@@ -10,6 +10,14 @@ package-configuration file required at the project root. It includes the
 
 ## What we are building now
 
+The overall purpose of Stealth is to recreate selected Py4GW Reforged
+capabilities from outside `Gw.exe`, without an injected DLL or executable
+payload. Reforged is an in-game Python automation and scripting library: its
+launcher injects `Py4GW.dll`, which embeds Python and provides `Py*` bindings,
+shared-memory game state, widgets, hooks, and higher-level automation helpers.
+The current process-discovery class is only the first small capability in that
+larger direction.
+
 The first library step is small:
 
 1. ask Windows for the running process list;

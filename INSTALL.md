@@ -2,9 +2,19 @@
 
 ## What this project is
 
-Py4GW Stealth is an external-first Windows/Python research project for
-understanding what can be observed from a Guild Wars client without placing a
-runtime inside the game process.
+Py4GW Stealth is an external Windows/Python library intended to recreate
+selected Py4GW Reforged capabilities without placing a runtime inside the
+Guild Wars process. The intended model is pure external operation: no injected
+DLL, executable payload, or code patch in `Gw.exe`.
+
+Py4GW Reforged is the current injected automation library: its launcher puts
+`Py4GW.dll` inside `Gw.exe`, where an embedded Python runtime uses `Py*`
+bindings, shared-memory game state, widgets, hooks, and higher-level helpers.
+The native companion that builds the DLL is
+<https://github.com/apoguita/Py4GW_Reforged_Native>.
+
+Stealth is a capability-by-capability external counterpart to that system, not
+a promise that every in-process feature can be reproduced externally.
 
 The current implementation is intentionally small. It provides a `py4gw`
 Python package with a `Win32` class that can:
