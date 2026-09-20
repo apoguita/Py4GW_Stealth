@@ -104,6 +104,17 @@ processes = win32.find_guild_wars()
 print(win32.format_processes(processes))
 ```
 
+## Running the main UI
+
+From the project directory:
+
+```text
+python main.py
+```
+
+The first tab provides a small test surface for the current read-only Win32
+process-discovery methods.
+
 Scripts do not need to be placed in the project root. They may live in a
 separate `scripts/` directory or another location, as long as they use the
 same Python environment where the editable package was installed.
@@ -111,6 +122,7 @@ same Python environment where the editable package was installed.
 ## Project layout
 
 ```text
+main.py         Main NiceGUI window and current Win32 test surface
 py4gw/          The Python package
 tests/          Automated tests and manual dependency probes
 docs/           Design and programming-style rules

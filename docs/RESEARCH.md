@@ -4,9 +4,9 @@ This document contains the detailed research history and source comparisons
 that were intentionally kept out of the GitHub front page. It is not the
 project's short description or installation guide.
 
-Status: current active research project
-Scope: establish what an external Guild Wars controller can read, write, execute, and observe before any implementation decision.
-Authority: inspected current Py4GW Reforged and Py4GW Reforged Native sources; inspected GwAu3 source checkout. No live-client behavior has been verified.
+Status: current active research project; first process-discovery slice implemented
+Scope: establish what an external Guild Wars controller can read, write, execute, and observe before expanding capabilities.
+Authority: inspected current Py4GW Reforged and Py4GW Reforged Native sources; inspected the GwAu3 source checkout; verified the current read-only process-discovery behavior. No live-client memory behavior has been verified.
 
 ## Intent
 
@@ -27,6 +27,11 @@ The immediate purpose is to understand the capability boundary between:
 3. the current Py4GW Reforged model, where a DLL embeds Python and owns an in-process runtime.
 
 This document deliberately does not select an architecture, promise a botting surface, or prescribe an implementation. Those decisions depend on research into individual Guild Wars data and command paths.
+
+The current implementation is intentionally narrower than the long-term
+research question: it is a project-owned `Win32` class for read-only process
+discovery, plus a small NiceGUI window for exercising that class. The UI does
+not expand the library's process or memory capabilities.
 
 ## Terminology
 
@@ -64,6 +69,36 @@ Stealth is intended to investigate how selected Reforged capabilities could be
 recreated from an external Python process. It is not currently a replacement
 for the complete Reforged library, and each capability must be designed and
 validated separately.
+
+## Current Implementation
+
+Status: verified from the current source, Pyright run, and focused tests.
+
+The current project surface is:
+
+```text
+main.py                 NiceGUI native test window
+py4gw/                  project package
+  win32/win32.py        Win32 process-discovery class
+tests/test_win32.py     focused process tests
+tests/nicegui_probe.py  manual NiceGUI dependency check
+```
+
+The `Win32` class currently provides `list_processes`,
+`find_guild_wars`, and `format_processes`. `find_guild_wars` matches the
+executable filename `Gw.exe` case-insensitively and reports the PID, name,
+path, and path error when applicable.
+
+The root `main.py` window has one `Win32 process test` tab. Its `List all
+processes` and `Find Gw.exe` buttons call the public class methods and show
+structured results in a table. NiceGUI is a presentation dependency only; it
+does not own Windows API declarations, process handles, memory operations, or
+Guild Wars-specific rules.
+
+The project enforces this code boundary with `pyrightconfig.json`: Pyright
+checks `main.py`, `py4gw/`, and `tests/`, while excluding the local research
+checkouts under `external/`. The selected Pyright/Pylance interpreter must be
+the same interpreter where NiceGUI and the editable project are installed.
 
 ## Confirmed Research
 
@@ -110,56 +145,59 @@ Important distinction: an external process can ask Windows to start code in anot
 
 ## Current Project Boundary
 
-The first read-only runtime now exists in the `py4gw` package. It currently
-lists Windows processes and finds `Gw.exe` candidates by executable filename.
-It does not read target memory or modify any process.
+The first read-only runtime exists in the `py4gw` package. It currently lists
+Windows processes and finds `Gw.exe` candidates by executable filename. The
+root NiceGUI window is only a test and presentation surface over that runtime.
+Neither component reads target memory or modifies any process.
 
 No claim in this document is live-client verified. GwAu3 behavior was established from source inspection; Py4GW Reforged behavior was established from current repository sources and project documentation.
 
 ## Current Starting Scope: Generic Process-Scanning Library
 
-The first deliverable is deliberately limited to a project-owned Windows
-library that can:
+The first deliverable is a project-owned Windows library plus a small test
+surface that can:
 
 1. enumerate running processes and present a useful list;
-2. let the caller choose a process explicitly; and
-3. leave memory scanning for a separately defined future capability.
+2. find every process whose executable filename is `Gw.exe`; and
+3. leave process-memory scanning for a separately defined future capability.
 
 The implemented part is generic Windows process handling plus one explicit
 `Gw.exe` filename filter. It contains no Guild Wars signatures, layouts,
-pointer chains, command paths, or behavior interpretation.
+pointer chains, command paths, or behavior interpretation. The root UI exposes
+the implemented operations without adding a second process layer.
 
-It also makes no decision yet about payload injection, DLL injection, remote
-execution, hooks, or an application/API built on top of the scanner. Those
-questions are outside the current starting scope.
+There is still no decision about payload injection, DLL injection, remote
+execution, hooks, or memory scanning. Those questions remain outside the
+current starting scope.
 
 ### Design order for this deliverable
 
-- [ ] Define the public vocabulary and data returned when processes are
+- [x] Define the public vocabulary and data returned when processes are
   listed: the minimum process summary, unavailable metadata, and errors.
 - [ ] Define how a caller selects a process: explicit PID input and the
   lifetime of the resulting library object.
 - [ ] Define exactly what “scan” means for version one: what is searched,
   what the query looks like, and what a successful result contains.
-- [ ] Define the library boundary versus a presentation layer. The library
-  should return structured data; a small command-line demonstration may render
-  the process list without becoming the library API.
-- [ ] Only after those contracts are agreed, choose the narrowest Windows APIs
-  and Python implementation needed to satisfy them.
+- [x] Define the library boundary versus a presentation layer. The library
+  returns structured data; `main.py` renders it without becoming the library
+  API.
+- [x] Choose the narrowest Windows APIs and Python implementation needed for
+  the current read-only capability.
 
 ### Current design decision
 
-The only agreed direction is: build the generic process-scanning library from
-small project-owned pieces, progressing one public capability at a time. No
-further architecture, target assumptions, or future roadmap is implied.
+The current direction is: build the generic process-scanning library from
+small project-owned pieces, progressing one public capability at a time. The
+NiceGUI window is deliberately limited to testing and presenting capabilities
+that already exist in the library.
 
 ### First concrete capability: Guild Wars process discovery
 
-The first capability to design and implement is discovery of running Guild
-Wars processes so a caller can locate them. For version zero, a process is a
-Guild Wars *candidate* when its executable filename is `Gw.exe`, compared
-case-insensitively. This is process discovery only, not proof of a supported
-client build or of any future memory-scanning capability.
+The first capability is discovery of running Guild Wars processes so a caller
+can locate them. A process is a Guild Wars *candidate* when its executable
+filename is `Gw.exe`, compared case-insensitively. This is process discovery
+only, not proof of a supported client build or of any future memory-scanning
+capability.
 
 Discovery returns every candidate, not just the first one. Each result should
 at minimum preserve:
@@ -169,9 +207,9 @@ at minimum preserve:
 - executable path when Windows makes it available, with an explicit
   unavailable/error status when it does not.
 
-The presentation may render those records as a list, but selection remains an
-explicit caller action. No process is opened for modification and no process
-memory is scanned in this capability.
+The console API and the NiceGUI table may render those records, but the
+records remain structured library data. No process is opened for modification
+and no process memory is scanned in this capability.
 
 The implementation rules and object responsibilities for this first slice are
 the active [process-discovery design contract](docs/DESIGN.md).
@@ -272,3 +310,8 @@ cleanup or target modification.
 - `C:\Users\Apo\Py4GW_Stealth\external\MemLib\MemLib\SharedMemory.py`
 - `C:\Users\Apo\Py4GW_Stealth\external\MemLib\MemLib\Hook.py`
 - `C:\Users\Apo\Downloads\BUILDING_WITH_MEMLIB.md` (user-supplied technical reference; proposals/examples, not instruction authority)
+- <https://nicegui.io/documentation> (Python UI components and project model)
+- <https://nicegui.io/documentation/section_configuration_deployment> (native
+  mode and pywebview requirements)
+- <https://nicegui.io/documentation/tabs> (tab and panel usage)
+- <https://nicegui.io/documentation/table> (table rows and updates)

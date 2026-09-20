@@ -1,48 +1,51 @@
-# First Design: The Win32 Process Class
+# Current Design Contract
 
 The naming and general Python rules for this project are recorded in the
-[programming style guide](STYLE.md). That guide is part of this design: new
-code should follow it unless an external API requires a different spelling.
+[programming style guide](STYLE.md). New code follows that guide unless an
+external API requires a different spelling.
 
-The project is a normal editable Python package. `pyproject.toml` is the only
-package-configuration file required at the project root. It includes the
-`py4gw` package without copying it or changing import statements in scripts.
+The project is a normal editable Python package. `pyproject.toml` is the
+package-configuration file at the project root. It includes the `py4gw`
+package and declares NiceGUI's native extra as a runtime dependency.
 
-## What we are building now
-
-The overall purpose of Stealth is to recreate selected Py4GW Reforged
-capabilities from outside `Gw.exe`, without an injected DLL or executable
-payload. Reforged is an in-game Python automation and scripting library: its
-launcher injects `Py4GW.dll`, which embeds Python and provides `Py*` bindings,
-shared-memory game state, widgets, hooks, and higher-level automation helpers.
-The current process-discovery class is only the first small capability in that
-larger direction.
-
-The first library step is small:
-
-1. ask Windows for the running process list;
-2. find processes named `Gw.exe`;
-3. return their PID, name, and executable path when available; and
-4. provide a simple method for displaying that list.
-
-This step does not scan process memory. It does not change a process, inject
-anything, run code in a process, or know anything about Guild Wars data. A
-`Gw.exe` result is a candidate found by filename.
-
-## Code layout
+## Current architecture
 
 ```text
+main.py
+  MainWindow
+    NiceGUI native window
+      Win32 process-test tab
+        py4gw.Win32
+          documented Windows APIs
+
 py4gw/
   __init__.py
   win32/
-    __init__.py     package export
-    win32.py         Win32 class
-tests/
-  test_win32.py       automated Win32 behavior tests
-  nicegui_probe.py    manual NiceGUI native-window check
+    __init__.py
+    win32.py
 ```
 
-There is one project class for this step: `Win32`.
+The library owns process behavior. The root UI presents and exercises that
+behavior. The UI must not become a second implementation of Windows process
+handling.
+
+## Current capability
+
+The first library capability is deliberately small:
+
+1. ask Windows for the running process list;
+2. find processes named `Gw.exe`, case-insensitively;
+3. return each matching process's PID, executable name, and path when
+   available; and
+4. provide structured records that a caller or the main UI can display.
+
+This does not scan process memory. It does not change a process, inject
+anything, run code in a process, or interpret Guild Wars data. A `Gw.exe`
+result is a candidate found by filename.
+
+## The `Win32` class
+
+There is one project class for the current process capability: `Win32`.
 
 The class owns:
 
@@ -52,17 +55,17 @@ The class owns:
 - executable-path lookup;
 - Windows error reporting;
 - native handle cleanup; and
-- simple text formatting.
+- simple text formatting for console callers.
 
-There are no separate process model, error, scanner, presenter, or API-wrapper
-classes yet. We will add another class only when the need is clear and the
-design is agreed first.
+There are no separate process-model, error, scanner, presenter, or API-wrapper
+classes for this first slice. Another class requires a clear responsibility
+and a design update first.
 
-## Public methods
+### Public methods
 
-### `Win32.list_processes()`
+#### `Win32.list_processes()`
 
-Returns a list like:
+Returns a current, PID-sorted snapshot:
 
 ```python
 [
@@ -71,9 +74,9 @@ Returns a list like:
 ]
 ```
 
-This is a snapshot. A process can exit after the list is returned.
+A process can exit after the snapshot is returned.
 
-### `Win32.find_guild_wars()`
+#### `Win32.find_guild_wars()`
 
 Returns every case-insensitive `Gw.exe` match:
 
@@ -91,12 +94,39 @@ Returns every case-insensitive `Gw.exe` match:
 If Windows does not allow the path lookup, the process remains in the result,
 with `path` set to `None` and the Windows error number in `path_error`.
 
-### `Win32.format_processes(processes)`
+#### `Win32.format_processes(processes)`
 
-Returns a readable table for a console or log. It is only presentation; callers
-should keep using the dictionaries returned by `find_guild_wars()` as data.
+Returns a readable table for a console or log. It is presentation only;
+callers should keep using the structured dictionaries as data.
 
-## Rules for this class
+## Main UI contract
+
+`main.py` contains the `MainWindow` class and is the current test surface. It
+is intentionally a root-level script so it can be launched directly:
+
+```text
+python main.py
+```
+
+The first tab is named `Win32 process test` and provides:
+
+- `List all processes`, which calls `Win32.list_processes()`;
+- `Find Gw.exe`, which calls `Win32.find_guild_wars()`; and
+- a table showing PID, executable name, and path.
+
+The UI catches `OSError` from the library and displays the diagnostic message.
+It does not open persistent process handles, read memory, write memory, or
+apply target-specific rules.
+
+NiceGUI is a presentation dependency, not part of the Win32 library API. UI
+callbacks may call public `Win32` methods and format returned records for
+display. They must not contain `ctypes` declarations, Windows handle
+management, memory operations, or Guild Wars signatures.
+
+The separate `tests/nicegui_probe.py` script remains a small manual dependency
+check. It is not the main application and does not replace the root UI.
+
+## Implementation rules
 
 - Keep all Windows-specific work inside `Win32`.
 - Keep error handling inside `Win32` and preserve the Windows error number.
@@ -110,53 +140,51 @@ should keep using the dictionaries returned by `find_guild_wars()` as data.
   start to finish.
 - Document each public method in plain language, including what it returns and
   what can fail.
+- Keep UI state in `MainWindow`; do not add UI state to `Win32`.
+- Add a UI control only when the corresponding library behavior already has a
+  documented contract.
 
-## Why this is different from the earlier version
+## Verification contract
 
-The earlier version split this small task across several custom classes. That
-made the first step harder to read and harder to control. The current design
-keeps the complete Win32 process-discovery behavior in one class so we can
-understand and verify it before deciding whether another abstraction is needed.
-
-GwAu3 was useful evidence for the initial `ProcessList("gw.exe")` idea, but its
-later character-name scanning and broad process access are intentionally not
-part of this class yet.
-
-## Verification
-
-- The unit tests exercise filename matching, empty display output, and a real
-  read-only process-list call.
-- A host integration run completed with no `Gw.exe` process currently running.
-- No target process memory was read or modified.
-- A user-provided live run found PID `39212` at `F:\GW\GW1\Gw.exe` with the
-  client open, and no candidates after the client was closed.
-
-After installing once from the project root with `python -m pip install -e .`,
-any script can import the library from any working directory:
-
-```python
-from py4gw import Win32
-```
-
-Run the tests as modules from the project root:
+Run the focused process tests directly from the project root or from the
+`tests` directory:
 
 ```text
-python -m unittest discover -s tests -v
+python tests\test_win32.py
 ```
 
-For a zero-setup launch, use the project batch launcher. It supplies the
-project root to Python externally; no test or library file needs an
-import-path workaround. From the project root:
+Run the manual NiceGUI dependency probe when the UI dependency or environment
+changes:
 
 ```text
-py4gw.bat /tests/test_win32.py
+python tests\nicegui_probe.py
 ```
 
-From inside the `tests` directory:
+Run the main test surface with:
 
 ```text
-..\py4gw.bat /tests/test_win32.py
+python main.py
 ```
 
-The first argument is the project-relative script path. Any arguments after it
-through the ninth batch argument are passed to that script.
+Run static type checking from the project root:
+
+```text
+pyright
+```
+
+`pyrightconfig.json` checks `main.py`, `py4gw/`, and `tests/`, while excluding
+the local research checkouts under `external/`. Pyright and Pylance must use
+the same interpreter where the project dependencies are installed.
+
+## Evidence and boundary
+
+The current implementation is pure external and read-only. It does not read
+target memory or modify any process. A `Gw.exe` result is not proof of a
+supported Guild Wars build.
+
+The user-provided live observation recorded in `RESEARCH.md` found PID `39212`
+at `F:\GW\GW1\Gw.exe` with the client open and no candidates after the client
+was closed. The build/version and exact timestamp were not recorded.
+
+GwAu3 remains comparative research. Its later character-name scanning,
+remote payloads, and broad process access are not part of this class.

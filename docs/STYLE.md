@@ -4,6 +4,10 @@ This project uses a Python-first naming style. The goal is for code to read
 naturally to a Python programmer while still preserving names that belong to a
 Windows API or another external system.
 
+The style is enforced by review, focused tests, and the repository's Pyright
+configuration. New code is not complete until its changed files pass `pyright`
+with the project interpreter.
+
 ## Naming rules
 
 | Thing | Style | Example |
@@ -18,6 +22,10 @@ Windows API or another external system.
 | Constant | `UPPER_SNAKE_CASE` | `_MAX_PATH_CHARS` |
 | Local variable | lowercase `snake_case` | `error_code` |
 | Boolean | a descriptive `is_`, `has_`, `can_`, or `should_` name | `is_running` |
+
+Typed data records may use `PascalCase` because they are types, for example
+`ProcessRow(TypedDict)`. This does not change the rule for variables or
+dictionary keys, which remain lowercase `snake_case`.
 
 `Win32` is an intentional class-name exception because it is the name of the
 Windows API family. Product and API names such as `GwAu3`, `PID`, and
@@ -50,6 +58,9 @@ boundary uses our `snake_case` names.
   document has been updated first.
 - Keep object state explicit. Do not hide shared mutable state in module-level
   variables.
+- `MainWindow` owns NiceGUI controls and UI state. `Win32` owns Windows process
+  operations. Do not move behavior between those responsibilities for
+  convenience.
 
 ## Methods and data
 
@@ -73,6 +84,19 @@ boundary uses our `snake_case` names.
 - Do not convert a Windows pointer or structure field to a host-sized Python
   interpretation without documenting the target architecture.
 
+## NiceGUI code
+
+- Use NiceGUI components from Python; do not introduce HTML, CSS, or JavaScript
+  for the current test surface unless the design document explicitly approves
+  that boundary.
+- Keep UI callbacks small. They may call public library methods, convert
+  structured results to display rows, and report errors.
+- Do not put `ctypes`, process handles, memory access, signatures, or target
+  assumptions in UI code.
+- Keep the main window in root-level `main.py`. Use `tests/` for focused tests
+  and manual dependency probes; do not create a new top-level directory for a
+  one-off check.
+
 ## Documentation and comments
 
 - Write docstrings in plain language. Explain purpose, inputs, outputs, and
@@ -91,5 +115,8 @@ boundary uses our `snake_case` names.
   then project imports.
 - Run the focused tests for the changed class before considering the change
   complete.
+- Run `pyright` from the project root. Use the same interpreter in which
+  NiceGUI and the editable project are installed; otherwise Pylance can report
+  a missing import even when the package works from another terminal.
 - Keep the first implementation small; do not add future features “because we
   will need them later.”

@@ -5,7 +5,8 @@ Reforged capabilities without injecting a Python runtime or executable
 payload into the Guild Wars process.
 
 The project is being developed one capability at a time. The current capability
-is read-only discovery of running `Gw.exe` processes.
+is read-only discovery of running `Gw.exe` processes, with a small NiceGUI
+window for exercising that capability.
 
 ## Install
 
@@ -36,6 +37,19 @@ from py4gw import Win32
 win32 = Win32()
 print(win32.format_processes(win32.find_guild_wars()))
 ```
+
+## Main UI
+
+Run the current test surface from the project directory:
+
+```text
+python main.py
+```
+
+The first tab exercises the read-only Win32 process-discovery methods.
+
+The UI is a presentation and testing surface. The `Win32` class remains the
+owner of all Windows process operations.
 
 ## Documentation
 
