@@ -7,6 +7,9 @@ name = "py4gw-stealth"
 version = "0.1.0"
 description = "Read-only Windows process discovery for Guild Wars research"
 requires-python = ">=3.11"
+dependencies = [
+    "nicegui[native]",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

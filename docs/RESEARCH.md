@@ -228,6 +228,34 @@ Memory reads, module inspection, signatures, remote allocation, memory writes,
 remote threads, DLL loading, executable payloads, and hooks are outside the
 current scope.
 
+## Live Observation: Gw.exe Discovery
+
+Status: verified from a user-provided run of the current package.
+
+The same read-only command was run with the Guild Wars client open and closed:
+
+```text
+python -c "from py4gw import Win32; win32=Win32(); print(win32.format_processes(win32.find_guild_wars()))"
+```
+
+With the client open, the observed result was:
+
+```text
+PID   | Name   | Path
+39212 | Gw.exe | F:\GW\GW1\Gw.exe
+```
+
+With the client closed, the observed result was:
+
+```text
+No Gw.exe candidates are currently running.
+```
+
+This verifies the current filename-based process discovery behavior across
+those two states. The Guild Wars build/version and exact observation timestamp
+were not recorded in the report. The operation was read-only and performed no
+cleanup or target modification.
+
 ## Sources Consulted
 
 - `C:\Users\Apo\Py4GW_Reforged\README.md`

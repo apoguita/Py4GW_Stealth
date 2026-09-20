@@ -15,7 +15,18 @@ From the project directory:
 python -m pip install -e .
 ```
 
-The editable install keeps Python connected to the working source tree.
+This installs the package and its Python dependencies, including NiceGUI's
+native-window support. The editable install keeps Python connected to the
+working source tree.
+
+Run scripts through the selected Python interpreter:
+
+```text
+python path\to\script.py
+```
+
+This is preferred over typing `script.py` by itself, because Windows may use a
+different interpreter for the `.py` file association.
 
 ## Example
 

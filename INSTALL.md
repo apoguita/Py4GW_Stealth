@@ -32,6 +32,7 @@ or automate Guild Wars.
 
 - Windows
 - Python 3.13 32-bit for the current x86-oriented research setup
+- NiceGUI with native-window support (installed automatically with the project)
 
 Python 3.12 or another supported Python version may run the current process
 discovery code, but the controller and target should match bitness before any
@@ -51,8 +52,45 @@ From the project directory, install the package in editable mode:
 python -m pip install -e .
 ```
 
-Editable installation means Python uses the files in this working directory.
-After changing the code, there is no package rebuild step.
+This installs the project and its Python dependencies, including NiceGUI's
+native support for the optional desktop interface. Editable installation means
+Python uses the files in this working directory. After changing the code, there
+is no package rebuild step.
+
+On Windows, NiceGUI native mode also uses the system's .NET Framework and
+Microsoft Edge WebView2 Runtime. These are Windows components, not Python
+packages, and are not installed by pip.
+
+Run scripts with the same interpreter explicitly:
+
+```text
+python path\to\script.py
+```
+
+Do not rely on launching `script.py` directly through the Windows file
+association; that association can point to a different Python installation.
+
+## Pyright and Pylance
+
+Pyright and the VS Code Pylance extension use the Python interpreter selected
+in VS Code. They do not automatically use whichever `python` command happens
+to appear first in another terminal.
+
+Select the interpreter where NiceGUI is installed, then verify it from the
+project root:
+
+```text
+python -c "import sys, nicegui; print(sys.executable); print(nicegui.__file__)"
+```
+
+The repository's `pyrightconfig.json` checks the project package and project
+tests, while excluding the source checkouts under `external/`.
+
+Run the project check from the project root with:
+
+```text
+pyright
+```
 
 ## Using the library
 
@@ -74,7 +112,7 @@ same Python environment where the editable package was installed.
 
 ```text
 py4gw/          The Python package
-tests/          Automated tests for the current package behavior
+tests/          Automated tests and manual dependency probes
 docs/           Design and programming-style rules
 external/       Local research checkouts; intentionally excluded from Git
 ```

@@ -1,0 +1,14 @@
+{
+  "include": [
+    "py4gw",
+    "tests"
+  ],
+  "exclude": [
+    "external",
+    ".deep-copilot",
+    "**/__pycache__"
+  ],
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "standard",
+  "reportMissingTypeStubs": "none"
+}

@@ -38,7 +38,8 @@ py4gw/
     __init__.py     package export
     win32.py         Win32 class
 tests/
-  test_win32.py
+  test_win32.py       automated Win32 behavior tests
+  nicegui_probe.py    manual NiceGUI native-window check
 ```
 
 There is one project class for this step: `Win32`.
@@ -127,6 +128,8 @@ part of this class yet.
   read-only process-list call.
 - A host integration run completed with no `Gw.exe` process currently running.
 - No target process memory was read or modified.
+- A user-provided live run found PID `39212` at `F:\GW\GW1\Gw.exe` with the
+  client open, and no candidates after the client was closed.
 
 After installing once from the project root with `python -m pip install -e .`,
 any script can import the library from any working directory:
