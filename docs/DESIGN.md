@@ -37,6 +37,14 @@ py4gw/
     pre_game_context.py External PreGameContext layout, resolver, and reader
     cinematic_context.py External Cinematic layout and reader
     gameplay_context.py External GameplayContext layout and reader
+    server_region_context.py External ServerRegion layout, resolver, and reader
+    instance_info_context.py External InstanceInfo layout, resolver, and reader
+    text_parser_context.py External TextParser layout and GameContext reader
+    available_character_context.py External account-roster array reader
+    party_context.py External PartyContext hierarchy and list readers
+    guild_context.py External GuildContext hierarchy and guild record readers
+    acc_agent_context.py External AgentContext summary and movement readers
+    gw_list.py     External intrusive GwList/link readers
     gw_array.py    External GW_Array and array-view readers
 ```
 
@@ -64,8 +72,10 @@ The current read-only library surface is deliberately small:
 
 The library does not change a process, inject anything, or run code in a
 process. The first target-specific structure readers were migrated in this
-order: `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`, and
-`GameplayContext`; broader
+order: `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
+`GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
+`AvailableCharacterArray`, `PartyContext`, `GuildContext`, and
+`AccAgentContext`; broader
 Guild Wars structure interpretation remains outside
 the current capability.
 A `Gw.exe` result is a candidate found by filename, and a scanner result is
@@ -145,11 +155,14 @@ The first tab is named `Guild Wars clients` and provides:
 - a live character read through `ConnectedClient` for each discovered client.
 
 After a connection succeeds, the `Client data` tab is enabled. Its subtabs
-currently expose `Cinematic`, `GameplayContext`, `PreGameContext`, `GameContext`,
-and `CharContext`,
+currently expose `Cinematic`, `GameplayContext`, `ServerRegion`, `InstanceInfo`,
+`TextParser`, `AvailableCharacters`, `PartyContext`, `GuildContext`,
+`PreGameContext`, `GameContext`, and `CharContext`,
 each displaying every field in its maintained structure with the target offset.
 The migration order for these readers is `CharContext`, `GameContext`,
-`PreGameContext`, `Cinematic`, then `GameplayContext`.
+`PreGameContext`, `Cinematic`, `GameplayContext`, `ServerRegion`,
+`InstanceInfo`, `TextParser`, `AvailableCharacterArray`, `PartyContext`,
+`GuildContext`, then `AccAgentContext`.
 The tables are paginated, sortable, filterable where applicable, and
 selectable; long values wrap inside the normal window. `PreGameContext` is
 allowed to be inactive while the client is in-game; in that state it reports
@@ -165,7 +178,10 @@ connection open. It does not write memory or execute target code.
 The external memory path has three separate layers. The scanner and
 process-memory transport are implemented, and `context.CharContext`,
 `context.GameContext`, `context.PreGameContext`, `context.Cinematic`, plus
-`context.GameplayContext` are the
+`context.GameplayContext`, `context.ServerRegion`, `context.InstanceInfo`,
+`context.TextParser`, `context.AvailableCharacterArray`,
+`context.PartyContext`, `context.GuildContext`, and
+`context.AccAgentContext` are the
 first target-specific structure readers.
 
 ### Scanner
@@ -204,8 +220,12 @@ scanner, not a competing scanner API.
 The structure reader takes an address plus a documented target layout, reads
 the required byte span through the memory reader, and decodes complete typed
 structures. `context.CharContextStruct`, `context.GameContextStruct`,
-`context.PreGameContextStruct`, `context.CinematicStruct`, and
-`context.GameplayContextStruct` are the first
+`context.PreGameContextStruct`, `context.CinematicStruct`,
+`context.GameplayContextStruct`, `context.ServerRegionStruct`,
+`context.InstanceInfoStruct`, `context.TextParserStruct`,
+`context.AvailableCharacterInfoStruct`, `context.PartyContextStruct`, and
+`context.GuildContextStruct` are
+the first
 implementations. Their field names and order are ported from the
 corresponding Reforged context sources;
 the external version replaces host pointers with fixed-width target integers.
@@ -247,8 +267,9 @@ reports whether the snapshot contains a character; these are separate states.
 
 `ConnectedClient` initializes the resolver-backed contexts during connection.
 `GameContext` performs the JSON signature scan and caches the stable
-module-global pointer location. `GameplayContext` and `PreGameContext` each
-cache their own global-pointer resolver. `Cinematic` follows the
+module-global pointer location. `GameplayContext`, `PreGameContext`, and
+`ServerRegion` and `InstanceInfo` each cache their own resolver. `Cinematic`
+follows the
 `GameContext.cinematic` pointer, `CharContext` follows
 `GameContext.character`. Each later context read re-reads only its short dynamic pointer chain
 and structure bytes, so a context fetch does not scan the module again. The

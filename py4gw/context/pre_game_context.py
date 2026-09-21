@@ -151,7 +151,9 @@ class PreGameContextStruct(Structure):
 
     _remote_reader: _memory_reader | None = None
 
-    def bind_reader(self, reader: _memory_reader) -> PreGameContextStruct:
+    def bind_reader(
+        self, reader: _memory_reader, address: int | None = None
+    ) -> PreGameContextStruct:
         """Attach the reader needed to follow the remote character array."""
 
         self._remote_reader = reader

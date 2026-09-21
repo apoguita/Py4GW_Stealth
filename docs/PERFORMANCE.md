@@ -71,8 +71,10 @@ The context readers have two different kinds of work:
 2. The reader follows the current values from that location to
    `GameContext`, then to a selected context such as `CharContext` or
    `Cinematic`, and reads the structure. Contexts with their own global
-   resolver, such as `PreGameContext` and `GameplayContext`, follow the same
-   cache-then-reread pattern. This is
+   resolver, such as `PreGameContext`, `GameplayContext`, `ServerRegion`,
+   `InstanceInfo`, and `AvailableCharacterArray`, follow the same
+   cache-then-reread pattern. `TextParser` follows the already-cached
+   `GameContext` pointer instead of running a separate signature scan. This is
    per-snapshot work.
 
 `ConnectedClient` initializes the resolver-backed contexts during connection.
@@ -94,7 +96,9 @@ shared between processes.
 
 The root `main.py` window measures each context read separately with the metric
 names `CharContext.read`, `GameContext.read`, `PreGameContext.read`,
-`Cinematic.read`, and `GameplayContext.read`. The latest duration is shown in
+`Cinematic.read`, `GameplayContext.read`, `ServerRegion.read`,
+`InstanceInfo.read`, `TextParser.read`, `AvailableCharacters.read`, and
+`PartyContext.read`, `GuildContext.read`, and `AccAgentContext.read`. The latest duration is shown in
 the corresponding `Client data` status line.
 
 The UI timing does not include formatting the table after the snapshot is

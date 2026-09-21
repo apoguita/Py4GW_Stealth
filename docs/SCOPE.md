@@ -46,7 +46,10 @@ The current `py4gw` package can:
 - open a selected process for read-only memory access; and
 - scan validated x86 module ranges using copied pattern definitions;
 - resolve and read the maintained `CharContext`, `GameContext`,
-  `PreGameContext`, `Cinematic`, and `GameplayContext` structures; and
+  `PreGameContext`, `Cinematic`, `GameplayContext`, `ServerRegion`,
+  `InstanceInfo`, `TextParser`, `AvailableCharacterArray`, `PartyContext`,
+  `GuildContext`, and `AccAgentContext`
+  structures; and
 - expose a selected-client connection for scripts and the root UI; and
 - measure execution time in the external Python controller.
 

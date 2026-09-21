@@ -7,7 +7,7 @@ project's short description or installation guide.
 Status: current active research project; read-only process discovery and the
 reusable scanner slice implemented
 Scope: establish what an external Guild Wars controller can read, write, execute, and observe before expanding capabilities.
-Authority: inspected current Py4GW Reforged and Py4GW Reforged Native sources; inspected the GwAu3 source checkout; and verified process discovery, section scanning, and the CharContext, GameContext, PreGameContext, Cinematic, and GameplayContext read paths against one live client build. Other context behavior remains unverified.
+Authority: inspected current Py4GW Reforged and Py4GW Reforged Native sources; inspected the GwAu3 source checkout; and verified process discovery, section scanning, and the CharContext, GameContext, PreGameContext, Cinematic, GameplayContext, ServerRegion, InstanceInfo, TextParser, AvailableCharacterArray, PartyContext, GuildContext, and AccAgentContext read paths against one live client build. Other context behavior remains unverified.
 
 ## Intent
 
@@ -98,12 +98,26 @@ py4gw/                  project package
   context/pre_game_context.py External PreGameContext layout, resolver, and reader
   context/cinematic_context.py External Cinematic layout and reader
   context/gameplay_context.py External GameplayContext layout and reader
+  context/server_region_context.py External ServerRegion layout, resolver, and reader
+  context/instance_info_context.py External InstanceInfo layout, resolver, and reader
+  context/text_parser_context.py External TextParser layout and GameContext reader
+  context/available_character_context.py External account-roster array reader
+  context/party_context.py External PartyContext hierarchy and list readers
+  context/guild_context.py External GuildContext hierarchy and guild readers
+  context/acc_agent_context.py External AgentContext summary and movement readers
 tests/test_win32.py     focused process tests
 tests/test_scanner.py   offline scanner tests
 tests/test_remote_scanner.py  synthetic PE scanner tests
 tests/test_patterns.py  offsets/resolver tests
 tests/test_cinematic_context.py live Cinematic integration test
 tests/test_gameplay_context.py live GameplayContext integration test
+tests/test_server_region_context.py live ServerRegion integration test
+tests/test_instance_info_context.py live InstanceInfo integration test
+tests/test_text_parser_context.py live TextParser integration test
+tests/test_available_character_context.py live AvailableCharacterArray integration test
+tests/test_party_context.py live PartyContext integration test
+tests/test_guild_context.py live GuildContext integration test
+tests/test_acc_agent_context.py live AccAgentContext integration test
 tests/test_context.py   live CharContext integration test
 tests/nicegui_probe.py  manual NiceGUI dependency check
 ```
@@ -123,9 +137,12 @@ The `ProcessMemoryReader` and `RemoteScanner` add the read-only external path:
 they open a selected process, parse its x86 PE section ranges, scan those
 ranges in bounded chunks, and execute the copied `Patterns` resolver
 operations. Their section and resolver path, plus the `CharContext`,
-`GameContext`, `PreGameContext`, `Cinematic`, and `GameplayContext` readers, have also been
-verified against one live client build; this does not establish compatibility
-with other builds.
+`GameContext`, `PreGameContext`, `Cinematic`, `GameplayContext`,
+`ServerRegion`, `InstanceInfo`, and `TextParser` readers have been implemented
+and verified. `AvailableCharacterArray`, `PartyContext`, `GuildContext`, and
+`AccAgentContext` have also been implemented and verified
+against one live client build. This does not establish compatibility with
+other builds.
 
 The root `main.py` window has a client-selection tab and read-only context
 tabs for a connected client. NiceGUI is a presentation
@@ -199,7 +216,9 @@ search validated byte ranges in a selected process and report matches without
 knowing what those matches mean. Guild Wars character-name discovery will be a
 consumer of this scanner, not part of the scanner engine itself. The current
 consumers are the maintained `CharContext`, `GameContext`, `PreGameContext`,
-`Cinematic`, and `GameplayContext` readers.
+`Cinematic`, `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
+`AvailableCharacterArray`, `PartyContext`, `GuildContext`, and
+`AccAgentContext` readers.
 
 The scanner foundation should provide:
 
@@ -248,10 +267,11 @@ The root NiceGUI window is only a test and presentation surface over process
 discovery; it does not own the memory path or modify any process.
 
 Claims about GwAu3 and Reforged behavior are source-based. The Stealth
-CharContext, GameContext, PreGameContext, Cinematic, GameplayContext, process reader, and
-scanner observations marked as live below were reproduced against one client
-build; they do not establish compatibility with other builds or with the
-remaining contexts.
+CharContext, GameContext, PreGameContext, Cinematic, GameplayContext,
+ServerRegion, InstanceInfo, process reader, and scanner observations marked as
+live below were reproduced against one client build. None of these
+observations establish compatibility with other builds or with the remaining
+contexts.
 
 ## Initial Deliverable: Generic Process-Scanning Library
 
@@ -265,9 +285,9 @@ surface that can:
 
 The implemented part is generic Windows process handling, a bounded memory
 reader, PE section discovery, a reusable pattern scanner, an offsets
-resolver, and the first five Guild Wars structure readers, migrated in this
-order: `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`, and
-`GameplayContext`. It does
+resolver, and the first seven Guild Wars structure readers, migrated in this
+order: `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
+`GameplayContext`, `ServerRegion`, and `InstanceInfo`. It does
 not yet contain the
 remaining context readers, command paths, or behavior interpretation. The root
 UI exposes process discovery and these read-only context surfaces without
@@ -447,9 +467,9 @@ The migration is intentionally staged:
 
 Steps 1 through 8 now have project-owned implementations and focused tests.
 The first Guild Wars-specific consumers are the externally read
-`CharContext`, `GameContext`, `PreGameContext`, `Cinematic`, and
-`GameplayContext`, in that migration order. All five have been validated
-against one live client build.
+`CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
+`GameplayContext`, `ServerRegion`, and `InstanceInfo`, in that migration
+order. All seven have been validated against one live client build.
 Additional contexts remain separate future consumers and must be validated
 independently.
 
@@ -558,6 +578,105 @@ The live test resolved the global pointer at `0x015EAAB8`, the current
 `GameplayContext` at `0x02421248`, and read `mission_map_zoom` as `1.500`.
 These addresses and values are observations for one client build, not
 cross-build guarantees.
+
+## ServerRegion implementation and resolution
+
+Status: source-verified and verified against one live client build.
+
+The native and Reforged definitions agree that `ServerRegion` is a single
+signed 32-bit value, not a pointer to a larger context structure. Reforged's
+`ServerRegionStruct` contains one `c_int32 region_id` field, and the native
+enum uses `-2` for International, `0` for America, then the named regional
+values, with `0xff` reserved for Unknown.
+
+The native resolver stores the address of that value in
+`Context::g_region_id_addr`. Its JSON-backed resolver is
+`map.region_id_addr`: it scans the `region_id_ref` pattern and applies the
+native dereference step. Stealth therefore resolves that address once during
+connection, caches the resolver result, and reads four bytes for each
+snapshot. It does not introduce a hard-coded field offset or scan the pattern
+again for every read.
+
+The focused test is `tests/test_server_region_context.py`. It checks the
+fixed-width layout, resolver address, and signed value when a client is
+running. The recorded run resolved the value at `0x017C63A8` and read region
+ID `0` (America). These are observations for one client build, not
+cross-build guarantees.
+
+## InstanceInfo implementation and resolution
+
+Status: source-verified and verified against one live client build.
+
+The native and Reforged definitions agree on these fixed-width layouts:
+
+- `MapDimensionsStruct` is `0x18` bytes;
+- `AreaInfoStruct` is `0x7C` bytes; and
+- `InstanceInfoStruct` is `0x14` bytes, with target pointers at offsets
+  `0x00`, `0x08`, and `0x10`.
+
+The native map resolver exposes `map.instance_info_addr`, which resolves the
+current `InstanceInfo` structure address from the copied `instance_info_ref`
+signature. Stealth caches that resolved address during connection and reads
+the root structure on demand. Its nested `terrain_info1`, `current_map_info`,
+and `terrain_info2` properties follow their target-process pointers through
+`ReadProcessMemory`; they never dereference those addresses as local Python
+pointers. The `AreaInfoStruct` flag and file-ID properties are ported from the
+Reforged source.
+
+The live test resolved `InstanceInfo` at `0x01C4A150`, read instance type `0`,
+and read current map metadata with campaign `1`, region `0`, and file ID `0`.
+These values and addresses are observations for one client build.
+
+## TextParser implementation and resolution
+
+Status: source-verified and verified against one live client build.
+
+The native `TextParser` pointer is a field of the already-resolved
+`GameContext`, at offset `+0x18`. Stealth follows that field for each read; it
+does not add a second signature scan or invent a global pointer resolver. The
+native root layout is `0x1D4` bytes, with the `TextCache*` field at `+0x30`,
+the auxiliary structure pointer at `+0x180`, and `language_id` at `+0x1D0`.
+Those pointer fields are followed through the external memory reader when the
+corresponding properties are requested.
+
+The live test read `TextParser` at `0x0257E9E0` and observed language ID `0`.
+That address and value are observations for one client build.
+
+## AvailableCharacterArray implementation and resolution
+
+Status: source-verified and verified against one live client build.
+
+The native account roster is a global `GWArray<AvailableCharacterInfo>`
+resolved by `player.available_characters_addr`. It is distinct from the
+`PreGameContext::chars_buffer` preview array. Stealth caches the resolved
+`GWArray` address, rereads its header for each snapshot, and follows the array
+buffer through the external memory reader. Each entry is `0x84` bytes and
+includes the fixed UTF-16 name plus packed map, profession, campaign, level,
+and PvP properties.
+
+The live test resolved the roster array at `0x017AF28C`, read 14 entries, and
+observed `Fezzik The Untamed` as the first entry. These values and the address
+are observations for one client build.
+
+## PartyContext implementation and resolution
+
+Status: source-verified and verified against one live client build.
+
+The native party accessor follows `GameContext.party`; no separate signature
+or callback is required. The root structure is `0xD0` bytes and contains
+remote `GWArray` headers for parties and searches plus intrusive request and
+sending lists. Stealth reads those arrays and traverses `GwList` links with
+fixed-width x86 addresses and a bounded loop guard.
+
+The live test resolved `PartyContext` at `0x024A5D78`, observed one party, one
+party-search entry, and a party-leader state. These values and the address are
+observations for one client build.
+
+`WorldMapContext` is intentionally not claimed as migrated yet. The native
+implementation receives its pointer from an injected UI callback and publishes
+it through Reforged shared memory. The copied offsets contain no direct
+external resolver for that context, so adding a guessed pattern would violate
+the external-reader design.
 
 ## Live Observation: Gw.exe Discovery
 
@@ -697,6 +816,111 @@ the game-context slot at `+0x18`; `GetCharContext()` re-reads the character
 pointer at `GameContext + 0x44`. Therefore the external reader caches the
 resolver's stable pointer location but does not cache the dynamic context
 object addresses.
+
+## Live Observation: GuildContext
+
+Status: verified against the same running client build with
+`tests/test_guild_context.py`.
+
+`GuildContext` is reached directly from the current `GameContext` at the
+maintained `guild_context` field. No new signature scan or callback bridge is
+needed. The reader follows that pointer, reads the complete maintained
+0x368-byte field surface, and follows its remote `GW_Array` members through
+the external memory reader. The native header contains an older `0x3BC` size
+comment, but its explicit field offsets end at the 0x368-byte roster array;
+the Python layout follows those concrete offsets.
+
+The live test resolved `GuildContext` at `0x025732D8` and observed player
+`Fezzik The Untamed`, 101 guild records, 42 roster entries, and 20 history
+entries. These values are one observation and are not assumed stable across
+client builds or account state.
+
+## Live Observation: AccAgentContext
+
+Status: verified against the same running client build with
+`tests/test_acc_agent_context.py`.
+
+The Reforged Python module calls this surface `AccAgentContext`; the native
+project defines the same root as `GW::Context::AgentContext`. It is reached
+directly through `GameContext.agent` at `+0x08`. The external reader follows
+that pointer and reads the maintained 0x1B0-byte root, including the summary
+array and movement-pointer array. Nested pointers are read through the
+external memory reader and are never treated as local Python pointers.
+
+The live test resolved `AgentContext` at `0x0257E208` and observed 2,296
+summary entries, 45 movement entries, 45 valid movement IDs, and instance
+timer `1709016840`. These values are one observation and are not assumed
+stable across client builds or account state.
+
+## AgentArray traversal and materialization
+
+### Verified in Py4GW Reforged Native
+
+The native agent array is a `GWArray<Agent*>` resolved through the
+`agent.agent_array_addr` signature. `Context::GetAgentArray()` returns that
+array when its header is valid. `GetAgentByID()` performs the bounds and
+non-null pointer checks, then applies the stale-agent gate:
+
+```text
+agent_movement.size() > agent_id
+and agent_movement[agent_id] != nullptr
+```
+
+The native code then uses the existing in-process `Agent*`. It does not copy a
+full `Agent` structure for each traversal.
+
+The native shared-memory updater does traverse the populated array each frame.
+For every valid pointer it reads the common `Agent` fields needed for
+classification: type flags at `Agent + 0x9C`, and, for living agents,
+allegiance at `AgentLiving + 0xB5` and the related living flags. It publishes
+only the agent pointer, agent ID, and categorized ID/index references. The
+shared-memory cap is 300 entries.
+
+The updater also refuses to publish an array while the map is not ready, while
+the client is observing, or during loading. This is a state-validity gate in
+addition to the pointer and movement-array checks.
+
+### Verified in Reforged Python
+
+The public `AgentArray.Get*Array()` methods first consume the native shared
+memory wrapper. They return IDs from the already-classified arrays: enemy,
+ally, neutral, living, item, gadget, and so on. This path does not
+materialize a full ctypes agent for every entry.
+
+`AgentArray.GetAgentByID()` materializes one requested `AgentStruct` from the
+published pointer. Filters and sorts then operate on IDs and call methods such
+as `Agent.GetAllegiance`, `Agent.IsAlive`, and `Agent.GetXY`; those calls
+materialize or access the selected agent as needed.
+
+The direct `AgentArrayStruct.raw_agents` path can materialize every pointer and
+classify the entire array in Python, but its recurring cache-update callback is
+disabled in the inspected source. It is therefore not the normal public
+agent-array path.
+
+### Consequence for Stealth
+
+The agent array is populated, and allegiance is a required classification
+field. A Stealth traversal that must produce enemy/ally/living categories must
+read enough of every valid candidate to inspect at least the common type and,
+for living records, the allegiance field. That work cannot be eliminated.
+
+It can still avoid full object materialization. The proposed external design
+is:
+
+1. Read the bounded pointer table once and capture `(agent_id, address)`
+   references.
+2. Apply the movement-array stale-agent check.
+3. Read a small classification projection containing the common type and the
+   living fields needed for allegiance/dead-state categorization.
+4. Build ID/reference lists for all, ally, enemy, items, gadgets, and other
+   categories.
+5. Materialize the complete `Agent`, `AgentLiving`, `AgentItem`, or
+   `AgentGadget` structure only for callers that request detailed data.
+
+This preserves the native/Reforged separation: classification traverses the
+populated array, while detailed structures remain on demand. The cost should
+be measured as remote-read calls, bytes transferred, and Python object count;
+the number of agents alone is not enough to identify the bottleneck.
 
 ## Sources Consulted
 

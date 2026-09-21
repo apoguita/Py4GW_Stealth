@@ -88,7 +88,11 @@ class GWArrayValueView:
             return None
         element_size = ctypes.sizeof(self._element_type)
         raw = self._reader.read(self._array.m_buffer + index * element_size, element_size)
-        return _decode_value(self._element_type, raw)
+        value = _decode_value(self._element_type, raw)
+        bind_reader = getattr(value, "bind_reader", None)
+        if callable(bind_reader):
+            return bind_reader(self._reader, self._array.m_buffer + index * element_size)
+        return value
 
     def to_list(self) -> list[Any]:
         """Read all values in the bounded target array."""
@@ -152,7 +156,11 @@ class GWArrayView:
             return None
         element_size = ctypes.sizeof(self._element_type)
         raw = self._reader.read(pointer, element_size)
-        return _decode_value(self._element_type, raw)
+        value = _decode_value(self._element_type, raw)
+        bind_reader = getattr(value, "bind_reader", None)
+        if callable(bind_reader):
+            return bind_reader(self._reader, pointer)
+        return value
 
     def to_list(self) -> list[Any]:
         """Read all non-null pointed-to objects in the target array."""

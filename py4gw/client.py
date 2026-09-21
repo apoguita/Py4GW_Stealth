@@ -15,6 +15,20 @@ from .context import (
     GameplayContextStruct,
     PreGameContext,
     PreGameContextStruct,
+    ServerRegion,
+    ServerRegionStruct,
+    InstanceInfo,
+    InstanceInfoStruct,
+    TextParser,
+    TextParserStruct,
+    AvailableCharacterArray,
+    AvailableCharacterArrayStruct,
+    PartyContext,
+    PartyContextStruct,
+    GuildContext,
+    GuildContextStruct,
+    AccAgentContext,
+    AccAgentContextStruct,
 )
 from .memory import ProcessMemoryReader
 from .scanner import PatternCatalog, RemoteScanner
@@ -63,6 +77,30 @@ class ConnectedClient:
                 patterns,
             )
             self._pre_game_context.initialize()
+            self._server_region = ServerRegion(
+                self._reader,
+                self._scanner,
+                patterns,
+            )
+            self._server_region.initialize()
+            self._instance_info = InstanceInfo(
+                self._reader,
+                self._scanner,
+                patterns,
+            )
+            self._instance_info.initialize()
+            self._text_parser = TextParser(self._reader, self._game_context)
+            self._available_characters = AvailableCharacterArray(
+                self._reader,
+                self._scanner,
+                patterns,
+            )
+            self._available_characters.initialize()
+            self._party_context = PartyContext(self._reader, self._game_context)
+            self._guild_context = GuildContext(self._reader, self._game_context)
+            self._acc_agent_context = AccAgentContext(
+                self._reader, self._game_context
+            )
             self._context = CharContext(
                 self._reader,
                 self._scanner,
@@ -124,6 +162,83 @@ class ConnectedClient:
         """Read and return the current complete PreGameContext snapshot."""
 
         return self._pre_game_context.read()
+
+    @property
+    def server_region(self) -> ServerRegion:
+        """Return the external ServerRegion reader for this client."""
+
+        return self._server_region
+
+    def read_server_region(self) -> ServerRegionStruct | None:
+        """Read and return the current server-region value, if available."""
+
+        return self._server_region.read()
+
+    @property
+    def instance_info(self) -> InstanceInfo:
+        """Return the external InstanceInfo reader for this client."""
+
+        return self._instance_info
+
+    def read_instance_info(self) -> InstanceInfoStruct | None:
+        """Read and return the current InstanceInfo snapshot, if available."""
+
+        return self._instance_info.read()
+
+    @property
+    def text_parser(self) -> TextParser:
+        """Return the external TextParser reader for this client."""
+
+        return self._text_parser
+
+    def read_text_parser(self) -> TextParserStruct | None:
+        """Read the current TextParser snapshot, if its pointer is available."""
+
+        return self._text_parser.read()
+
+    @property
+    def available_characters(self) -> AvailableCharacterArray:
+        """Return the external account-roster reader for this client."""
+
+        return self._available_characters
+
+    def read_available_characters(self) -> AvailableCharacterArrayStruct | None:
+        """Read the current account-wide available-character roster."""
+
+        return self._available_characters.read()
+
+    @property
+    def party_context(self) -> PartyContext:
+        """Return the external PartyContext reader for this client."""
+
+        return self._party_context
+
+    def read_party_context(self) -> PartyContextStruct | None:
+        """Read the current PartyContext snapshot, if available."""
+
+        return self._party_context.read()
+
+    @property
+    def guild_context(self) -> GuildContext:
+        """Return the external GuildContext reader for this client."""
+
+        return self._guild_context
+
+    def read_guild_context(self) -> GuildContextStruct | None:
+        """Read the current GuildContext snapshot, if available."""
+
+        return self._guild_context.read()
+
+    @property
+    def acc_agent_context(self) -> AccAgentContext:
+        """Return the external agent-context reader for this client."""
+
+        return self._acc_agent_context
+
+    def read_acc_agent_context(self) -> AccAgentContextStruct | None:
+        """Read the current maintained agent context, if available."""
+
+        return self._acc_agent_context.read()
 
     @property
     def cinematic(self) -> Cinematic:

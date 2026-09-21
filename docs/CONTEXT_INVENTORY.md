@@ -200,14 +200,37 @@ keeps in another module.
   `GameContext.cinematic`.
 - `context.GameplayContext`: optional gameplay structure with the maintained
   mission-map zoom field.
+- `context.ServerRegion`: signed 32-bit server-region value resolved from
+  `map.region_id_addr` and cached for the connection.
+- `context.InstanceInfo`: map-instance structure resolved from
+  `map.instance_info_addr`, with external nested `MapDimensions` and
+  `AreaInfo` reads.
+- `context.TextParser`: native `GameContext.text_parser` pointer at `+0x18`,
+  complete `TextParser` root layout, and nested cache/sub-structure reads.
+- `context.AvailableCharacterArray`: native account-roster `GWArray` resolved
+  through `player.available_characters_addr`, with packed character properties.
+- `context.PartyContext`: direct `GameContext.party` pointer, nested party
+  arrays, party searches, and bounded intrusive-list readers.
+- `context.GuildContext`: direct `GameContext.guild` pointer, complete
+  maintained guild layout, and nested guild, history, alliance, and roster
+  array readers.
+- `context.AccAgentContext`: direct `GameContext.agent` pointer, maintained
+  agent-summary and movement layouts, and bounded remote array readers.
 
-The implemented context readers are live-verified. Their resolver scans are
+The first twelve context readers are live-verified. Resolver scans are
 performed during connection and stable resolver locations are cached; dynamic
 context pointers and structure bytes are re-read for each snapshot.
 
 The migration sequence so far is: `CharContext`, `GameContext`,
-`PreGameContext`, `Cinematic`, then `GameplayContext`. The next selected simple
-context is `ServerRegion`.
+`PreGameContext`, `Cinematic`, `GameplayContext`, `ServerRegion`,
+`InstanceInfo`, `TextParser`, `AvailableCharacterArray`, `PartyContext`,
+`GuildContext`, then `AccAgentContext`. The live GuildContext check resolved
+address `0x025732D8` and
+read player `Fezzik The Untamed`, 101 guild records, 42 roster entries, and 20
+history entries on the verified client build.
+`WorldMapContext` remains pending because its source pointer
+is published by injected UI callback/shared-memory state rather than a
+currently available external resolver.
 
 ### Not yet implemented in Stealth
 
@@ -234,24 +257,18 @@ performance.
 
 ### Simple candidates
 
-These have small structures and few dependencies, making them appropriate
-next steps:
+The previously selected simple candidates are now implemented. The remaining
+small callback-owned contexts are not resolver-backed external candidates:
 
-- `ServerRegionContext.py`
-- `WorldMapContext.py`
-- `MissionMapContext.py`
-- `AvailableCharacterContext.py`
-- `InstanceInfoContext.py`
-- `TextContext.py` (small layout, but string pointers need a reader helper)
+- `MissionMapContext.py` has a small layout, but its pointer is gathered by a
+  UI callback in the native DLL.
 
 ### Moderate candidates
 
 These contain several arrays or related records, but are still bounded enough
 to migrate as one focused task:
 
-- `AccAgentContext.py`
-- `PartyContext.py`
-- `GuildContext.py`
+- `AccAgentContext.py` (implemented and live-verified)
 - `PreGameContext.py` (already migrated)
 - `CharContext.py` (already migrated)
 
@@ -266,9 +283,12 @@ until the smaller roots are available:
 
 The native-only or distributed surfaces (`ItemContext`, trade, friend list,
 camera, render, UI, salvage, and related records) should be scheduled after
-the root context that owns their pointers is understood. The next simple
-implementation candidate is `ServerRegion` unless a different candidate is
-selected deliberately.
+the root context that owns their pointers is understood. `WorldMapContext` and
+`MissionMapContext` are separately tracked as callback-owned contexts below;
+they are not treated as ordinary JSON-resolver readers.
+
+The resolver-backed moderate candidates are now implemented; callback-owned
+contexts remain postponed until their pointer source is explicitly in scope.
 
 ## Migration checklist
 
@@ -283,21 +303,27 @@ does not mean that every nested record in the source project is complete.
 - [x] `PreGameContext`
 - [x] `Cinematic`
 - [x] `GameplayContext`
+- [x] `ServerRegion`
+- [x] `InstanceInfo`
+- [x] `TextParser`
+- [x] `AvailableCharacterArray`
+- [x] `PartyContext`
+- [x] `GuildContext`
+- [x] `AccAgentContext`
 
 ### Pending: simple contexts
 
-- [ ] `ServerRegion`
-- [ ] `WorldMapContext`
-- [ ] `MissionMapContext`
-- [ ] `AvailableCharacterArray`
-- [ ] `InstanceInfo`
-- [ ] `TextParser`
+No resolver-backed simple context is currently selected. The callback-owned
+map contexts remain listed separately below.
+
+### Pending: callback-owned contexts
+
+- [ ] `WorldMapContext` (native UI callback publishes the pointer)
+- [ ] `MissionMapContext` (native UI callback publishes the pointer)
 
 ### Pending: moderate contexts
 
-- [ ] `AccAgentContext`
-- [ ] `PartyContext`
-- [ ] `GuildContext`
+No pending moderate context is currently selected.
 
 ### Pending: complex contexts
 

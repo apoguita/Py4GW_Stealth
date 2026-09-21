@@ -27,10 +27,11 @@ Python package with a `Win32` process boundary and a read-only scanner that can:
 - resolve copied pattern and pointer-resolver definitions from `offsets/`.
 
 The scanner and remote memory path are read-only. The scanner, resolver, and
-the `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`, and
-`GameplayContext` readers have
-also been verified against one live client build; compatibility with other
-builds is not established. The current
+the `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
+`GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
+`AvailableCharacterArray`, `PartyContext`, `GuildContext`, and
+`AccAgentContext` readers have also been
+verified against one live client build. Compatibility with other builds is not established. The current
 package does not write to a process, inject code, create remote threads,
 install hooks, or automate Guild Wars.
 
@@ -176,6 +177,10 @@ char_context = py4gw.context.charcontext.get()
 if char_context is not None and char_context.is_logged_in:
     print(char_context.player_name_str or "in selection menus")
 
+instance_info = py4gw.context.instanceinfo.get()
+if instance_info is not None and instance_info.current_map_info is not None:
+    print(f"Map file id: {instance_info.current_map_info.file_id}")
+
 py4gw.disconnect()
 ```
 
@@ -204,12 +209,20 @@ To run the live context check directly, keep Guild Wars running and execute:
 ```text
 python tests\test_context.py
 python tests\test_gameplay_context.py
+python tests\test_server_region_context.py
+python tests\test_instance_info_context.py
+python tests\test_text_parser_context.py
+python tests\test_available_character_context.py
 ```
 
 This test reads the complete `CharContextStruct`, resolves its address through
 the JSON resolver, and prints the live character name. It skips clearly when
 no Guild Wars client is running. The GameplayContext test performs the same
 read-only verification for the gameplay structure and its mission-map zoom.
+The ServerRegion test verifies the signed region value resolved from the
+copied `map.json` resolver. The InstanceInfo test verifies the root structure,
+its current area metadata, and the nested fixed-width records. The TextParser
+test follows `GameContext.text_parser` and reads the native root structure.
 
 ## Running the main UI
 
@@ -223,9 +236,13 @@ The first tab lists running Guild Wars clients, shows their live character
 names when available, labels clients in the selection menus, and provides PID
 selection plus a read-only Connect button. After connecting, the `Client data`
 tab displays the available `CharContext`, `GameContext`, `PreGameContext`,
-`Cinematic`, and `GameplayContext` snapshots. The migration order is
-`CharContext`, `GameContext`, `PreGameContext`, `Cinematic`, then
-`GameplayContext`.
+`Cinematic`, `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
+`AvailableCharacters`, `PartyContext`, `GuildContext`, and `AccAgentContext`
+snapshots.
+The migration order is `CharContext`, `GameContext`, `PreGameContext`,
+`Cinematic`, `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
+`AvailableCharacterArray`, `PartyContext`, `GuildContext`, then
+`AccAgentContext`.
 
 Scripts do not need to be placed in the project root. They may live in a
 separate `scripts/` directory or another location, as long as they use the

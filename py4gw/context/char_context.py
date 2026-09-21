@@ -62,7 +62,9 @@ class ObserverMatch(Structure):
 
     _remote_reader: _memory_reader | None = None
 
-    def bind_reader(self, reader: _memory_reader) -> ObserverMatch:
+    def bind_reader(
+        self, reader: _memory_reader, address: int | None = None
+    ) -> ObserverMatch:
         """Attach the reader needed to follow this match's target pointers."""
 
         self._remote_reader = reader
@@ -194,7 +196,9 @@ class CharContextStruct(Structure):
 
     _remote_reader: _memory_reader | None = None
 
-    def bind_reader(self, reader: _memory_reader) -> CharContextStruct:
+    def bind_reader(
+        self, reader: _memory_reader, address: int | None = None
+    ) -> CharContextStruct:
         """Attach the reader needed to follow this snapshot's target pointers."""
 
         self._remote_reader = reader

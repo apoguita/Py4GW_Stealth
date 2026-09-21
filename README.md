@@ -7,7 +7,10 @@ payload into the Guild Wars process.
 The project is being developed one capability at a time. The current library
 provides read-only `Gw.exe` discovery, a reusable x86 pattern scanner, and
 external readers for Reforged's maintained `CharContext`, `GameContext`,
-`PreGameContext`, `Cinematic`, and `GameplayContext` layouts. A small NiceGUI
+`PreGameContext`, `Cinematic`, `GameplayContext`, `ServerRegion`,
+`InstanceInfo`, `TextParser`, `AvailableCharacterArray`, `PartyContext`,
+`GuildContext`, and `AccAgentContext`
+layouts. A small NiceGUI
 window exercises the
 client-selection and read-only connection surface.
 
@@ -62,8 +65,8 @@ with ProcessMemoryReader(win32, pid) as reader:
 
 This opens the selected process with read-only access and returns section
 addresses. It does not write to or execute code in the process. The scanner
-and the first context readers have been verified against one live client build;
-compatibility with other builds is not established.
+and the context readers have been verified against one live client build.
+Compatibility with other builds is not established.
 
 ## Main UI
 
@@ -77,9 +80,13 @@ The first tab lists every running Guild Wars client, shows its live character
 name when available, labels clients at the selection menus, and lets you
 refresh and connect to a selected PID. After connecting, the `Client data`
 tab becomes available; its context subtabs display the live structure fields:
-`Cinematic`, `GameplayContext`, `PreGameContext`, `GameContext`, and
-`CharContext`. The migration order for these readers is `CharContext`,
-`GameContext`, `PreGameContext`, `Cinematic`, then `GameplayContext`.
+`Cinematic`, `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
+`AvailableCharacters`, `PartyContext`, `GuildContext`, `AccAgentContext`,
+`PreGameContext`, `GameContext`, and `CharContext`. The migration order for
+these readers is `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
+`GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
+`AvailableCharacterArray`, `PartyContext`, `GuildContext`, then
+`AccAgentContext`.
 `PreGameContext` reports when the client is outside the selection menus.
 The context tables support sorting by their
 headers, pagination, filtering, row selection, and wrapped values for long
@@ -123,6 +130,22 @@ gameplay_context = py4gw.context.gameplaycontext.get()
 if gameplay_context is not None:
     print(f"Mission-map zoom: {gameplay_context.mission_map_zoom:.3f}")
 
+instance_info = py4gw.context.instanceinfo.get()
+if instance_info is not None and instance_info.current_map_info is not None:
+    print(f"Map file id: {instance_info.current_map_info.file_id}")
+
+text_parser = py4gw.context.textparser.get()
+if text_parser is not None:
+    print(f"Text language: {text_parser.language_id}")
+
+available_characters = py4gw.context.availablecharacters.get()
+if available_characters is not None:
+    print([entry.player_name_str for entry in available_characters.characters])
+
+party = py4gw.context.partycontext.get()
+if party is not None:
+    print(f"Party leader: {party.is_party_leader}")
+
 py4gw.disconnect()
 ```
 
@@ -154,6 +177,7 @@ inside Guild Wars.
 - [Design contract](docs/DESIGN.md) — current implementation rules
 - [Performance](docs/PERFORMANCE.md) — timing, resolver caching, and the live harness
 - [Context inventory](docs/CONTEXT_INVENTORY.md) — native/Reforged context mapping and Stealth status
+- [AgentArray plan](docs/AGENT_ARRAY_PLAN.md) — the staged plan for bounded agent traversal and lazy reads
 - [Programming style](docs/STYLE.md) — naming and coding conventions
 - [Research record](docs/RESEARCH.md) — detailed source analysis and history
 
