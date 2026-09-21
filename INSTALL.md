@@ -17,16 +17,22 @@ Stealth is a capability-by-capability external counterpart to that system, not
 a promise that every in-process feature can be reproduced externally.
 
 The current implementation is intentionally small. It provides a `py4gw`
-Python package with a `Win32` class that can:
+Python package with a `Win32` process boundary and a read-only scanner that can:
 
 - list running Windows processes;
 - find every process whose executable name is `Gw.exe`; and
 - report each matching process's PID and executable path when Windows allows
-  that lookup.
+  that lookup;
+- read validated x86 module sections through `ReadProcessMemory`; and
+- resolve copied pattern and pointer-resolver definitions from `offsets/`.
 
-This is read-only process discovery. The current package does not read target
-memory, write to a process, inject code, create remote threads, install hooks,
-or automate Guild Wars.
+The scanner and remote memory path are read-only. The scanner, resolver, and
+the `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`, and
+`GameplayContext` readers have
+also been verified against one live client build; compatibility with other
+builds is not established. The current
+package does not write to a process, inject code, create remote threads,
+install hooks, or automate Guild Wars.
 
 ## Requirements
 
@@ -34,9 +40,9 @@ or automate Guild Wars.
 - Python 3.13 32-bit for the current x86-oriented research setup
 - NiceGUI with native-window support (installed automatically with the project)
 
-Python 3.12 or another supported Python version may run the current process
-discovery code, but the controller and target should match bitness before any
-future memory work is considered.
+Python 3.12 or another supported Python version may run the process-discovery
+code, but the current remote scanner requires an x86 controller for an x86
+target. Match controller and target bitness when using the memory path.
 
 Check the active interpreter with:
 
@@ -104,6 +110,107 @@ processes = win32.find_guild_wars()
 print(win32.format_processes(processes))
 ```
 
+To inspect a selected process read-only, obtain its main module and use the
+scanner with an explicit context manager:
+
+```python
+from py4gw import ProcessMemoryReader, RemoteScanner, Win32
+
+win32 = Win32()
+pid = 1234  # choose one result from find_guild_wars()
+module = win32.get_main_module(pid)
+
+with ProcessMemoryReader(win32, pid) as reader:
+    scanner = RemoteScanner(reader, module["base_address"], module["size"])
+    scanner.initialize()
+    print(scanner.get_section_range("text"))
+```
+
+The reader requests query and VM-read access only and closes its handle when
+the `with` block ends. The scanner reads validated x86 module ranges; it does
+not write memory or execute target code. The scanner and context readers have
+been verified against one live client build, but compatibility with other
+builds is not established.
+
+The complete low-level context example keeps the reader open for the entire
+snapshot operation:
+
+```python
+from py4gw import (
+    CharContext,
+    PatternCatalog,
+    ProcessMemoryReader,
+    RemoteScanner,
+    Win32,
+)
+
+win32 = Win32()
+pid = 1234  # choose one result from find_guild_wars()
+module = win32.get_main_module(pid)
+
+with ProcessMemoryReader(win32, pid) as reader:
+    scanner = RemoteScanner(reader, module["base_address"], module["size"])
+    scanner.initialize()
+    patterns = PatternCatalog.from_directory("offsets")
+    context = CharContext(reader, scanner, patterns)
+    context.initialize()  # scan once and cache the stable resolver address
+    print(context.read_player_name())
+```
+
+`context.read()` re-reads the dynamic context pointer chain but does not scan
+the module again. Call `context.initialize()` again only when you deliberately
+want to refresh the cached resolver address. A new `ConnectedClient` performs
+this initialization automatically during `py4gw.connect(...)`.
+
+For normal scripts, use the shorter client-selection facade instead of
+constructing the scanner yourself:
+
+```python
+import py4gw
+
+clients = py4gw.win32.list_processes()
+client = py4gw.connect(clients[0])
+print("attached:", client.is_connected)
+
+char_context = py4gw.context.charcontext.get()
+if char_context is not None and char_context.is_logged_in:
+    print(char_context.player_name_str or "in selection menus")
+
+py4gw.disconnect()
+```
+
+`py4gw.win32.list_processes()` returns only running `Gw.exe` clients.
+`py4gw.connect(...)` selects one client and keeps its read-only handle open.
+Call `py4gw.disconnect()` when the script is finished.
+
+`CharContext` follows the JSON `context.base_ptr` resolver and the maintained
+Reforged structure offsets. `PatternCatalog.from_directory("offsets")` also
+finds the project-root `offsets/` directory when called from a project
+subdirectory. It reads a snapshot externally; it does not cast or dereference
+remote pointers inside the Python process.
+
+For detailed timing of the connection scan, cached context reads, and derived
+array properties, run the live harness:
+
+```text
+python tests\perf_context.py
+```
+
+The harness accepts `--samples N` and `--pid PID` and reports elapsed time,
+percentiles, remote-read counts, and requested bytes for each stage.
+
+To run the live context check directly, keep Guild Wars running and execute:
+
+```text
+python tests\test_context.py
+python tests\test_gameplay_context.py
+```
+
+This test reads the complete `CharContextStruct`, resolves its address through
+the JSON resolver, and prints the live character name. It skips clearly when
+no Guild Wars client is running. The GameplayContext test performs the same
+read-only verification for the gameplay structure and its mission-map zoom.
+
 ## Running the main UI
 
 From the project directory:
@@ -112,8 +219,13 @@ From the project directory:
 python main.py
 ```
 
-The first tab provides a small test surface for the current read-only Win32
-process-discovery methods.
+The first tab lists running Guild Wars clients, shows their live character
+names when available, labels clients in the selection menus, and provides PID
+selection plus a read-only Connect button. After connecting, the `Client data`
+tab displays the available `CharContext`, `GameContext`, `PreGameContext`,
+`Cinematic`, and `GameplayContext` snapshots. The migration order is
+`CharContext`, `GameContext`, `PreGameContext`, `Cinematic`, then
+`GameplayContext`.
 
 Scripts do not need to be placed in the project root. They may live in a
 separate `scripts/` directory or another location, as long as they use the
@@ -129,9 +241,12 @@ docs/           Design and programming-style rules
 external/       Local research checkouts; intentionally excluded from Git
 ```
 
+The [performance guide](docs/PERFORMANCE.md) documents the `PerfCounter`
+contract, resolver caching, and the detailed live timing harness.
+
 ## Research boundary
 
-The package currently identifies `Gw.exe` candidates by executable filename.
-That is not proof of a particular game build and does not validate any Guild
-Wars memory layout. New capabilities must be designed and documented before
-they are added.
+The package identifies `Gw.exe` candidates by executable filename and has a
+read-only scanner for validated x86 module ranges. Neither is proof of a
+particular supported game build. New target-specific capabilities must be
+designed and documented before they are added.

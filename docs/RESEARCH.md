@@ -4,9 +4,10 @@ This document contains the detailed research history and source comparisons
 that were intentionally kept out of the GitHub front page. It is not the
 project's short description or installation guide.
 
-Status: current active research project; first process-discovery slice implemented
+Status: current active research project; read-only process discovery and the
+reusable scanner slice implemented
 Scope: establish what an external Guild Wars controller can read, write, execute, and observe before expanding capabilities.
-Authority: inspected current Py4GW Reforged and Py4GW Reforged Native sources; inspected the GwAu3 source checkout; verified the current read-only process-discovery behavior. No live-client memory behavior has been verified.
+Authority: inspected current Py4GW Reforged and Py4GW Reforged Native sources; inspected the GwAu3 source checkout; and verified process discovery, section scanning, and the CharContext, GameContext, PreGameContext, Cinematic, and GameplayContext read paths against one live client build. Other context behavior remains unverified.
 
 ## Intent
 
@@ -29,9 +30,17 @@ The immediate purpose is to understand the capability boundary between:
 This document deliberately does not select an architecture, promise a botting surface, or prescribe an implementation. Those decisions depend on research into individual Guild Wars data and command paths.
 
 The current implementation is intentionally narrower than the long-term
-research question: it is a project-owned `Win32` class for read-only process
-discovery, plus a small NiceGUI window for exercising that class. The UI does
-not expand the library's process or memory capabilities.
+research question: it is a project-owned `Win32` boundary, a reusable
+read-only scanner consuming the copied offsets definitions, and a small
+NiceGUI window for exercising process discovery. The UI does not expand the
+library's process or memory capabilities.
+
+The current source inventory for the native and Reforged context surfaces is
+maintained in [CONTEXT_INVENTORY.md](CONTEXT_INVENTORY.md). It records the
+native root accessors, the Reforged Python modules, their many-to-one mapping,
+and which surfaces Stealth has actually implemented. That inventory is
+comparative source evidence; it is not evidence that every context has been
+externally validated.
 
 ## Terminology
 
@@ -80,7 +89,22 @@ The current project surface is:
 main.py                 NiceGUI native test window
 py4gw/                  project package
   win32/win32.py        Win32 process-discovery class
+  memory/memory.py      Read-only process-memory transport
+  scanner/scanner.py    Offline pattern scanner core
+  scanner/remote.py     PE sections and remote scanner
+  scanner/patterns.py   Offset definitions and resolver chains
+  context/char_context.py  Reforged CharContext layout, reader, and accessor
+  context/game_context.py External GameContext layout, resolver, and reader
+  context/pre_game_context.py External PreGameContext layout, resolver, and reader
+  context/cinematic_context.py External Cinematic layout and reader
+  context/gameplay_context.py External GameplayContext layout and reader
 tests/test_win32.py     focused process tests
+tests/test_scanner.py   offline scanner tests
+tests/test_remote_scanner.py  synthetic PE scanner tests
+tests/test_patterns.py  offsets/resolver tests
+tests/test_cinematic_context.py live Cinematic integration test
+tests/test_gameplay_context.py live GameplayContext integration test
+tests/test_context.py   live CharContext integration test
 tests/nicegui_probe.py  manual NiceGUI dependency check
 ```
 
@@ -89,11 +113,24 @@ The `Win32` class currently provides `list_processes`,
 executable filename `Gw.exe` case-insensitively and reports the PID, name,
 path, and path error when applicable.
 
-The root `main.py` window has one `Win32 process test` tab. Its `List all
-processes` and `Find Gw.exe` buttons call the public class methods and show
-structured results in a table. NiceGUI is a presentation dependency only; it
-does not own Windows API declarations, process handles, memory operations, or
-Guild Wars-specific rules.
+The `Scanner` class scans a local byte snapshot. It supports the
+Reforged escaped pattern literals, masks, signed result offsets, bounded
+ranges, first/all/nth matches, and the native C-string compatibility behavior
+used by the copied offsets definitions. It is deliberately independent of
+Windows handles.
+
+The `ProcessMemoryReader` and `RemoteScanner` add the read-only external path:
+they open a selected process, parse its x86 PE section ranges, scan those
+ranges in bounded chunks, and execute the copied `Patterns` resolver
+operations. Their section and resolver path, plus the `CharContext`,
+`GameContext`, `PreGameContext`, `Cinematic`, and `GameplayContext` readers, have also been
+verified against one live client build; this does not establish compatibility
+with other builds.
+
+The root `main.py` window has a client-selection tab and read-only context
+tabs for a connected client. NiceGUI is a presentation
+dependency only; it does not own Windows API declarations, process handles,
+memory operations, or Guild Wars-specific rules.
 
 The project enforces this code boundary with `pyrightconfig.json`: Pyright
 checks `main.py`, `py4gw/`, and `tests/`, while excluding the local research
@@ -121,6 +158,65 @@ GwAu3's AutoIt application is external, but its command execution mechanism is n
 
 Conclusion: GwAu3 demonstrates that an external controller can gain broad game-thread execution capabilities without an injected DLL or embedded scripting runtime. It does so by injecting a smaller executable payload and patching game code. AutoIt is not the special capability; a 32-bit Python process with appropriate Windows interop could use the same operating-system primitives.
 
+### GwAu3 character-name discovery
+
+Status: verified by source inspection of the checked-out GwAu3 revision. This
+is not yet verified against a live Guild Wars client from Stealth.
+
+GwAu3 uses the character name to make a list of `Gw.exe` candidates useful for
+human selection. Its character-name path is:
+
+1. Enumerate processes whose executable name is `gw.exe`.
+2. Open one candidate process and discover its main module base address.
+3. Read the module's PE headers and record the virtual ranges of sections such
+   as `.text`.
+4. Read the `.text` section and search for the x86 byte pattern
+   `8B 03 83 C4 10 A3`.
+5. From the match, read a 32-bit pointer at the pattern-relative offset used
+   by GwAu3 (`match + 6 - 0xF`).
+6. Read a fixed-size UTF-16/wchar character-name value from that pointer.
+7. When the caller supplied a character name, compare the trimmed result and
+   keep the matching PID/window. When scanning all clients, return the name
+   associated with each candidate.
+
+The relevant source paths are `API/Core/GwAu3_Core.au3`,
+`API/Core/GwAu3_Core_Scanner.au3`, `API/Modules/Data/GwAu3_Data_Player.au3`,
+and `API/Core/GwAu3_Core_Memory.au3`. `Scanner_ScanGW` does not check the
+character-pattern result before calling `Player_GetCharName`, which is a
+source-level weakness rather than evidence that every candidate is identified.
+
+This mechanism is a read-only pattern scan and pointer dereference. GwAu3
+opens the process with an all-access mask (`0x1F0FFF`), but Stealth should not
+copy that privilege choice for a read-only identity probe. The pattern and
+offset are historical comparative evidence, not a current-build guarantee.
+They must be revalidated against the target build and treated as a target-
+specific adapter rather than hidden inside generic Win32 process code.
+
+### Implemented capability: reusable read-only scanner
+
+The implemented scanner is reusable, not character-specific. Its job is to
+search validated byte ranges in a selected process and report matches without
+knowing what those matches mean. Guild Wars character-name discovery will be a
+consumer of this scanner, not part of the scanner engine itself. The current
+consumers are the maintained `CharContext`, `GameContext`, `PreGameContext`,
+`Cinematic`, and `GameplayContext` readers.
+
+The scanner foundation should provide:
+
+- bounded reads from a selected process and address range;
+- exact byte patterns and explicitly represented wildcard bytes;
+- correct handling of matches that cross read-chunk boundaries;
+- zero, one, or many match results with their target addresses;
+- validation of requested ranges and target pointer width;
+- distinct outcomes for unreadable ranges, incomplete reads, and no matches;
+- explicit ownership and closing of process handles; and
+- deterministic offline tests that do not require a live Guild Wars client.
+
+The implementation was staged as offline matching, bounded process-memory
+transport, section/range selection, remote helper operations, and finally the
+offsets resolver. A target-specific signature, pointer offset, or
+text-decoding rule must not be hidden inside the reusable scanner.
+
 ## Capability Boundary So Far
 
 | Capability | Pure external process | External host plus remote payload | Current Py4GW DLL |
@@ -145,39 +241,50 @@ Important distinction: an external process can ask Windows to start code in anot
 
 ## Current Project Boundary
 
-The first read-only runtime exists in the `py4gw` package. It currently lists
-Windows processes and finds `Gw.exe` candidates by executable filename. The
-root NiceGUI window is only a test and presentation surface over that runtime.
-Neither component reads target memory or modifies any process.
+The first read-only runtime exists in the `py4gw` package. It lists Windows
+processes, finds `Gw.exe` candidates by executable filename, opens a selected
+process for query/VM-read access, and scans validated x86 module sections.
+The root NiceGUI window is only a test and presentation surface over process
+discovery; it does not own the memory path or modify any process.
 
-No claim in this document is live-client verified. GwAu3 behavior was established from source inspection; Py4GW Reforged behavior was established from current repository sources and project documentation.
+Claims about GwAu3 and Reforged behavior are source-based. The Stealth
+CharContext, GameContext, PreGameContext, Cinematic, GameplayContext, process reader, and
+scanner observations marked as live below were reproduced against one client
+build; they do not establish compatibility with other builds or with the
+remaining contexts.
 
-## Current Starting Scope: Generic Process-Scanning Library
+## Initial Deliverable: Generic Process-Scanning Library
 
 The first deliverable is a project-owned Windows library plus a small test
 surface that can:
 
 1. enumerate running processes and present a useful list;
 2. find every process whose executable filename is `Gw.exe`; and
-3. leave process-memory scanning for a separately defined future capability.
+3. open a selected process read-only and scan its validated x86 module ranges;
+4. load the copied `offsets/` definitions and execute reusable resolver chains.
 
-The implemented part is generic Windows process handling plus one explicit
-`Gw.exe` filename filter. It contains no Guild Wars signatures, layouts,
-pointer chains, command paths, or behavior interpretation. The root UI exposes
-the implemented operations without adding a second process layer.
+The implemented part is generic Windows process handling, a bounded memory
+reader, PE section discovery, a reusable pattern scanner, an offsets
+resolver, and the first five Guild Wars structure readers, migrated in this
+order: `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`, and
+`GameplayContext`. It does
+not yet contain the
+remaining context readers, command paths, or behavior interpretation. The root
+UI exposes process discovery and these read-only context surfaces without
+adding a second process layer.
 
-There is still no decision about payload injection, DLL injection, remote
-execution, hooks, or memory scanning. Those questions remain outside the
-current starting scope.
+Payload injection, DLL injection, remote execution, hooks, and writes remain
+outside the current scope. Memory scanning is read-only and is now part of the
+implemented foundation.
 
 ### Design order for this deliverable
 
 - [x] Define the public vocabulary and data returned when processes are
   listed: the minimum process summary, unavailable metadata, and errors.
-- [ ] Define how a caller selects a process: explicit PID input and the
+- [x] Define how a caller selects a process: explicit PID input and the
   lifetime of the resulting library object.
-- [ ] Define exactly what “scan” means for version one: what is searched,
-  what the query looks like, and what a successful result contains.
+- [x] Define exactly what “scan” means for version one: validated module
+  sections, masked patterns, bounded ranges, and target addresses.
 - [x] Define the library boundary versus a presentation layer. The library
   returns structured data; `main.py` renders it without becoming the library
   API.
@@ -186,18 +293,18 @@ current starting scope.
 
 ### Current design decision
 
-The current direction is: build the generic process-scanning library from
-small project-owned pieces, progressing one public capability at a time. The
-NiceGUI window is deliberately limited to testing and presenting capabilities
-that already exist in the library.
+The current direction is: keep the generic process-scanning library in small
+project-owned pieces, progressing one public capability at a time. The
+NiceGUI window remains deliberately limited to testing and presenting
+capabilities that already exist in the library.
 
 ### First concrete capability: Guild Wars process discovery
 
 The first capability is discovery of running Guild Wars processes so a caller
 can locate them. A process is a Guild Wars *candidate* when its executable
 filename is `Gw.exe`, compared case-insensitively. This is process discovery
-only, not proof of a supported client build or of any future memory-scanning
-capability.
+only, not proof of a supported client build or of the scanner's compatibility
+with that build.
 
 Discovery returns every candidate, not just the first one. Each result should
 at minimum preserve:
@@ -247,13 +354,18 @@ The user-provided `BUILDING_WITH_MEMLIB.md` was reviewed as technical reference 
 
 Py4GW Stealth will not depend on or import MemLib for its initial work. The fetched checkout remains research context only.
 
-The current implementation is one small, project-owned `Win32` class for the
-first process-discovery capability:
+The current implementation is a small, project-owned set of boundaries:
 
 ```text
 py4gw/
     win32/
         win32.py      Win32 class: process listing and Gw.exe discovery
+    memory/
+        memory.py     read-only process-memory transport
+    scanner/
+        scanner.py    offline pattern matching
+        remote.py     PE section and remote scanning
+        patterns.py   offsets and resolver chains
 ```
 
 This is not authorization to copy MemLib wholesale. Reimplement the small
@@ -261,10 +373,191 @@ required surface against documented Windows behavior. If a later change
 deliberately borrows actual MemLib source, preserve its MIT license notice and
 record exact file-level provenance in the project documentation.
 
-The current local work is only pure external, read-only process discovery.
-Memory reads, module inspection, signatures, remote allocation, memory writes,
-remote threads, DLL loading, executable payloads, and hooks are outside the
-current scope.
+The current local work is pure external, read-only process discovery and
+read-only module scanning. Remote allocation, memory writes, remote threads,
+DLL loading, executable payloads, and hooks are outside the current scope.
+
+## Native scanner migration plan
+
+The current `Py4GW_Reforged_Native` scanner is useful comparative design
+material, but it is not one class with one responsibility. It has two layers:
+
+1. `Scanner`/`FileScanner` provide section discovery, masked byte-pattern
+   searches, range searches, address/string-use searches, near-call and
+   function-start helpers, and section pointer validation.
+2. `Patterns` loads pattern definitions and resolver chains, then combines scan,
+   dereference, integer-read, arithmetic, section-validation, and fallback
+   steps while preserving a resolution trace and failure policy.
+
+The native implementation runs inside the target module. It can inspect mapped
+module bytes directly and also map the module file from disk. Stealth runs
+outside `Gw.exe`, so the Python version must replace those assumptions with
+read-only `ReadProcessMemory` calls against a selected PID, explicit module
+and section ranges, fixed-width x86 fields, and bounded reads. This is a
+behavioral migration, not a line-by-line translation.
+
+`ReadProcessMemory` does not introduce another signature set. It is only the
+external transport used to obtain bytes from `Gw.exe`. The pattern bytes,
+masks, offsets, section names, and resolver descriptions remain the same data
+used by Reforged Native. The current Stealth repository now contains a copied
+`offsets/` directory; future updates can be copied from Reforged into that
+directory without maintaining a second Python translation of the signatures.
+The Python loader must consume this JSON schema directly and every scan should
+record the offsets source revision/build it used.
+
+The offsets locate addresses and describe resolution steps; they do not by
+themselves describe the fields of every object at those addresses. Those
+layouts already exist as maintained context definitions in Reforged Native's
+`GW::Context` headers and Reforged's Python `ctypes.Structure` declarations.
+Stealth's structure reader should reuse or deliberately port those definitions
+instead of inventing a competing model. The injected Python version can cast a
+pointer and access `.contents` because it runs in the game process; the
+external version must read the target bytes first and decode them, while
+treating embedded pointers as target addresses that require explicit follow-up
+reads.
+
+The migration is intentionally staged:
+
+1. **Parity inventory.** Record the native public operations and their exact
+   success/failure behavior. Keep scanner mechanics separate from Guild Wars
+   signatures and meanings.
+2. **Offline pattern engine.** Implement typed byte patterns and masks, input
+   validation, first/all/nth match behavior, offsets, and deterministic tests
+   over ordinary byte buffers. No process access is involved.
+3. **External memory reader.** Extend the existing Win32 boundary with a
+   selected-process, read-only handle and bounded reads that preserve Windows
+   error context. Add explicit close/context-manager ownership.
+4. **Remote module sections.** Read and validate the target PE headers, expose
+   `.text`, `.rdata`, and `.data` ranges, and reject invalid or unreadable
+   ranges before scanning.
+5. **Remote scanner.** Scan section/range data in chunks with overlap so a
+   pattern crossing a chunk boundary is found. Return structured match and
+   diagnostic results rather than a bare zero address.
+6. **Scanner helpers.** Add the reusable native-style helpers one at a time:
+   address uses, string uses, near-call resolution, function-start search, and
+   section pointer validation. Each helper gets offline tests before any live
+   process test.
+7. **Pattern definitions and resolvers.** Only after the scanner core is
+   stable, add a Python representation for pattern records and resolver chains,
+   including fallback attempts, step traces, and continue/halt policies.
+8. **Guild Wars consumers.** Add target-specific adapters, beginning with the
+   maintained context readers. These adapters own signatures, pointer offsets,
+   decoding, and semantic validation; the reusable scanner remains target
+   agnostic.
+
+Steps 1 through 8 now have project-owned implementations and focused tests.
+The first Guild Wars-specific consumers are the externally read
+`CharContext`, `GameContext`, `PreGameContext`, `Cinematic`, and
+`GameplayContext`, in that migration order. All five have been validated
+against one live client build.
+Additional contexts remain separate future consumers and must be validated
+independently.
+
+## CharContext implementation and resolution
+
+Status: source-verified and verified against one live client build.
+
+The maintained Reforged definitions agree on the relevant layout:
+
+- `CharContext` is `0x448` bytes;
+- `CharContext.player_name` is an inline UTF-16/wchar field at offset `0x74`,
+  with 20 code units;
+- `GameContext.character` is a 32-bit target pointer at offset `0x44`.
+
+The native context code obtains `GameContext` through the resolved
+`context.base_ptr`: dereference that global to a base-context table, read the
+entry at table offset `0x18` (index `6`), then read `GameContext + 0x44` to get
+the `CharContext` address. Stealth uses the same target addresses with
+explicit `ReadProcessMemory` calls; it does not cast remote pointers locally.
+
+The copied `offsets/context.json` provides the `context.base_ptr` resolver.
+`GameContext.initialize()` executes that resolver once and caches the
+module-global pointer location for the lifetime of the connection.
+`CharContext` reuses that initialized reader and follows the dynamic
+character pointer for each read because the base, game, and character context
+objects may change during client state transitions.
+
+## GameContext implementation and resolution
+
+Status: source-verified and verified against one live client build.
+
+The external `GameContextStruct` follows the native and Reforged layout:
+
+- it is `0x5C` bytes;
+- `agent_context` is at `0x08`;
+- `map_context` is at `0x14`;
+- `char_context` is at `0x44`;
+- `party_context` is at `0x4C`; and
+- `trade_context` is at `0x58`.
+
+All pointer fields are represented as fixed-width 32-bit target addresses.
+The reader resolves `context.base_ptr` from the copied JSON definitions,
+reads the base-context table, selects its `+0x18` entry, and decodes the
+resulting `GameContext` bytes. The resolver location is cached for the
+connection, while the base table and current context pointer are re-read for
+each snapshot.
+
+The live test observed `GameContext` at `0x024D9018`, with its character and
+world pointers matching the independently read context addresses. This is a
+read-only observation for one client build, not a cross-build guarantee.
+
+## PreGameContext implementation and resolution
+
+Status: source-verified and verified against one live client build.
+
+The external `PreGameContextStruct` is `0x100` bytes and the nested
+`LoginCharacter` record is `0x78` bytes, matching the native and Reforged
+definitions. Its `chars_array` is read as a contiguous value array through the
+existing external `GWBaseArray`/`GWArrayValueView` boundary. Pointer fields are
+fixed-width target addresses, including the login-character item buffer and
+model pointer.
+
+The native context initializer resolves `context.pregame_context_addr` as a
+stable global-pointer location. The external reader caches that location and
+re-reads the pointed-to value for each snapshot. The pointed-to context is
+allowed to be null: that is the expected state while the client is outside the
+selection menus, so `read()` returns `None` rather than treating it as a
+resolver failure.
+
+The live test resolved the global pointer at `0x015EA2EC`. During the recorded
+run the pointed-to value was null because the client was already in-game; the
+reader reported the inactive pre-game state correctly.
+
+## Cinematic implementation and resolution
+
+Status: source-verified and verified against one live client build.
+
+The native `Cinematic` record is an `0x08`-byte pair of fixed-width `uint32`
+fields (`h0000` and `h0004`). It is owned by `GameContext` at offset `0x30`.
+The external reader reuses the connection's initialized `GameContext` resolver,
+reads that pointer for each snapshot, and returns `None` when the pointer is
+null. This keeps the context optional while preserving the native pointer
+relationship; it does not add a second signature scan.
+
+The live test resolved `Cinematic` at `0x025065D8` and read both fields as
+`0x00000000` during the recorded run. The address and values are observations
+for one client build, not cross-build guarantees.
+
+## GameplayContext implementation and resolution
+
+Status: source-verified and verified against one live client build.
+
+The native and Reforged definitions agree on a fixed `0x78`-byte structure:
+
+- `h0000` contains 19 `uint32` values;
+- `mission_map_zoom` is a `float` at offset `0x4C`; and
+- `unk` contains 10 trailing `uint32` values.
+
+The native context layer resolves `context.gameplay_context_addr` as a stable
+global-pointer location. The external reader caches that resolver during
+connection, re-reads the pointed-to gameplay context for each snapshot, and
+returns `None` when the target pointer is null. It uses the copied JSON
+resolver and does not add a second signature definition.
+
+The live test resolved the global pointer at `0x015EAAB8`, the current
+`GameplayContext` at `0x02421248`, and read `mission_map_zoom` as `1.500`.
+These addresses and values are observations for one client build, not
+cross-build guarantees.
 
 ## Live Observation: Gw.exe Discovery
 
@@ -294,12 +587,127 @@ those two states. The Guild Wars build/version and exact observation timestamp
 were not recorded in the report. The operation was read-only and performed no
 cleanup or target modification.
 
+## Live Observation: Remote scanner initialization
+
+Status: verified from a user-provided read-only run against a live `Gw.exe`.
+
+The external scanner opened PID `47852`, identified the main module as
+`F:\GW\GW1\Gw.exe`, and successfully parsed these sections:
+
+```text
+.text  14553088 - 20026880
+.rdata 20029440 - 22866432
+.data  22867968 - 28505400
+.rsrc  28508160 - 30277632
+.reloc 30277632 - 30573056
+```
+
+The reported module base was `14548992` and its image size was `16027648`.
+This verifies process opening, main-module discovery, PE parsing, and section
+range initialization against that live client. The later CharContext
+observation records the separate verification of a copied Guild Wars resolver
+and its target pointer chain.
+
+## Live Observation: Remote byte scan
+
+Status: verified from a user-provided read-only run against the same live
+client.
+
+The scanner read 16 bytes at the beginning of `.text`, built a pattern from
+the first four bytes, and searched the remote `.text` range. The observed
+addresses were:
+
+```text
+text start:  0x00DE1000
+scan result: 0x00DE1000
+```
+
+This verifies the complete read-and-search path against live Guild Wars
+memory. It is a transport and scanner check only; it does not validate a
+Guild Wars-specific signature or resolver definition.
+
+## Live Observation: CharContext resolver and name read
+
+Status: verified from a user-provided read-only run against the same live
+client.
+
+The `context.base_ptr` resolver succeeded with this trace:
+
+```text
+scan_ref       0x00E6CE4B
+deref_ptr      0x015E6170
+validate_ptr   success in .data
+```
+
+Following the documented target layout produced:
+
+```text
+base_context   0x0251C348
+game_context   0x024D9018
+char_context   0x0251DA70
+player_name    non-empty UTF-16 name decoded successfully
+```
+
+The name was read from `CharContext + 0x74` as a fixed 20-code-unit
+UTF-16LE field. This verifies the initial target-specific read path: a copied
+resolver, explicit 32-bit pointer reads, and a structure field decode. The
+same path is now exposed by `py4gw.context.CharContext`; the observation does
+not prove that the same offsets work across other client builds.
+
+The context port also includes the Reforged `GW_Array` header and its two
+array-view behaviors. `GWArrayValueView` reads contiguous values from a
+remote buffer, while `GWArrayView` reads target pointers and then the remote
+structures they reference. This is an external adaptation of the Reforged
+behavior: those pointers are never dereferenced as local Python pointers.
+
+## Live Observation: Context performance breakdown
+
+Status: verified by `tests/perf_context.py` against the same running client;
+the Guild Wars build and host load were not recorded.
+
+Before resolver caching, one five-sample run measured the following
+approximate averages:
+
+```text
+resolver.pattern_scan       4.664 ms, 9 reads, 589,878 bytes
+resolver.pointer_chain      0.030 ms, 4 reads, 16 bytes
+context.read                4.739 ms, 14 reads, 590,990 bytes
+context.read.cached_address 0.009 ms, 1 read, 1,096 bytes
+```
+
+This separates the repeated `.text` signature scan from structure decoding:
+the scan dominates `CharContext.read`, while decoding a structure at an
+already-resolved address is negligible. The UI's derived array views are a
+separate cost; in this run `h00EC_ptrs` performed 520 remote reads and took
+about 2.7 ms. These numbers are one live observation, not a cross-build or
+cross-machine benchmark.
+
+The resolver is now initialized during `ConnectedClient` construction and its
+stable module-global pointer location is cached. A follow-up five-sample run
+measured approximately `0.012 ms` for cached address resolution and
+`0.026 ms` for `context.read`, with four remote reads for the dynamic pointer
+chain plus the 0x448-byte structure. The one-time connection initialization
+still took approximately `3.766 ms`, which is the intended location for the
+signature scan cost.
+
+This cache boundary matches Reforged Native. `GW::Context::Initialize()`
+resolves `context.base_ptr` once and is guarded by `g_initialized`. Its
+`GetGameContext()` then re-reads the pointer stored at `g_base_ptr` and selects
+the game-context slot at `+0x18`; `GetCharContext()` re-reads the character
+pointer at `GameContext + 0x44`. Therefore the external reader caches the
+resolver's stable pointer location but does not cache the dynamic context
+object addresses.
+
 ## Sources Consulted
 
 - `C:\Users\Apo\Py4GW_Reforged\README.md`
 - `C:\Users\Apo\Py4GW_Reforged\docs\architecture\reference\py4-gw-conceptual-model.md`
 - `C:\Users\Apo\Py4GW_Reforged\py4gw_bridge\README.md`
 - `C:\Users\Apo\Py4GW_Reforged_Native\AGENTS.md`
+- `C:\Users\Apo\Py4GW_Reforged_Native\include\GW\context\context.h`
+- `C:\Users\Apo\Py4GW_Reforged_Native\include\GW\context\game.h`
+- `C:\Users\Apo\Py4GW_Reforged_Native\src\GW\context\context.cpp`
+- `C:\Users\Apo\Py4GW_Reforged_Native\src\GW\context\context_methods.cpp`
 - `C:\Users\Apo\Py4GW_Reforged_Native\src\Py4GW.cpp`
 - `C:\Users\Apo\Py4GW_Reforged_Native\src\base\hooker.cpp`
 - `C:\tmp\gwau3-analysis-20260920\API\Core\GwAu3_Core.au3`

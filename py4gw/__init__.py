@@ -1,5 +1,76 @@
-"""Small library for finding Guild Wars processes on Windows."""
+"""Small external library for Guild Wars process and memory research."""
 
+from . import context, win32
+from .client import ConnectedClient, connect, current_client, disconnect
+from .scanner import (
+    Pattern,
+    PatternCatalog,
+    RemoteScanner,
+    ResolutionResult,
+    ResolutionTraceStep,
+    Scanner,
+    SectionRange,
+)
+from .memory import ProcessMemoryReader
+from .performance import PerfCounter, PerformanceReport
+from .context import (
+    CharContext,
+    CharContextStruct,
+    Cinematic,
+    CinematicStruct,
+    GameContext,
+    GameContextStruct,
+    GameplayContext,
+    GameplayContextStruct,
+    LoginCharacter,
+    PreGameContext,
+    PreGameContextStruct,
+    GW_Array,
+    GW_Array_Value_View,
+    GW_Array_View,
+    GW_BaseArray,
+    GWArray,
+    GWArrayValueView,
+    GWArrayView,
+    GWBaseArray,
+)
 from .win32 import Win32
 
-__all__ = ["Win32"]
+__all__ = [
+    "Pattern",
+    "PatternCatalog",
+    "CharContext",
+    "CharContextStruct",
+    "Cinematic",
+    "CinematicStruct",
+    "GameContext",
+    "GameContextStruct",
+    "GameplayContext",
+    "GameplayContextStruct",
+    "PreGameContext",
+    "PreGameContextStruct",
+    "LoginCharacter",
+    "ConnectedClient",
+    "connect",
+    "disconnect",
+    "current_client",
+    "context",
+    "win32",
+    "GWArray",
+    "GWBaseArray",
+    "GWArrayView",
+    "GWArrayValueView",
+    "GW_Array",
+    "GW_BaseArray",
+    "GW_Array_View",
+    "GW_Array_Value_View",
+    "ProcessMemoryReader",
+    "PerfCounter",
+    "PerformanceReport",
+    "RemoteScanner",
+    "ResolutionResult",
+    "ResolutionTraceStep",
+    "Scanner",
+    "SectionRange",
+    "Win32",
+]

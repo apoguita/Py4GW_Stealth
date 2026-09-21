@@ -13,14 +13,16 @@ its design and evidence are clear.
 
 ## Current deliverable
 
-The first deliverable has two deliberately small parts:
+The first deliverable has three deliberately separated parts:
 
 1. a project-owned `py4gw` package with a `Win32` class for read-only Windows
-   process discovery; and
-2. a root-level `main.py` NiceGUI window for exercising that class.
+   process and memory operations;
+2. a reusable scanner that consumes the copied `offsets/` definitions; and
+3. a root-level `main.py` NiceGUI window for exercising the process surface.
 
 The UI is not a second process library. It is a presentation and testing
-surface over the package. The Windows behavior stays inside `Win32`.
+surface over the package. Windows process and memory behavior stays inside the
+`Win32` and `ProcessMemoryReader` boundaries.
 
 ## In scope
 
@@ -28,25 +30,37 @@ surface over the package. The Windows behavior stays inside `Win32`.
 - Read-only Windows process enumeration.
 - Case-insensitive discovery of processes named `Gw.exe`.
 - Best-effort executable-path reporting with preserved Windows errors.
+- Read-only process-memory reads and x86 module-section scanning.
+- Pattern and resolver definitions loaded from the copied `offsets/` directory.
 - A small native NiceGUI window for testing the current library behavior.
 - Tests and documentation that explain each capability.
 - Small project-owned wrappers around documented Windows APIs.
 
 ## Current capability
 
-The current `py4gw.Win32` class can:
+The current `py4gw` package can:
 
 - list running Windows processes;
 - find every process whose executable filename is `Gw.exe`; and
-- report its PID and executable path when Windows allows that lookup.
+- report its PID and executable path when Windows allows that lookup;
+- open a selected process for read-only memory access; and
+- scan validated x86 module ranges using copied pattern definitions;
+- resolve and read the maintained `CharContext`, `GameContext`,
+  `PreGameContext`, `Cinematic`, and `GameplayContext` structures; and
+- expose a selected-client connection for scripts and the root UI; and
+- measure execution time in the external Python controller.
 
-The root UI currently exposes these operations in the `Win32 process test` tab:
+The root UI currently exposes these operations in the `Guild Wars clients` tab:
 
-- `List all processes` displays the current process snapshot; and
-- `Find Gw.exe` displays the current Guild Wars candidates.
+- `Refresh` discovers every running `Gw.exe` client;
+- each row displays its PID, character name or `in selection menus`, and path;
+- a PID selector chooses one client; and
+- `Connect selected` keeps that client's read-only connection available.
 
-This identifies process candidates by filename. It does not verify a Guild
-Wars build, read game state, or scan process memory.
+This identifies process candidates by filename. The scanner can inspect bytes
+and resolve addresses, and the context readers can decode the maintained
+structures externally. This does not claim compatibility with every client
+build or provide all Reforged context behavior.
 
 ## NiceGUI contract
 
@@ -60,25 +74,33 @@ The UI must remain understandable without knowing NiceGUI internals. New tabs
 or controls should be added only for a capability that already has a library
 method and a documented contract.
 
+`PerfCounter` is controller-side instrumentation. It does not inspect or
+execute code inside the Guild Wars process.
+
+The resolver scan occurs during connection and its stable pointer location is
+cached. Context object pointers are re-read for each snapshot because they may
+change with client state. See [Performance](PERFORMANCE.md) for the timing
+contract and live harness.
+
 ## Out of scope for the current capability
 
 The current implementation does not:
 
-- read or write Guild Wars memory;
+- write to Guild Wars memory;
 - inject a DLL, payload, executable code, or patch;
 - create a remote thread or hook a game function;
 - reproduce Py4GW `Py*` bindings, widgets, or automation helpers;
 - select a client by character, map, or memory signature; or
 - promise compatibility with every Reforged feature.
 
-Any expansion beyond process discovery must be documented and designed before
-implementation.
+Any expansion beyond the current read-only scanner must be documented and
+designed before implementation.
 
 ## Terminology
 
 `Pure external` means that the controller runs outside `Gw.exe` and does not
-place executable code or patches in it. Process-memory reads and writes would
-still be external operations, but they are not part of the current capability.
+place executable code or patches in it. Read-only process-memory reads are
+part of the current capability; writes are not.
 
 `External host` means that the primary logic runs outside `Gw.exe`. It does not,
 by itself, prove that the game process is unmodified.

@@ -18,9 +18,14 @@ class Win32:
     """
 
     _SNAPSHOT_PROCESSES = 0x00000002
+    _SNAPSHOT_MODULES = 0x00000008 | 0x00000010
     _QUERY_LIMITED_INFORMATION = 0x00001000
+    _QUERY_INFORMATION = 0x00000400
+    _PROCESS_VM_READ = 0x00000010
     _ERROR_NO_MORE_FILES = 18
+    _ERROR_ACCESS_DENIED = 5
     _ERROR_INSUFFICIENT_BUFFER = 122
+    _ERROR_PARTIAL_COPY = 299
     _MAX_PATH_CHARS = 32768
     _GW_EXE = "Gw.exe"
 
@@ -40,12 +45,38 @@ class Win32:
             ("szExeFile", wintypes.WCHAR * 260),
         ]
 
+    class _module_entry(ctypes.Structure):
+        """The Windows structure filled by ``Module32First/NextW``."""
+
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("th32ModuleID", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("GlblcntUsage", wintypes.DWORD),
+            ("ProccntUsage", wintypes.DWORD),
+            ("modBaseAddr", ctypes.c_void_p),
+            ("modBaseSize", wintypes.DWORD),
+            ("hModule", wintypes.HMODULE),
+            ("szModule", wintypes.WCHAR * 256),
+            ("szExePath", wintypes.WCHAR * 260),
+        ]
+
+    class _module_information(ctypes.Structure):
+        """The small structure filled by ``GetModuleInformation``."""
+
+        _fields_ = [
+            ("lpBaseOfDll", ctypes.c_void_p),
+            ("SizeOfImage", wintypes.DWORD),
+            ("EntryPoint", ctypes.c_void_p),
+        ]
+
     def __init__(self) -> None:
         """Load Kernel32 and prepare the functions used by this class."""
 
         if os.name != "nt":
             raise OSError("Win32 is available only on Windows.")
         self._kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self._psapi = ctypes.WinDLL("psapi", use_last_error=True)
         self._set_function_signatures()
 
     def list_processes(self) -> list[dict[str, Any]]:
@@ -127,10 +158,142 @@ class Win32:
         output.extend(self._format_row(row, widths) for row in rows[1:])
         return "\n".join(output)
 
+    def open_process_memory(self, pid: int) -> int:
+        """Open one process for query and read-only memory access.
+
+        The caller owns the returned handle and must pass it to
+        :meth:`close_process_memory` when finished.
+        """
+
+        if pid <= 0:
+            raise ValueError("pid must be positive.")
+        access = self._QUERY_INFORMATION | self._PROCESS_VM_READ
+        handle = self._kernel32.OpenProcess(access, False, pid)
+        if not handle:
+            self._raise_last_error(f"OpenProcess(pid={pid})")
+        if isinstance(handle, int):
+            return handle
+        if isinstance(handle, ctypes.c_void_p) and handle.value is not None:
+            return int(handle.value)
+        raise OSError("OpenProcess returned an invalid handle.")
+
+    def close_process_memory(self, handle: int) -> None:
+        """Close a process handle returned by :meth:`open_process_memory`."""
+
+        if handle and not self._kernel32.CloseHandle(handle):
+            self._raise_last_error("CloseHandle")
+
+    def read_process_memory(self, handle: int, address: int, size: int) -> bytes:
+        """Read exactly ``size`` bytes from a process handle.
+
+        A failed or partial read raises ``OSError`` with the original Windows
+        error number. The operation never writes to the target process.
+        """
+
+        if not handle:
+            raise ValueError("handle must be valid.")
+        if address < 0:
+            raise ValueError("address cannot be negative.")
+        if size <= 0:
+            raise ValueError("size must be positive.")
+
+        buffer = ctypes.create_string_buffer(size)
+        bytes_read = ctypes.c_size_t()
+        success = self._kernel32.ReadProcessMemory(
+            handle,
+            ctypes.c_void_p(address),
+            buffer,
+            size,
+            ctypes.byref(bytes_read),
+        )
+        if not success:
+            error_code = ctypes.get_last_error()
+            self._raise_error(
+                f"ReadProcessMemory(address=0x{address:X}, size=0x{size:X})",
+                error_code,
+            )
+        if bytes_read.value != size:
+            self._raise_error(
+                f"ReadProcessMemory(address=0x{address:X}, size=0x{size:X})",
+                self._ERROR_PARTIAL_COPY,
+            )
+        return bytes(buffer.raw)
+
+    def get_main_module(self, pid: int) -> dict[str, Any]:
+        """Return the first module's base, size, name, and path for ``pid``."""
+
+        if pid <= 0:
+            raise ValueError("pid must be positive.")
+        snapshot = self._kernel32.CreateToolhelp32Snapshot(
+            self._SNAPSHOT_MODULES, pid
+        )
+        if snapshot == ctypes.c_void_p(-1).value:
+            error_code = ctypes.get_last_error()
+            if error_code == self._ERROR_ACCESS_DENIED:
+                return self._get_main_module_with_psapi(pid)
+            self._raise_error(
+                f"CreateToolhelp32Snapshot(pid={pid})", error_code
+            )
+
+        try:
+            entry = self._new_module_entry()
+            if not self._kernel32.Module32FirstW(snapshot, ctypes.byref(entry)):
+                self._raise_last_error(f"Module32FirstW(pid={pid})")
+            return {
+                "base_address": int(entry.modBaseAddr or 0),
+                "size": int(entry.modBaseSize),
+                "name": str(entry.szModule),
+                "path": str(entry.szExePath),
+            }
+        finally:
+            self._close_handle(snapshot)
+
     def _is_guild_wars_name(self, name: str) -> bool:
         """Apply the only Guild Wars detection rule used in this first step."""
 
         return name.casefold() == self._GW_EXE.casefold()
+
+    def _get_main_module_with_psapi(self, pid: int) -> dict[str, Any]:
+        """Use PSAPI when Toolhelp module enumeration is denied."""
+
+        handle = self.open_process_memory(pid)
+        try:
+            modules = (wintypes.HMODULE * 256)()
+            needed = wintypes.DWORD()
+            if not self._psapi.EnumProcessModulesEx(
+                handle,
+                modules,
+                ctypes.sizeof(modules),
+                ctypes.byref(needed),
+                0x03,
+            ):
+                self._raise_last_error(f"EnumProcessModulesEx(pid={pid})")
+            if needed.value < ctypes.sizeof(wintypes.HMODULE):
+                self._raise_error(
+                    f"EnumProcessModulesEx(pid={pid})", self._ERROR_PARTIAL_COPY
+                )
+
+            module = modules[0]
+            information = self._module_information()
+            if not self._psapi.GetModuleInformation(
+                handle,
+                module,
+                ctypes.byref(information),
+                ctypes.sizeof(information),
+            ):
+                self._raise_last_error(f"GetModuleInformation(pid={pid})")
+
+            path, path_error = self._get_image_path(pid)
+            name = os.path.basename(path) if path else self._GW_EXE
+            return {
+                "base_address": int(information.lpBaseOfDll or 0),
+                "size": int(information.SizeOfImage),
+                "name": name,
+                "path": path,
+                "path_error": path_error,
+            }
+        finally:
+            self.close_process_memory(handle)
 
     def _get_image_path(self, pid: int) -> tuple[str | None, int | None]:
         """Read one image path with limited query access and close its handle."""
@@ -163,6 +326,13 @@ class Win32:
 
         entry = self._process_entry()
         entry.dwSize = ctypes.sizeof(self._process_entry)
+        return entry
+
+    def _new_module_entry(self) -> _module_entry:
+        """Create a module-entry buffer with its required size set."""
+
+        entry = self._module_entry()
+        entry.dwSize = ctypes.sizeof(self._module_entry)
         return entry
 
     def _close_handle(self, handle: Any) -> None:
@@ -213,5 +383,33 @@ class Win32:
             ctypes.POINTER(wintypes.DWORD),
         ]
         self._kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+        self._kernel32.ReadProcessMemory.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_size_t),
+        ]
+        self._kernel32.ReadProcessMemory.restype = wintypes.BOOL
+        self._kernel32.Module32FirstW.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_void_p,
+        ]
+        self._kernel32.Module32FirstW.restype = wintypes.BOOL
         self._kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
         self._kernel32.CloseHandle.restype = wintypes.BOOL
+        self._psapi.EnumProcessModulesEx.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(wintypes.HMODULE),
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+            wintypes.DWORD,
+        ]
+        self._psapi.EnumProcessModulesEx.restype = wintypes.BOOL
+        self._psapi.GetModuleInformation.argtypes = [
+            wintypes.HANDLE,
+            wintypes.HMODULE,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+        ]
+        self._psapi.GetModuleInformation.restype = wintypes.BOOL
