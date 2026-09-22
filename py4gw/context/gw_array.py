@@ -50,6 +50,8 @@ def _decode_value(element_type: type[Any], raw: bytes) -> Any:
     """Decode one ctypes value from bytes read from the target process."""
 
     value = element_type.from_buffer_copy(raw)
+    if isinstance(value, Structure):
+        return value
     return value.value if hasattr(value, "value") else value
 
 

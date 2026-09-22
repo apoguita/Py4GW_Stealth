@@ -53,8 +53,8 @@ class LiveCinematicContextTests(unittest.TestCase):
         """Keep the fixed-width layout aligned with the native source."""
 
         self.assertEqual(ctypes.sizeof(CinematicStruct), 0x08)
-        self.assertEqual(CinematicStruct.h0000.offset, 0x00)
-        self.assertEqual(CinematicStruct.h0004.offset, 0x04)
+        self.assertEqual(getattr(CinematicStruct, "h0000").offset, 0x00)
+        self.assertEqual(getattr(CinematicStruct, "h0004").offset, 0x04)
 
     def test_resolves_live_cinematic_pointer(self) -> None:
         """Follow GameContext's cinematic pointer without assuming it is active."""

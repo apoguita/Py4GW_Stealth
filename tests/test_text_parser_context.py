@@ -58,10 +58,10 @@ class LiveTextParserTests(unittest.TestCase):
         self.assertEqual(ctypes.sizeof(TextCacheStruct), 0x04)
         self.assertEqual(ctypes.sizeof(TextParserSubStructStruct), 0x04)
         self.assertEqual(ctypes.sizeof(TextParserStruct), 0x1D4)
-        self.assertEqual(TextParserStruct.cache_ptr.offset, 0x30)
-        self.assertEqual(TextParserStruct.sub_struct_ptr.offset, 0x180)
-        self.assertEqual(TextParserStruct.language_id.offset, 0x1D0)
-        self.assertEqual(GameContextStruct.text_parser.offset, 0x18)
+        self.assertEqual(getattr(TextParserStruct, "_cache_header").offset, 0x30)
+        self.assertEqual(getattr(TextParserStruct, "sub_struct_ptr").offset, 0x180)
+        self.assertEqual(getattr(TextParserStruct, "language_id").offset, 0x1D0)
+        self.assertEqual(getattr(GameContextStruct, "text_parser").offset, 0x18)
 
     def test_resolves_live_text_parser_pointer(self) -> None:
         """Follow GameContext.text_parser at the native +0x18 offset."""

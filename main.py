@@ -23,6 +23,15 @@ from py4gw import (
     CharContextStruct,
     ConnectedClient,
     CinematicStruct,
+    CameraStruct,
+    FriendListStruct,
+    ChatBufferStruct,
+    WorldContextStruct,
+    MapContextStruct,
+    TradeContextStruct,
+    ItemContextStruct,
+    AccountContextStruct,
+    GadgetContextStruct,
     InstanceInfoStruct,
     GameContextStruct,
     GameplayContextStruct,
@@ -64,6 +73,15 @@ class MainWindow:
         self._last_game_context_read_ms: float | None = None
         self._last_pre_game_context_read_ms: float | None = None
         self._last_cinematic_read_ms: float | None = None
+        self._last_camera_read_ms: float | None = None
+        self._last_friend_list_read_ms: float | None = None
+        self._last_chat_buffer_read_ms: float | None = None
+        self._last_world_context_read_ms: float | None = None
+        self._last_map_context_read_ms: float | None = None
+        self._last_trade_context_read_ms: float | None = None
+        self._last_item_context_read_ms: float | None = None
+        self._last_account_context_read_ms: float | None = None
+        self._last_gadget_context_read_ms: float | None = None
         self._last_gameplay_context_read_ms: float | None = None
         self._last_server_region_read_ms: float | None = None
         self._last_instance_info_read_ms: float | None = None
@@ -92,6 +110,34 @@ class MainWindow:
         self._cinematic_status: Any = None
         self._cinematic_table: Any = None
         self._cinematic_filter: Any = None
+        self._camera_status: Any = None
+        self._camera_table: Any = None
+        self._camera_filter: Any = None
+        self._friend_list_status: Any = None
+        self._friend_list_table: Any = None
+        self._friend_list_filter: Any = None
+        self._chat_buffer_status: Any = None
+        self._chat_buffer_table: Any = None
+        self._chat_buffer_filter: Any = None
+        self._world_context_status: Any = None
+        self._world_context_table: Any = None
+        self._world_context_filter: Any = None
+        self._map_context_status: Any = None
+        self._map_context_table: Any = None
+        self._map_context_filter: Any = None
+        self._trade_context_status: Any = None
+        self._trade_context_table: Any = None
+        self._trade_context_filter: Any = None
+        self._item_context_status: Any = None
+        self._item_context_table: Any = None
+        self._item_records_table: Any = None
+        self._item_context_filter: Any = None
+        self._account_context_status: Any = None
+        self._account_context_table: Any = None
+        self._account_context_filter: Any = None
+        self._gadget_context_status: Any = None
+        self._gadget_context_table: Any = None
+        self._gadget_context_filter: Any = None
         self._gameplay_context_status: Any = None
         self._gameplay_context_table: Any = None
         self._gameplay_context_filter: Any = None
@@ -218,6 +264,15 @@ class MainWindow:
 
         with ui.tabs().classes("w-full") as context_tabs:
             cinematic_tab = ui.tab("Cinematic")
+            camera_tab = ui.tab("Camera")
+            friend_list_tab = ui.tab("FriendList")
+            chat_buffer_tab = ui.tab("ChatBuffer")
+            world_context_tab = ui.tab("WorldContext")
+            map_context_tab = ui.tab("MapContext")
+            trade_context_tab = ui.tab("TradeContext")
+            item_context_tab = ui.tab("ItemContext")
+            account_context_tab = ui.tab("AccountContext")
+            gadget_context_tab = ui.tab("GadgetContext")
             gameplay_context_tab = ui.tab("GameplayContext")
             server_region_tab = ui.tab("ServerRegion")
             instance_info_tab = ui.tab("InstanceInfo")
@@ -270,6 +325,313 @@ class MainWindow:
                     },
                 ).props("bordered flat wrap-cells separator=cell")
                 self._cinematic_table.classes("w-full h-full")
+            with ui.tab_panel(camera_tab).classes("w-full h-full"):
+                with ui.row().classes("w-full items-center"):
+                    ui.button("Refresh Camera", on_click=self._refresh_camera)
+                    self._camera_filter = ui.input("Filter fields or values")
+                    self._camera_filter.on(
+                        "update:model-value",
+                        lambda event: self._set_camera_filter(event.args),
+                    )
+                    self._camera_status = ui.label("Connect a client first")
+                self._camera_table = ui.table(
+                    columns=[
+                        {
+                            "name": "offset",
+                            "label": "Offset",
+                            "field": "offset",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "field",
+                            "label": "Field",
+                            "field": "field",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "value",
+                            "label": "Value",
+                            "field": "value",
+                            "sortable": True,
+                        },
+                    ],
+                    rows=[],
+                    row_key="field",
+                    selection="single",
+                    pagination={
+                        "rowsPerPage": 15,
+                        "rowsPerPageOptions": [15, 30, 0],
+                    },
+                ).props("bordered flat wrap-cells separator=cell")
+                self._camera_table.classes("w-full h-full")
+            with ui.tab_panel(friend_list_tab).classes("w-full h-full"):
+                with ui.row().classes("w-full items-center"):
+                    ui.button(
+                        "Refresh FriendList",
+                        on_click=self._refresh_friend_list,
+                    )
+                    self._friend_list_filter = ui.input("Filter fields or values")
+                    self._friend_list_filter.on(
+                        "update:model-value",
+                        lambda event: self._set_friend_list_filter(event.args),
+                    )
+                    self._friend_list_status = ui.label("Connect a client first")
+                self._friend_list_table = ui.table(
+                    columns=[
+                        {
+                            "name": "offset",
+                            "label": "Offset",
+                            "field": "offset",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "field",
+                            "label": "Field",
+                            "field": "field",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "value",
+                            "label": "Value",
+                            "field": "value",
+                            "sortable": True,
+                        },
+                    ],
+                    rows=[],
+                    row_key="field",
+                    selection="single",
+                    pagination={
+                        "rowsPerPage": 15,
+                        "rowsPerPageOptions": [15, 30, 0],
+                    },
+                ).props("bordered flat wrap-cells separator=cell")
+                self._friend_list_table.classes("w-full h-full")
+            with ui.tab_panel(chat_buffer_tab).classes("w-full h-full"):
+                with ui.row().classes("w-full items-center"):
+                    ui.button(
+                        "Refresh ChatBuffer",
+                        on_click=self._refresh_chat_buffer,
+                    )
+                    self._chat_buffer_filter = ui.input("Filter fields or values")
+                    self._chat_buffer_filter.on(
+                        "update:model-value",
+                        lambda event: self._set_chat_buffer_filter(event.args),
+                    )
+                    self._chat_buffer_status = ui.label("Connect a client first")
+                self._chat_buffer_table = ui.table(
+                    columns=[
+                        {
+                            "name": "offset",
+                            "label": "Offset",
+                            "field": "offset",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "field",
+                            "label": "Field",
+                            "field": "field",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "value",
+                            "label": "Value",
+                            "field": "value",
+                            "sortable": True,
+                        },
+                    ],
+                    rows=[],
+                    row_key="field",
+                    selection="single",
+                    pagination={
+                        "rowsPerPage": 15,
+                        "rowsPerPageOptions": [15, 30, 0],
+                    },
+                ).props("bordered flat wrap-cells separator=cell")
+                self._chat_buffer_table.classes("w-full h-full")
+            with ui.tab_panel(world_context_tab).classes("w-full h-full"):
+                with ui.row().classes("w-full items-center"):
+                    ui.button(
+                        "Refresh WorldContext",
+                        on_click=self._refresh_world_context,
+                    )
+                    self._world_context_filter = ui.input(
+                        "Filter fields or values"
+                    )
+                    self._world_context_filter.on(
+                        "update:model-value",
+                        lambda event: self._set_world_context_filter(event.args),
+                    )
+                    self._world_context_status = ui.label(
+                        "Connect a client first"
+                    )
+                self._world_context_table = ui.table(
+                    columns=[
+                        {"name": "offset", "label": "Offset", "field": "offset", "sortable": True},
+                        {"name": "field", "label": "Field", "field": "field", "sortable": True},
+                        {"name": "value", "label": "Value", "field": "value", "sortable": True},
+                    ],
+                    rows=[],
+                    row_key="field",
+                    selection="single",
+                    pagination={"rowsPerPage": 20, "rowsPerPageOptions": [20, 40, 0]},
+                ).props("bordered flat wrap-cells separator=cell")
+                self._world_context_table.classes("w-full h-full")
+            with ui.tab_panel(map_context_tab).classes("w-full h-full"):
+                with ui.row().classes("w-full items-center"):
+                    ui.button(
+                        "Refresh MapContext",
+                        on_click=self._refresh_map_context,
+                    )
+                    self._map_context_filter = ui.input("Filter fields or values")
+                    self._map_context_filter.on(
+                        "update:model-value",
+                        lambda event: self._set_map_context_filter(event.args),
+                    )
+                    self._map_context_status = ui.label("Connect a client first")
+                self._map_context_table = ui.table(
+                    columns=[
+                        {"name": "offset", "label": "Offset", "field": "offset", "sortable": True},
+                        {"name": "field", "label": "Field", "field": "field", "sortable": True},
+                        {"name": "value", "label": "Value", "field": "value", "sortable": True},
+                    ],
+                    rows=[],
+                    row_key="field",
+                    selection="single",
+                    pagination={"rowsPerPage": 20, "rowsPerPageOptions": [20, 40, 0]},
+                ).props("bordered flat wrap-cells separator=cell")
+                self._map_context_table.classes("w-full h-full")
+            with ui.tab_panel(trade_context_tab).classes("w-full h-full"):
+                with ui.row().classes("w-full items-center"):
+                    ui.button(
+                        "Refresh TradeContext",
+                        on_click=self._refresh_trade_context,
+                    )
+                    self._trade_context_filter = ui.input(
+                        "Filter fields or values"
+                    )
+                    self._trade_context_filter.on(
+                        "update:model-value",
+                        lambda event: self._set_trade_context_filter(event.args),
+                    )
+                    self._trade_context_status = ui.label(
+                        "Connect a client first"
+                    )
+                self._trade_context_table = ui.table(
+                    columns=[
+                        {"name": "offset", "label": "Offset", "field": "offset", "sortable": True},
+                        {"name": "field", "label": "Field", "field": "field", "sortable": True},
+                        {"name": "value", "label": "Value", "field": "value", "sortable": True},
+                    ],
+                    rows=[],
+                    row_key="field",
+                    selection="single",
+                    pagination={"rowsPerPage": 15, "rowsPerPageOptions": [15, 30, 0]},
+                ).props("bordered flat wrap-cells separator=cell")
+                self._trade_context_table.classes("w-full h-full")
+            with ui.tab_panel(item_context_tab).classes("w-full h-full"):
+                with ui.row().classes("w-full items-center"):
+                    ui.button(
+                        "Refresh ItemContext",
+                        on_click=self._refresh_item_context,
+                    )
+                    self._item_context_filter = ui.input(
+                        "Filter fields or values"
+                    )
+                    self._item_context_filter.on(
+                        "update:model-value",
+                        lambda event: self._set_item_context_filter(event.args),
+                    )
+                    self._item_context_status = ui.label(
+                        "Connect a client first"
+                    )
+                self._item_context_table = ui.table(
+                    columns=[
+                        {"name": "offset", "label": "Offset", "field": "offset", "sortable": True},
+                        {"name": "field", "label": "Field", "field": "field", "sortable": True},
+                        {"name": "value", "label": "Value", "field": "value", "sortable": True},
+                    ],
+                    rows=[],
+                    row_key="field",
+                    selection="single",
+                    pagination={"rowsPerPage": 15, "rowsPerPageOptions": [15, 30, 0]},
+                ).props("bordered flat wrap-cells separator=cell")
+                self._item_context_table.classes("w-full h-full")
+                ui.label("Items read through the maintained bag arrays").classes(
+                    "text-subtitle2"
+                )
+                self._item_records_table = ui.table(
+                    columns=[
+                        {"name": "bag", "label": "Bag", "field": "bag", "sortable": True},
+                        {"name": "slot", "label": "Slot", "field": "slot", "sortable": True},
+                        {"name": "item_id", "label": "Item ID", "field": "item_id", "sortable": True},
+                        {"name": "quantity", "label": "Quantity", "field": "quantity", "sortable": True},
+                        {"name": "model_id", "label": "Model ID", "field": "model_id", "sortable": True},
+                        {"name": "type", "label": "Type", "field": "type", "sortable": True},
+                        {"name": "modifier_count", "label": "Modifiers", "field": "modifier_count", "sortable": True},
+                        {"name": "address", "label": "Address", "field": "address", "sortable": True},
+                    ],
+                    rows=[],
+                    row_key="address",
+                    selection="single",
+                    pagination={"rowsPerPage": 25, "rowsPerPageOptions": [25, 50, 0]},
+                ).props("bordered flat wrap-cells separator=cell")
+                self._item_records_table.classes("w-full h-full")
+            with ui.tab_panel(account_context_tab).classes("w-full h-full"):
+                with ui.row().classes("w-full items-center"):
+                    ui.button(
+                        "Refresh AccountContext",
+                        on_click=self._refresh_account_context,
+                    )
+                    self._account_context_filter = ui.input(
+                        "Filter fields or values"
+                    )
+                    self._account_context_filter.on(
+                        "update:model-value",
+                        lambda event: self._set_account_context_filter(event.args),
+                    )
+                    self._account_context_status = ui.label(
+                        "Connect a client first"
+                    )
+                self._account_context_table = ui.table(
+                    columns=[
+                        {"name": "offset", "label": "Offset", "field": "offset", "sortable": True},
+                        {"name": "field", "label": "Field", "field": "field", "sortable": True},
+                        {"name": "value", "label": "Value", "field": "value", "sortable": True},
+                    ],
+                    rows=[],
+                    row_key="field",
+                    selection="single",
+                    pagination={"rowsPerPage": 15, "rowsPerPageOptions": [15, 30, 0]},
+                ).props("bordered flat wrap-cells separator=cell")
+                self._account_context_table.classes("w-full h-full")
+            with ui.tab_panel(gadget_context_tab).classes("w-full h-full"):
+                with ui.row().classes("w-full items-center"):
+                    ui.button(
+                        "Refresh GadgetContext",
+                        on_click=self._refresh_gadget_context,
+                    )
+                    self._gadget_context_filter = ui.input(
+                        "Filter fields or values"
+                    )
+                    self._gadget_context_filter.on(
+                        "update:model-value",
+                        lambda event: self._set_gadget_context_filter(event.args),
+                    )
+                    self._gadget_context_status = ui.label(
+                        "Connect a client first"
+                    )
+                self._gadget_context_table = ui.table(
+                    columns=[
+                        {"name": "offset", "label": "Offset", "field": "offset", "sortable": True},
+                        {"name": "field", "label": "Field", "field": "field", "sortable": True},
+                        {"name": "value", "label": "Value", "field": "value", "sortable": True},
+                    ],
+                    rows=[],
+                    row_key="field",
+                    selection="single",
+                    pagination={"rowsPerPage": 15, "rowsPerPageOptions": [15, 30, 0]},
+                ).props("bordered flat wrap-cells separator=cell")
+                self._gadget_context_table.classes("w-full h-full")
             with ui.tab_panel(gameplay_context_tab).classes("w-full h-full"):
                 with ui.row().classes("w-full items-center"):
                     ui.button(
@@ -788,7 +1150,11 @@ class MainWindow:
             connection = ConnectedClient(process, self._win32)
             try:
                 snapshot = self._read_context_timed(connection)
-                character = snapshot.player_name_str.strip() or None
+                character = (
+                    snapshot.player_name_str.strip()
+                    if snapshot.player_name_str is not None
+                    else None
+                ) or None
                 is_connected = snapshot.is_logged_in
             finally:
                 connection.close()
@@ -824,6 +1190,19 @@ class MainWindow:
         try:
             self._connection = ConnectedClient(process, self._win32)
             cinematic_snapshot = self._read_cinematic_timed(self._connection)
+            camera_snapshot = self._read_camera_timed(self._connection)
+            friend_list_snapshot = self._read_friend_list_timed(self._connection)
+            chat_buffer_snapshot = self._read_chat_buffer_timed(self._connection)
+            world_context_snapshot = self._read_world_context_timed(self._connection)
+            map_context_snapshot = self._read_map_context_timed(self._connection)
+            trade_context_snapshot = self._read_trade_context_timed(self._connection)
+            item_context_snapshot = self._read_item_context_timed(self._connection)
+            account_context_snapshot = self._read_account_context_timed(
+                self._connection
+            )
+            gadget_context_snapshot = self._read_gadget_context_timed(
+                self._connection
+            )
             gameplay_snapshot = self._read_gameplay_context_timed(self._connection)
             server_region_snapshot = self._read_server_region_timed(self._connection)
             instance_info_snapshot = self._read_instance_info_timed(self._connection)
@@ -839,7 +1218,11 @@ class MainWindow:
             pre_game_snapshot = self._read_pre_game_context_timed(self._connection)
             game_snapshot = self._read_game_context_timed(self._connection)
             snapshot = self._read_context_timed(self._connection)
-            character = snapshot.player_name_str.strip() or None
+            character = (
+                snapshot.player_name_str.strip()
+                if snapshot.player_name_str is not None
+                else None
+            ) or None
             is_logged_in = snapshot.is_logged_in
         except (OSError, RuntimeError, ValueError) as error:
             self._connection = None
@@ -854,6 +1237,15 @@ class MainWindow:
         self._data_tab.update()
         self._show_pre_game_context(pre_game_snapshot)
         self._show_cinematic(cinematic_snapshot)
+        self._show_camera(camera_snapshot)
+        self._show_friend_list(friend_list_snapshot)
+        self._show_chat_buffer(chat_buffer_snapshot)
+        self._show_world_context(world_context_snapshot)
+        self._show_map_context(map_context_snapshot)
+        self._show_trade_context(trade_context_snapshot)
+        self._show_item_context(item_context_snapshot)
+        self._show_account_context(account_context_snapshot)
+        self._show_gadget_context(gadget_context_snapshot)
         self._show_gameplay_context(gameplay_snapshot)
         self._show_server_region(server_region_snapshot)
         self._show_instance_info(instance_info_snapshot)
@@ -886,6 +1278,36 @@ class MainWindow:
         if self._cinematic_table is not None:
             self._cinematic_table.rows = []
             self._cinematic_table.update()
+        if self._camera_table is not None:
+            self._camera_table.rows = []
+            self._camera_table.update()
+        if self._friend_list_table is not None:
+            self._friend_list_table.rows = []
+            self._friend_list_table.update()
+        if self._chat_buffer_table is not None:
+            self._chat_buffer_table.rows = []
+            self._chat_buffer_table.update()
+        if self._world_context_table is not None:
+            self._world_context_table.rows = []
+            self._world_context_table.update()
+        if self._map_context_table is not None:
+            self._map_context_table.rows = []
+            self._map_context_table.update()
+        if self._trade_context_table is not None:
+            self._trade_context_table.rows = []
+            self._trade_context_table.update()
+        if self._item_context_table is not None:
+            self._item_context_table.rows = []
+            self._item_context_table.update()
+        if self._item_records_table is not None:
+            self._item_records_table.rows = []
+            self._item_records_table.update()
+        if self._account_context_table is not None:
+            self._account_context_table.rows = []
+            self._account_context_table.update()
+        if self._gadget_context_table is not None:
+            self._gadget_context_table.rows = []
+            self._gadget_context_table.update()
         if self._gameplay_context_table is not None:
             self._gameplay_context_table.rows = []
             self._gameplay_context_table.update()
@@ -922,6 +1344,33 @@ class MainWindow:
         if self._cinematic_filter is not None:
             self._cinematic_filter.value = ""
             self._cinematic_filter.update()
+        if self._camera_filter is not None:
+            self._camera_filter.value = ""
+            self._camera_filter.update()
+        if self._friend_list_filter is not None:
+            self._friend_list_filter.value = ""
+            self._friend_list_filter.update()
+        if self._chat_buffer_filter is not None:
+            self._chat_buffer_filter.value = ""
+            self._chat_buffer_filter.update()
+        if self._world_context_filter is not None:
+            self._world_context_filter.value = ""
+            self._world_context_filter.update()
+        if self._map_context_filter is not None:
+            self._map_context_filter.value = ""
+            self._map_context_filter.update()
+        if self._trade_context_filter is not None:
+            self._trade_context_filter.value = ""
+            self._trade_context_filter.update()
+        if self._item_context_filter is not None:
+            self._item_context_filter.value = ""
+            self._item_context_filter.update()
+        if self._account_context_filter is not None:
+            self._account_context_filter.value = ""
+            self._account_context_filter.update()
+        if self._gadget_context_filter is not None:
+            self._gadget_context_filter.value = ""
+            self._gadget_context_filter.update()
         if self._gameplay_context_filter is not None:
             self._gameplay_context_filter.value = ""
             self._gameplay_context_filter.update()
@@ -954,6 +1403,24 @@ class MainWindow:
             self._pre_game_context_status.set_text("Connect a client first")
         if self._cinematic_status is not None:
             self._cinematic_status.set_text("Connect a client first")
+        if self._camera_status is not None:
+            self._camera_status.set_text("Connect a client first")
+        if self._friend_list_status is not None:
+            self._friend_list_status.set_text("Connect a client first")
+        if self._chat_buffer_status is not None:
+            self._chat_buffer_status.set_text("Connect a client first")
+        if self._world_context_status is not None:
+            self._world_context_status.set_text("Connect a client first")
+        if self._map_context_status is not None:
+            self._map_context_status.set_text("Connect a client first")
+        if self._trade_context_status is not None:
+            self._trade_context_status.set_text("Connect a client first")
+        if self._item_context_status is not None:
+            self._item_context_status.set_text("Connect a client first")
+        if self._account_context_status is not None:
+            self._account_context_status.set_text("Connect a client first")
+        if self._gadget_context_status is not None:
+            self._gadget_context_status.set_text("Connect a client first")
         if self._gameplay_context_status is not None:
             self._gameplay_context_status.set_text("Connect a client first")
         if self._server_region_status is not None:
@@ -983,6 +1450,127 @@ class MainWindow:
             self._cinematic_status.set_text(f"Context read failed: {error}")
             return
         self._show_cinematic(snapshot)
+
+    def _refresh_camera(self) -> None:
+        """Read a fresh read-only Camera snapshot for the selected client."""
+
+        if self._connection is None or not self._connection.is_connected:
+            self._camera_status.set_text("Connect a client first")
+            return
+        try:
+            snapshot = self._read_camera_timed(self._connection)
+        except (OSError, RuntimeError) as error:
+            self._camera_status.set_text(f"Context read failed: {error}")
+            return
+        self._show_camera(snapshot)
+
+    def _refresh_friend_list(self) -> None:
+        """Read a fresh bounded FriendList snapshot for the selected client."""
+
+        if self._connection is None or not self._connection.is_connected:
+            self._friend_list_status.set_text("Connect a client first")
+            return
+        try:
+            snapshot = self._read_friend_list_timed(self._connection)
+        except (OSError, RuntimeError) as error:
+            self._friend_list_status.set_text(f"Context read failed: {error}")
+            return
+        self._show_friend_list(snapshot)
+
+    def _refresh_chat_buffer(self) -> None:
+        """Read a fresh bounded ChatBuffer snapshot for the selected client."""
+
+        if self._connection is None or not self._connection.is_connected:
+            self._chat_buffer_status.set_text("Connect a client first")
+            return
+        try:
+            snapshot = self._read_chat_buffer_timed(self._connection)
+        except (OSError, RuntimeError) as error:
+            self._chat_buffer_status.set_text(f"Context read failed: {error}")
+            return
+        self._show_chat_buffer(snapshot)
+
+    def _refresh_world_context(self) -> None:
+        """Read a fresh WorldContext root for the selected client."""
+
+        if self._connection is None or not self._connection.is_connected:
+            self._world_context_status.set_text("Connect a client first")
+            return
+        try:
+            snapshot = self._read_world_context_timed(self._connection)
+        except (OSError, RuntimeError) as error:
+            self._world_context_status.set_text(f"Context read failed: {error}")
+            return
+        self._show_world_context(snapshot)
+
+    def _refresh_map_context(self) -> None:
+        """Read a fresh MapContext root and bounded spawn snapshot."""
+
+        if self._connection is None or not self._connection.is_connected:
+            self._map_context_status.set_text("Connect a client first")
+            return
+        try:
+            snapshot = self._read_map_context_timed(self._connection)
+        except (OSError, RuntimeError, ValueError) as error:
+            self._map_context_status.set_text(f"Context read failed: {error}")
+            return
+        self._show_map_context(snapshot)
+
+    def _refresh_trade_context(self) -> None:
+        """Read a fresh TradeContext snapshot for the selected client."""
+
+        if self._connection is None or not self._connection.is_connected:
+            self._trade_context_status.set_text("Connect a client first")
+            return
+        try:
+            snapshot = self._read_trade_context_timed(self._connection)
+        except (OSError, RuntimeError) as error:
+            self._trade_context_status.set_text(f"Context read failed: {error}")
+            return
+        self._show_trade_context(snapshot)
+
+    def _refresh_item_context(self) -> None:
+        """Read a fresh ItemContext root for the selected client."""
+
+        if self._connection is None or not self._connection.is_connected:
+            self._item_context_status.set_text("Connect a client first")
+            return
+        try:
+            snapshot = self._read_item_context_timed(self._connection)
+        except (OSError, RuntimeError) as error:
+            self._item_context_status.set_text(f"Context read failed: {error}")
+            return
+        self._show_item_context(snapshot)
+
+    def _refresh_account_context(self) -> None:
+        """Read a fresh AccountContext root for the selected client."""
+
+        if self._connection is None or not self._connection.is_connected:
+            self._account_context_status.set_text("Connect a client first")
+            return
+        try:
+            snapshot = self._read_account_context_timed(self._connection)
+        except (OSError, RuntimeError) as error:
+            self._account_context_status.set_text(
+                f"Context read failed: {error}"
+            )
+            return
+        self._show_account_context(snapshot)
+
+    def _refresh_gadget_context(self) -> None:
+        """Read a fresh GadgetContext root for the selected client."""
+
+        if self._connection is None or not self._connection.is_connected:
+            self._gadget_context_status.set_text("Connect a client first")
+            return
+        try:
+            snapshot = self._read_gadget_context_timed(self._connection)
+        except (OSError, RuntimeError) as error:
+            self._gadget_context_status.set_text(
+                f"Context read failed: {error}"
+            )
+            return
+        self._show_gadget_context(snapshot)
 
     def _refresh_gameplay_context(self) -> None:
         """Read a fresh GameplayContext snapshot for the selected client."""
@@ -1183,6 +1771,114 @@ class MainWindow:
         finally:
             self._last_cinematic_read_ms = self._perf.end(metric_name)
 
+    def _read_camera_timed(
+        self, connection: ConnectedClient
+    ) -> CameraStruct | None:
+        """Read one Camera snapshot and retain its elapsed time."""
+
+        metric_name = "Camera.read"
+        self._perf.start(metric_name)
+        try:
+            return connection.read_camera_context()
+        finally:
+            self._last_camera_read_ms = self._perf.end(metric_name)
+
+    def _read_friend_list_timed(
+        self, connection: ConnectedClient
+    ) -> FriendListStruct | None:
+        """Read one FriendList snapshot and retain its elapsed time."""
+
+        metric_name = "FriendList.read"
+        self._perf.start(metric_name)
+        try:
+            return connection.read_friend_list()
+        finally:
+            self._last_friend_list_read_ms = self._perf.end(metric_name)
+
+    def _read_chat_buffer_timed(
+        self, connection: ConnectedClient
+    ) -> ChatBufferStruct | None:
+        """Read one ChatBuffer snapshot and retain its elapsed time."""
+
+        metric_name = "ChatBuffer.read"
+        self._perf.start(metric_name)
+        try:
+            return connection.read_chat_buffer()
+        finally:
+            self._last_chat_buffer_read_ms = self._perf.end(metric_name)
+
+    def _read_world_context_timed(
+        self, connection: ConnectedClient
+    ) -> WorldContextStruct | None:
+        """Read one WorldContext root and retain its elapsed time."""
+
+        metric_name = "WorldContext.read"
+        self._perf.start(metric_name)
+        try:
+            return connection.read_world_context()
+        finally:
+            self._last_world_context_read_ms = self._perf.end(metric_name)
+
+    def _read_map_context_timed(
+        self, connection: ConnectedClient
+    ) -> MapContextStruct | None:
+        """Read one MapContext root and retain its elapsed time."""
+
+        metric_name = "MapContext.read"
+        self._perf.start(metric_name)
+        try:
+            return connection.read_map_context()
+        finally:
+            self._last_map_context_read_ms = self._perf.end(metric_name)
+
+    def _read_trade_context_timed(
+        self, connection: ConnectedClient
+    ) -> TradeContextStruct | None:
+        """Read one TradeContext snapshot and retain its elapsed time."""
+
+        metric_name = "TradeContext.read"
+        self._perf.start(metric_name)
+        try:
+            return connection.read_trade_context()
+        finally:
+            self._last_trade_context_read_ms = self._perf.end(metric_name)
+
+    def _read_item_context_timed(
+        self, connection: ConnectedClient
+    ) -> ItemContextStruct | None:
+        """Read one ItemContext root and retain its elapsed time."""
+
+        metric_name = "ItemContext.read"
+        self._perf.start(metric_name)
+        try:
+            return connection.read_item_context()
+        finally:
+            self._last_item_context_read_ms = self._perf.end(metric_name)
+
+    def _read_account_context_timed(
+        self, connection: ConnectedClient
+    ) -> AccountContextStruct | None:
+        """Read one AccountContext root and retain its elapsed time."""
+
+        metric_name = "AccountContext.read"
+        self._perf.start(metric_name)
+        try:
+            return connection.read_account_context()
+        finally:
+            self._last_account_context_read_ms = self._perf.end(metric_name)
+
+    def _read_gadget_context_timed(
+        self, connection: ConnectedClient
+    ) -> GadgetContextStruct | None:
+        """Read one GadgetContext root and retain its elapsed time."""
+
+        metric_name = "GadgetContext.read"
+        self._perf.start(metric_name)
+        try:
+            return connection.read_gadget_context()
+        finally:
+            self._last_gadget_context_read_ms = self._perf.end(metric_name)
+
     def _read_gameplay_context_timed(
         self, connection: ConnectedClient
     ) -> GameplayContextStruct | None:
@@ -1316,6 +2012,999 @@ class MainWindow:
             return
         self._cinematic_table.filter = str(value or "")
         self._cinematic_table.update()
+
+    def _show_camera(self, snapshot: CameraStruct | None) -> None:
+        """Display camera properties and the maintained raw fields."""
+
+        if snapshot is None:
+            self._camera_table.rows = []
+            self._camera_table.update()
+            self._camera_status.set_text(
+                "Camera is not available — no camera data was resolved"
+            )
+            return
+
+        rows: list[ContextFieldRow] = [
+            {
+                "offset": "property",
+                "field": "is_unlocked",
+                "value": str(snapshot.is_unlocked),
+            },
+            {
+                "offset": "property",
+                "field": "position",
+                "value": self._format_context_value(snapshot.position),
+            },
+            {
+                "offset": "property",
+                "field": "look_at_target",
+                "value": self._format_context_value(snapshot.look_at_target),
+            },
+        ]
+        for field_info in CameraStruct._fields_:
+            field_name = field_info[0]
+            field = getattr(CameraStruct, field_name)
+            value = getattr(snapshot, field_name)
+            rows.append(
+                {
+                    "offset": f"0x{field.offset:04X}",
+                    "field": field_name,
+                    "value": self._format_context_value(value),
+                }
+            )
+        self._camera_table.rows = rows
+        self._camera_table.update()
+        timing = ""
+        if self._last_camera_read_ms is not None:
+            timing = f" — read {self._last_camera_read_ms:.3f} ms"
+        self._camera_status.set_text("Camera refreshed" + timing)
+
+    def _set_camera_filter(self, value: Any) -> None:
+        """Apply the field/value filter to the Camera table."""
+
+        if self._camera_table is None:
+            return
+        self._camera_table.filter = str(value or "")
+        self._camera_table.update()
+
+    def _show_friend_list(self, snapshot: FriendListStruct | None) -> None:
+        """Display friend-list counts, status, and bounded friend records."""
+
+        if snapshot is None:
+            self._friend_list_table.rows = []
+            self._friend_list_table.update()
+            self._friend_list_status.set_text("FriendList is not available")
+            return
+
+        try:
+            friends = snapshot.friends
+        except OSError as error:
+            self._friend_list_table.rows = []
+            self._friend_list_table.update()
+            self._friend_list_status.set_text(f"FriendList read failed: {error}")
+            return
+
+        rows: list[ContextFieldRow] = [
+            {
+                "offset": "property",
+                "field": "player_status",
+                "value": snapshot.status.name,
+            },
+            {
+                "offset": "property",
+                "field": "friend_records",
+                "value": f"count={len(friends)}",
+            },
+        ]
+        for index, friend in enumerate(friends):
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"friend[{index}]",
+                    "value": (
+                        f"type={friend.type.name}, status={friend.friend_status.name}, "
+                        f"alias={friend.alias_str or '(none)'}, "
+                        f"character={friend.character_name_str or '(none)'}, "
+                        f"friend_id={friend.friend_id}, zone_id={friend.zone_id}"
+                    ),
+                }
+            )
+        for field_info in FriendListStruct._fields_:
+            field_name = field_info[0]
+            field = getattr(FriendListStruct, field_name)
+            value = getattr(snapshot, field_name)
+            rows.append(
+                {
+                    "offset": f"0x{field.offset:04X}",
+                    "field": field_name,
+                    "value": self._format_context_value(value),
+                }
+            )
+        self._friend_list_table.rows = rows
+        self._friend_list_table.update()
+        timing = ""
+        if self._last_friend_list_read_ms is not None:
+            timing = f" — read {self._last_friend_list_read_ms:.3f} ms"
+        self._friend_list_status.set_text(
+            f"FriendList refreshed ({len(friends)} records)" + timing
+        )
+
+    def _set_friend_list_filter(self, value: Any) -> None:
+        """Apply the field/value filter to the FriendList table."""
+
+        if self._friend_list_table is None:
+            return
+        self._friend_list_table.filter = str(value or "")
+        self._friend_list_table.update()
+
+    def _show_chat_buffer(self, snapshot: ChatBufferStruct | None) -> None:
+        """Display chat-ring metadata and a bounded set of decoded messages."""
+
+        if snapshot is None:
+            self._chat_buffer_table.rows = []
+            self._chat_buffer_table.update()
+            self._chat_buffer_status.set_text("ChatBuffer is not available")
+            return
+
+        try:
+            messages = snapshot.messages
+            is_typing = self._connection.is_typing() if self._connection else False
+        except OSError as error:
+            self._chat_buffer_table.rows = []
+            self._chat_buffer_table.update()
+            self._chat_buffer_status.set_text(f"ChatBuffer read failed: {error}")
+            return
+
+        rows: list[ContextFieldRow] = [
+            {
+                "offset": "property",
+                "field": "is_typing",
+                "value": str(is_typing),
+            },
+            {
+                "offset": "property",
+                "field": "message_count",
+                "value": f"count={len(messages)}",
+            },
+        ]
+        for index, message in enumerate(messages[:128]):
+            try:
+                text = message.message_str
+            except OSError:
+                text = "(unreadable)"
+            timestamp = message.timestamp_utc
+            timestamp_text = timestamp.isoformat() if timestamp else "(invalid)"
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"message[{index}]",
+                    "value": (
+                        f"channel={message.channel}, timestamp={timestamp_text}, "
+                        f"text={text}"
+                    ),
+                }
+            )
+        for field_info in ChatBufferStruct._fields_[:3]:
+            field_name = field_info[0]
+            field = getattr(ChatBufferStruct, field_name)
+            value = getattr(snapshot, field_name)
+            rows.append(
+                {
+                    "offset": f"0x{field.offset:04X}",
+                    "field": field_name,
+                    "value": self._format_context_value(value),
+                }
+            )
+        self._chat_buffer_table.rows = rows
+        self._chat_buffer_table.update()
+        timing = ""
+        if self._last_chat_buffer_read_ms is not None:
+            timing = f" — read {self._last_chat_buffer_read_ms:.3f} ms"
+        self._chat_buffer_status.set_text(
+            f"ChatBuffer refreshed ({len(messages)} messages; displaying up to 128)"
+            + timing
+        )
+
+    def _set_chat_buffer_filter(self, value: Any) -> None:
+        """Apply the field/value filter to the ChatBuffer table."""
+
+        if self._chat_buffer_table is None:
+            return
+        self._chat_buffer_table.filter = str(value or "")
+        self._chat_buffer_table.update()
+
+    def _show_map_context(self, snapshot: MapContextStruct | None) -> None:
+        """Display the MapContext root and a bounded list of spawn points."""
+
+        if snapshot is None:
+            self._map_context_table.rows = []
+            self._map_context_table.update()
+            self._map_context_status.set_text("MapContext is not available")
+            return
+
+        rows: list[ContextFieldRow] = [
+            {
+                "offset": "property",
+                "field": "address",
+                "value": (
+                    f"0x{snapshot.address:08X}"
+                    if snapshot.address is not None
+                    else "(unknown)"
+                ),
+            },
+            {"offset": "property", "field": "map_type", "value": str(int(snapshot.map_type))},
+            {"offset": "property", "field": "map_id", "value": str(int(snapshot.map_id))},
+            {"offset": "property", "field": "start_pos", "value": self._format_context_value((float(snapshot.start_pos.x), float(snapshot.start_pos.y)))},
+            {"offset": "property", "field": "end_pos", "value": self._format_context_value((float(snapshot.end_pos.x), float(snapshot.end_pos.y)))},
+            {"offset": "property", "field": "map_boundaries", "value": self._format_context_value(snapshot.map_boundaries)},
+            {"offset": "property", "field": "spawn_array_sizes", "value": self._format_context_value(snapshot.spawn_array_sizes)},
+            {"offset": "property", "field": "path_address", "value": self._format_pointer(snapshot.path_address)},
+            {"offset": "property", "field": "props_address", "value": self._format_pointer(snapshot.props_address)},
+            {"offset": "property", "field": "terrain_address", "value": self._format_pointer(snapshot.terrain_address)},
+            {"offset": "property", "field": "zones_address", "value": self._format_pointer(snapshot.zones_address)},
+        ]
+
+        try:
+            path_context = snapshot.path_context
+            static_data = path_context.static_data if path_context is not None else None
+            pathing_maps = static_data.pathing_maps if static_data is not None else []
+        except (OSError, RuntimeError, ValueError) as error:
+            path_context = None
+            static_data = None
+            pathing_maps = []
+            rows.append(
+                {"offset": "property", "field": "pathing_read_error", "value": str(error)}
+            )
+
+        rows.extend(
+            [
+                {
+                    "offset": "property",
+                    "field": "path_context_address",
+                    "value": self._format_pointer(
+                        path_context.address if path_context is not None else None
+                    ),
+                },
+                {
+                    "offset": "property",
+                    "field": "static_data_address",
+                    "value": self._format_pointer(
+                        static_data.address if static_data is not None else None
+                    ),
+                },
+                {
+                    "offset": "property",
+                    "field": "pathing_map_sizes",
+                    "value": self._format_context_value(
+                        static_data.pathing_map_sizes if static_data is not None else None
+                    ),
+                },
+                {
+                    "offset": "property",
+                    "field": "pathing_maps_read",
+                    "value": str(len(pathing_maps)),
+                },
+            ]
+        )
+        for index, pathing_map in enumerate(pathing_maps):
+            rows.append(
+                {
+                    "offset": "pathing",
+                    "field": f"pathing_maps[{index}]",
+                    "value": (
+                        f"zplane={pathing_map.zplane}, "
+                        f"trapezoids={pathing_map.trapezoid_count}, "
+                        f"sink_nodes={pathing_map.sink_node_count}, "
+                        f"x_nodes={pathing_map.x_node_count}, "
+                        f"y_nodes={pathing_map.y_node_count}, "
+                        f"portals={pathing_map.portal_count}, "
+                        f"trapezoids_ptr={self._format_pointer(pathing_map.trapezoids_address)}, "
+                        f"sink_nodes_ptr={self._format_pointer(pathing_map.sink_nodes_address)}, "
+                        f"x_nodes_ptr={self._format_pointer(pathing_map.x_nodes_address)}, "
+                        f"y_nodes_ptr={self._format_pointer(pathing_map.y_nodes_address)}, "
+                        f"portals_ptr={self._format_pointer(pathing_map.portals_address)}, "
+                        f"root_node_ptr={self._format_pointer(pathing_map.root_node_address)}"
+                    ),
+                }
+            )
+
+        arrays = (
+            ("spawns1", lambda: snapshot.spawns1),
+            ("spawns2", lambda: snapshot.spawns2),
+            ("spawns3", lambda: snapshot.spawns3),
+        )
+        for array_name, read_array in arrays:
+            try:
+                spawn_points = read_array()
+            except (OSError, RuntimeError, ValueError) as error:
+                rows.append(
+                    {
+                        "offset": "array",
+                        "field": f"{array_name}.error",
+                        "value": str(error),
+                    }
+                )
+                continue
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"{array_name}.count",
+                    "value": str(len(spawn_points)),
+                }
+            )
+            for index, spawn in enumerate(spawn_points[:64]):
+                rows.append(
+                    {
+                        "offset": "array",
+                        "field": f"{array_name}[{index}]",
+                        "value": (
+                            f"x={spawn.x:.3f}, y={spawn.y:.3f}, "
+                            f"angle={spawn.angle:.3f}, tag={spawn.tag or '(empty)'}, "
+                            f"map_id={spawn.map_id}, default={spawn.is_default}"
+                        ),
+                    }
+                )
+
+        for field_info in MapContextStruct._fields_:
+            field_name = field_info[0]
+            field = getattr(MapContextStruct, field_name)
+            value = getattr(snapshot, field_name)
+            rows.append(
+                {
+                    "offset": f"0x{field.offset:04X}",
+                    "field": field_name,
+                    "value": self._format_context_value(value),
+                }
+            )
+        self._map_context_table.rows = rows
+        self._map_context_table.update()
+        timing = ""
+        if self._last_map_context_read_ms is not None:
+            timing = f" — read {self._last_map_context_read_ms:.3f} ms"
+        self._map_context_status.set_text(
+            f"MapContext refreshed; {len(rows)} rows{timing}"
+        )
+
+    def _set_map_context_filter(self, value: Any) -> None:
+        """Apply the field/value filter to the MapContext table."""
+
+        if self._map_context_table is None:
+            return
+        self._map_context_table.filter = str(value or "")
+        self._map_context_table.update()
+
+    def _show_world_context(self, snapshot: WorldContextStruct | None) -> None:
+        """Display world-root scalars and array counts without child traversal."""
+
+        if snapshot is None:
+            self._world_context_table.rows = []
+            self._world_context_table.update()
+            self._world_context_status.set_text("WorldContext is not available")
+            return
+
+        try:
+            message_buffer = snapshot.message_buffer
+        except (OSError, RuntimeError):
+            message_buffer = "(unreadable)"
+        try:
+            dialog_buffer = snapshot.dialog_buffer
+        except (OSError, RuntimeError):
+            dialog_buffer = "(unreadable)"
+        try:
+            party_attributes = snapshot.party_attributes
+        except (OSError, RuntimeError):
+            party_attributes = []
+        try:
+            party_effects = snapshot.party_effects
+        except (OSError, RuntimeError):
+            party_effects = []
+        try:
+            players = snapshot.players
+        except (OSError, RuntimeError):
+            players = []
+        try:
+            npc_models = snapshot.npc_models
+        except (OSError, RuntimeError):
+            npc_models = []
+        try:
+            hero_flags = snapshot.hero_flags
+        except (OSError, RuntimeError):
+            hero_flags = []
+        try:
+            hero_info = snapshot.hero_info
+        except (OSError, RuntimeError):
+            hero_info = []
+        try:
+            pets = snapshot.pets
+        except (OSError, RuntimeError):
+            pets = []
+        try:
+            skillbars = snapshot.skillbars
+        except (OSError, RuntimeError):
+            skillbars = []
+        try:
+            learnable_skills = snapshot.learnable_character_skills
+        except (OSError, RuntimeError):
+            learnable_skills = []
+        try:
+            unlocked_skills = snapshot.unlocked_character_skills
+        except (OSError, RuntimeError):
+            unlocked_skills = []
+        try:
+            duplicated_skills = snapshot.duplicated_character_skills
+        except (OSError, RuntimeError):
+            duplicated_skills = []
+        try:
+            quests = snapshot.quests
+        except (OSError, RuntimeError):
+            quests = []
+        try:
+            mission_objectives = snapshot.mission_objectives
+        except (OSError, RuntimeError):
+            mission_objectives = []
+        try:
+            titles = snapshot.titles
+        except (OSError, RuntimeError):
+            titles = []
+        try:
+            title_tiers = snapshot.title_tiers
+        except (OSError, RuntimeError):
+            title_tiers = []
+
+        rows: list[ContextFieldRow] = [
+            {
+                "offset": "property",
+                "field": "address",
+                "value": (
+                    f"0x{snapshot.address:08X}"
+                    if snapshot.address is not None
+                    else "(unknown)"
+                ),
+            },
+            {
+                "offset": "property",
+                "field": "all_flag_value",
+                "value": self._format_context_value(snapshot.all_flag_value),
+            },
+            {
+                "offset": "property",
+                "field": "array_sizes",
+                "value": self._format_context_value(snapshot.array_sizes),
+            },
+            {
+                "offset": "property",
+                "field": "message_buffer",
+                "value": message_buffer,
+            },
+            {
+                "offset": "property",
+                "field": "dialog_buffer",
+                "value": dialog_buffer,
+            },
+            {
+                "offset": "property",
+                "field": "party_attribute_blocks",
+                "value": f"count={len(party_attributes)}",
+            },
+            {
+                "offset": "property",
+                "field": "party_effect_blocks",
+                "value": f"count={len(party_effects)}",
+            },
+            {
+                "offset": "property",
+                "field": "players",
+                "value": f"count={len(players)}",
+            },
+            {
+                "offset": "property",
+                "field": "npc_models",
+                "value": f"count={len(npc_models)}",
+            },
+            {
+                "offset": "property",
+                "field": "hero_flags",
+                "value": f"count={len(hero_flags)}",
+            },
+            {
+                "offset": "property",
+                "field": "hero_info",
+                "value": f"count={len(hero_info)}",
+            },
+            {
+                "offset": "property",
+                "field": "pets",
+                "value": f"count={len(pets)}",
+            },
+            {
+                "offset": "property",
+                "field": "skillbars",
+                "value": f"count={len(skillbars)}",
+            },
+            {
+                "offset": "property",
+                "field": "learnable_character_skills",
+                "value": f"count={len(learnable_skills)}",
+            },
+            {
+                "offset": "property",
+                "field": "unlocked_character_skills",
+                "value": f"count={len(unlocked_skills)}",
+            },
+            {
+                "offset": "property",
+                "field": "duplicated_character_skills",
+                "value": f"count={len(duplicated_skills)}",
+            },
+            {
+                "offset": "property",
+                "field": "quests",
+                "value": f"count={len(quests)}",
+            },
+            {
+                "offset": "property",
+                "field": "mission_objectives",
+                "value": f"count={len(mission_objectives)}",
+            },
+            {
+                "offset": "property",
+                "field": "titles",
+                "value": f"count={len(titles)}",
+            },
+            {
+                "offset": "property",
+                "field": "title_tiers",
+                "value": f"count={len(title_tiers)}",
+            },
+        ]
+        for index, attributes in enumerate(party_attributes[:64]):
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"party_attributes[{index}]",
+                    "value": (
+                        f"agent_id={attributes.agent_id}, "
+                        f"valid_attributes={len(attributes.valid_attributes)}"
+                    ),
+                }
+            )
+        for index, effects in enumerate(party_effects[:64]):
+            try:
+                buff_count = len(effects.buffs)
+                effect_count = len(effects.effects)
+            except (OSError, RuntimeError):
+                buff_count = effect_count = -1
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"party_effects[{index}]",
+                    "value": (
+                        f"agent_id={effects.agent_id}, buffs={buff_count}, "
+                        f"effects={effect_count}"
+                    ),
+                }
+            )
+        for index, player in enumerate(players[:32]):
+            try:
+                player_name = player.name or "(unnamed)"
+            except OSError:
+                player_name = "(unreadable)"
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"players[{index}]",
+                    "value": (
+                        f"player_number={player.player_number}, "
+                        f"agent_id={player.agent_id}, name={player_name}"
+                    ),
+                }
+            )
+        for index, npc in enumerate(npc_models[:32]):
+            try:
+                npc_name = npc.name or "(unnamed)"
+            except OSError:
+                npc_name = "(unreadable)"
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"npc_models[{index}]",
+                    "value": (
+                        f"model_file_id={npc.model_file_id}, "
+                        f"flags=0x{npc.npc_flags:08X}, name={npc_name}"
+                    ),
+                }
+            )
+        for index, hero in enumerate(hero_info[:32]):
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"hero_info[{index}]",
+                    "value": (
+                        f"hero_id={hero.hero_id}, agent_id={hero.agent_id}, "
+                        f"level={hero.level}, name={hero.name or '(unnamed)'}"
+                    ),
+                }
+            )
+        for index, pet in enumerate(pets[:32]):
+            try:
+                pet_name = pet.name or "(unnamed)"
+            except OSError:
+                pet_name = "(unreadable)"
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"pets[{index}]",
+                    "value": (
+                        f"agent_id={pet.agent_id}, owner={pet.owner_agent_id}, "
+                        f"name={pet_name}"
+                    ),
+                }
+            )
+        for index, skillbar in enumerate(skillbars[:32]):
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"skillbars[{index}]",
+                    "value": (
+                        f"agent_id={skillbar.agent_id}, "
+                        f"valid={skillbar.is_valid}, "
+                        f"skills={skillbar.skill_ids}"
+                    ),
+                }
+            )
+        for index, quest in enumerate(quests[:32]):
+            try:
+                quest_name = quest.name or "(unnamed)"
+            except OSError:
+                quest_name = "(unreadable)"
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"quests[{index}]",
+                    "value": (
+                        f"quest_id={quest.quest_id}, primary={quest.is_primary}, "
+                        f"completed={quest.is_completed}, name={quest_name}"
+                    ),
+                }
+            )
+        for index, objective in enumerate(mission_objectives[:32]):
+            try:
+                objective_text = objective.text or "(unnamed)"
+            except OSError:
+                objective_text = "(unreadable)"
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"mission_objectives[{index}]",
+                    "value": (
+                        f"objective_id={objective.objective_id}, "
+                        f"type={objective.type}, text={objective_text}"
+                    ),
+                }
+            )
+        for index, title in enumerate(titles[:32]):
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"titles[{index}]",
+                    "value": (
+                        f"tier={title.current_title_tier_index}, "
+                        f"points={title.current_points}, tiers={title.has_tiers}"
+                    ),
+                }
+            )
+        for index, tier in enumerate(title_tiers[:32]):
+            try:
+                tier_name = tier.name or "(unnamed)"
+            except OSError:
+                tier_name = "(unreadable)"
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"title_tiers[{index}]",
+                    "value": (
+                        f"tier_number={tier.tier_number}, name={tier_name}"
+                    ),
+                }
+            )
+        for field_info in WorldContextStruct._fields_:
+            field_name = field_info[0]
+            field = getattr(WorldContextStruct, field_name)
+            value = getattr(snapshot, field_name)
+            rows.append(
+                {
+                    "offset": f"0x{field.offset:04X}",
+                    "field": field_name,
+                    "value": self._format_context_value(value),
+                }
+            )
+        self._world_context_table.rows = rows
+        self._world_context_table.update()
+        timing = ""
+        if self._last_world_context_read_ms is not None:
+            timing = f" — read {self._last_world_context_read_ms:.3f} ms"
+        self._world_context_status.set_text("WorldContext refreshed" + timing)
+
+    def _set_world_context_filter(self, value: Any) -> None:
+        """Apply the field/value filter to the WorldContext table."""
+
+        if self._world_context_table is None:
+            return
+        self._world_context_table.filter = str(value or "")
+        self._world_context_table.update()
+
+    def _show_trade_context(self, snapshot: TradeContextStruct | None) -> None:
+        """Display trade state and bounded offers without performing actions."""
+
+        if snapshot is None:
+            self._trade_context_table.rows = []
+            self._trade_context_table.update()
+            self._trade_context_status.set_text("TradeContext is not available")
+            return
+
+        try:
+            player_offer = snapshot.player_offer
+            partner_offer = snapshot.partner_offer
+            player_items = player_offer.items
+            partner_items = partner_offer.items
+        except (OSError, RuntimeError) as error:
+            self._trade_context_table.rows = []
+            self._trade_context_table.update()
+            self._trade_context_status.set_text(f"TradeContext read failed: {error}")
+            return
+
+        rows: list[ContextFieldRow] = [
+            {"offset": "property", "field": "is_trade_initiated", "value": str(snapshot.is_trade_initiated)},
+            {"offset": "property", "field": "is_trade_offered", "value": str(snapshot.is_trade_offered)},
+            {"offset": "property", "field": "is_trade_accepted", "value": str(snapshot.is_trade_accepted)},
+            {"offset": "property", "field": "player_items", "value": f"count={len(player_items)}"},
+            {"offset": "property", "field": "partner_items", "value": f"count={len(partner_items)}"},
+            {"offset": "property", "field": "player_gold", "value": str(player_offer.gold)},
+            {"offset": "property", "field": "partner_gold", "value": str(partner_offer.gold)},
+        ]
+        for side, items in (("player", player_items), ("partner", partner_items)):
+            for index, item in enumerate(items):
+                rows.append(
+                    {
+                        "offset": "array",
+                        "field": f"{side}_items[{index}]",
+                        "value": f"item_id={item.item_id}, quantity={item.quantity}",
+                    }
+                )
+        for field_info in TradeContextStruct._fields_:
+            field_name = field_info[0]
+            field = getattr(TradeContextStruct, field_name)
+            value = getattr(snapshot, field_name)
+            rows.append(
+                {
+                    "offset": f"0x{field.offset:04X}",
+                    "field": field_name,
+                    "value": self._format_context_value(value),
+                }
+            )
+        self._trade_context_table.rows = rows
+        self._trade_context_table.update()
+        timing = ""
+        if self._last_trade_context_read_ms is not None:
+            timing = f" — read {self._last_trade_context_read_ms:.3f} ms"
+        self._trade_context_status.set_text("TradeContext refreshed" + timing)
+
+    def _set_trade_context_filter(self, value: Any) -> None:
+        """Apply the field/value filter to the TradeContext table."""
+
+        if self._trade_context_table is None:
+            return
+        self._trade_context_table.filter = str(value or "")
+        self._trade_context_table.update()
+
+    def _show_item_context(self, snapshot: ItemContextStruct | None) -> None:
+        """Display the item root and bounded records reached through bags."""
+
+        if snapshot is None:
+            self._item_context_table.rows = []
+            self._item_context_table.update()
+            self._item_records_table.rows = []
+            self._item_records_table.update()
+            self._item_context_status.set_text("ItemContext is not available")
+            return
+
+        rows: list[ContextFieldRow] = [
+            {
+                "offset": "property",
+                "field": "address",
+                "value": (
+                    f"0x{snapshot.address:08X}"
+                    if snapshot.address is not None
+                    else "(unknown)"
+                ),
+            },
+            {
+                "offset": "property",
+                "field": "array_sizes",
+                "value": self._format_context_value(snapshot.array_sizes),
+            },
+        ]
+        for field_info in ItemContextStruct._fields_:
+            field_name = field_info[0]
+            field = getattr(ItemContextStruct, field_name)
+            value = getattr(snapshot, field_name)
+            rows.append(
+                {
+                    "offset": f"0x{field.offset:04X}",
+                    "field": field_name,
+                    "value": self._format_context_value(value),
+                }
+            )
+        self._item_context_table.rows = rows
+        self._item_context_table.update()
+        item_rows: list[dict[str, Any]] = []
+        item_error: str | None = None
+        try:
+            for bag in snapshot.bags():
+                for item in bag.items():
+                    item_rows.append(
+                        {
+                            "bag": bag.bag_id,
+                            "slot": int(item.slot),
+                            "item_id": int(item.item_id),
+                            "quantity": int(item.quantity),
+                            "model_id": int(item.model_id),
+                            "type": int(item.type),
+                            "modifier_count": item.modifier_count,
+                            "address": (
+                                f"0x{item.address:08X}"
+                                if item.address is not None
+                                else "(unknown)"
+                            ),
+                        }
+                    )
+        except (OSError, RuntimeError, ValueError) as error:
+            item_error = str(error)
+        self._item_records_table.rows = item_rows
+        self._item_records_table.update()
+        timing = ""
+        if self._last_item_context_read_ms is not None:
+            timing = f" — read {self._last_item_context_read_ms:.3f} ms"
+        suffix = f"; item read failed: {item_error}" if item_error else ""
+        self._item_context_status.set_text(
+            f"ItemContext refreshed; {len(item_rows)} bag items" + timing + suffix
+        )
+
+    def _set_item_context_filter(self, value: Any) -> None:
+        """Apply the field/value filter to the ItemContext table."""
+
+        if self._item_context_table is None:
+            return
+        self._item_context_table.filter = str(value or "")
+        self._item_context_table.update()
+
+    def _show_account_context(
+        self, snapshot: AccountContextStruct | None
+    ) -> None:
+        """Display account-root fields and array headers without traversal."""
+
+        if snapshot is None:
+            self._account_context_table.rows = []
+            self._account_context_table.update()
+            self._account_context_status.set_text(
+                "AccountContext is not available"
+            )
+            return
+
+        rows: list[ContextFieldRow] = [
+            {
+                "offset": "property",
+                "field": "address",
+                "value": (
+                    f"0x{snapshot.address:08X}"
+                    if snapshot.address is not None
+                    else "(unknown)"
+                ),
+            },
+            {
+                "offset": "property",
+                "field": "array_sizes",
+                "value": self._format_context_value(snapshot.array_sizes),
+            },
+        ]
+        for field_info in AccountContextStruct._fields_:
+            field_name = field_info[0]
+            field = getattr(AccountContextStruct, field_name)
+            value = getattr(snapshot, field_name)
+            rows.append(
+                {
+                    "offset": f"0x{field.offset:04X}",
+                    "field": field_name,
+                    "value": self._format_context_value(value),
+                }
+            )
+        self._account_context_table.rows = rows
+        self._account_context_table.update()
+        timing = ""
+        if self._last_account_context_read_ms is not None:
+            timing = f" — read {self._last_account_context_read_ms:.3f} ms"
+        self._account_context_status.set_text("AccountContext refreshed" + timing)
+
+    def _set_account_context_filter(self, value: Any) -> None:
+        """Apply the field/value filter to the AccountContext table."""
+
+        if self._account_context_table is None:
+            return
+        self._account_context_table.filter = str(value or "")
+        self._account_context_table.update()
+
+    def _show_gadget_context(self, snapshot: GadgetContextStruct | None) -> None:
+        """Display gadget-root metadata and a bounded info sample."""
+
+        if snapshot is None:
+            self._gadget_context_table.rows = []
+            self._gadget_context_table.update()
+            self._gadget_context_status.set_text("GadgetContext is not available")
+            return
+
+        try:
+            records = snapshot.gadget_infos(limit=128)
+        except (OSError, RuntimeError):
+            records = []
+        rows: list[ContextFieldRow] = [
+            {
+                "offset": "property",
+                "field": "address",
+                "value": (
+                    f"0x{snapshot.address:08X}"
+                    if snapshot.address is not None
+                    else "(unknown)"
+                ),
+            },
+            {
+                "offset": "property",
+                "field": "gadget_info_count",
+                "value": f"advertised={snapshot.array_size}, sample={len(records)}",
+            },
+        ]
+        for index, record in enumerate(records):
+            try:
+                name = record.name_encoded or "(unnamed)"
+            except OSError:
+                name = "(unreadable)"
+            rows.append(
+                {
+                    "offset": "array",
+                    "field": f"gadget_info[{index}]",
+                    "value": (
+                        f"h0000=0x{int(record.h0000):08X}, "
+                        f"h0004=0x{int(record.h0004):08X}, "
+                        f"h0008=0x{int(record.h0008):08X}, name={name}"
+                    ),
+                }
+            )
+        for field_info in GadgetContextStruct._fields_:
+            field_name = field_info[0]
+            field = getattr(GadgetContextStruct, field_name)
+            value = getattr(snapshot, field_name)
+            rows.append(
+                {
+                    "offset": f"0x{field.offset:04X}",
+                    "field": field_name,
+                    "value": self._format_context_value(value),
+                }
+            )
+        self._gadget_context_table.rows = rows
+        self._gadget_context_table.update()
+        timing = ""
+        if self._last_gadget_context_read_ms is not None:
+            timing = f" — read {self._last_gadget_context_read_ms:.3f} ms"
+        self._gadget_context_status.set_text(
+            f"GadgetContext refreshed (displaying up to 128)" + timing
+        )
+
+    def _set_gadget_context_filter(self, value: Any) -> None:
+        """Apply the field/value filter to the GadgetContext table."""
+
+        if self._gadget_context_table is None:
+            return
+        self._gadget_context_table.filter = str(value or "")
+        self._gadget_context_table.update()
 
     def _show_gameplay_context(
         self, snapshot: GameplayContextStruct | None
@@ -1638,14 +3327,14 @@ class MainWindow:
             self._guild_context_status.set_text("GuildContext is not active")
             return
 
-        guilds = snapshot.guild_array
-        roster = snapshot.player_roster
-        history = snapshot.player_guild_history
-        alliances = snapshot.factions_outpost_guilds
+        guilds = snapshot.guild_array or []
+        roster = snapshot.player_roster or []
+        history = snapshot.player_guild_history or []
+        alliances = snapshot.factions_outpost_guilds or []
         rows: list[ContextFieldRow] = [
             {"offset": "property", "field": "player_name_str", "value": snapshot.player_name_str or "in selection menus"},
-            {"offset": "property", "field": "announcement_str", "value": snapshot.announcement_str},
-            {"offset": "property", "field": "announcement_author_str", "value": snapshot.announcement_author_str},
+            {"offset": "property", "field": "announcement_str", "value": snapshot.announcement_str or ""},
+            {"offset": "property", "field": "announcement_author_str", "value": snapshot.announcement_author_str or ""},
             {"offset": "property", "field": "guild_array", "value": f"count={len(guilds)}"},
             {"offset": "property", "field": "guild_names", "value": ", ".join(guild.name_str for guild in guilds[:10]) or "(none)"},
             {"offset": "property", "field": "player_roster", "value": f"count={len(roster)}"},
@@ -1957,6 +3646,12 @@ class MainWindow:
             f"valid={is_valid}, size={int(array.m_size)}, "
             f"capacity={int(array.m_capacity)}, items={item_count}"
         )
+
+    @staticmethod
+    def _format_pointer(value: int | None) -> str:
+        """Format an optional target-process pointer without implying validity."""
+
+        return f"0x{value:08X}" if value else "(null)"
 
     def _format_context_value(self, value: Any) -> str:
         """Format remaining ctypes values without local pointer dereferences."""

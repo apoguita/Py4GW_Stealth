@@ -12,7 +12,7 @@ from ctypes import Structure, c_float, c_uint8, c_uint32
 from typing import Any, Protocol, TypeVar, cast
 
 from .game_context import GameContext, GameContextStruct
-from .gw_array import GWArray, GWArrayValueView, GWArrayView, RemoteMemoryReader
+from .gw_array import GWArray, GWArrayValueView, RemoteMemoryReader
 
 
 class _memory_reader(RemoteMemoryReader, Protocol):
@@ -85,18 +85,19 @@ class AgentSummaryInfoSubStruct(Structure):
         return self
 
     @property
-    def gadget_name_encoded_str(self) -> str:
+    def gadget_name_encoded_str(self) -> str | None:
         """Read the encoded gadget name through the target pointer."""
 
         if self._remote_reader is None:
-            return ""
+            return None
         return _read_encoded_wide(self._remote_reader, int(self.gadget_name_enc))
 
     @property
-    def gadget_name_str(self) -> str:
+    def gadget_name_str(self) -> str | None:
         """Return a display-safe gadget name."""
 
-        return _format_encoded_text(self.gadget_name_encoded_str)
+        encoded = self.gadget_name_encoded_str
+        return _format_encoded_text(encoded) if encoded else None
 
 
 class AgentSummaryInfoStruct(Structure):
@@ -155,6 +156,12 @@ class AgentMovementStruct(Structure):
         ("h0074", Vec3fStruct),
     ]
 
+    @property
+    def agentDef(self) -> int:
+        """Return the Reforged-compatible movement-definition field."""
+
+        return int(self.agent_def)
+
 
 class AccAgentContextStruct(Structure):
     """The complete maintained native ``AgentContext`` layout."""
@@ -191,6 +198,7 @@ class AccAgentContextStruct(Structure):
     ]
 
     _remote_reader: _memory_reader | None = None
+    _remote_address: int | None = None
 
     def bind_reader(
         self, reader: _memory_reader, address: int | None = None
@@ -198,7 +206,14 @@ class AccAgentContextStruct(Structure):
         """Attach the reader used by all nested array properties."""
 
         self._remote_reader = reader
+        self._remote_address = address
         return self
+
+    @property
+    def remote_address(self) -> int | None:
+        """Return the target address represented by this snapshot."""
+
+        return self._remote_address
 
     def _require_reader(self) -> _memory_reader:
         if self._remote_reader is None:
@@ -207,63 +222,82 @@ class AccAgentContextStruct(Structure):
 
     def _values(
         self, array: GWArray, element_type: type[_value_type]
-    ) -> list[_value_type]:
+    ) -> list[_value_type] | None:
+        """Read a source-style array, preserving an empty-array result."""
+
+        if not array.m_buffer or not array.m_size:
+            return None
+        if array.m_size > array.m_capacity:
+            return None
         return list(GWArrayValueView(self._require_reader(), array, element_type))
 
-    def _pointer_values(self, array: GWArray) -> list[int]:
-        return [int(cast(Any, value)) for value in self._values(array, c_uint32)]
+    def _pointer_values(self, array: GWArray) -> list[int] | None:
+        values = self._values(array, c_uint32)
+        return [int(cast(Any, value)) for value in values] if values is not None else None
 
     @property
-    def h0000_ptrs(self) -> list[int]:
+    def h0000_ptrs(self) -> list[int] | None:
         return self._pointer_values(self.h0000_array)
 
     @property
-    def h0084_ptrs(self) -> list[int]:
+    def h0084_ptrs(self) -> list[int] | None:
         return self._pointer_values(self.h0084_array)
 
     @property
-    def agent_summary_info_list(self) -> list[AgentSummaryInfoStruct]:
-        return cast(
-            list[AgentSummaryInfoStruct],
-            self._values(self.agent_summary_info_array, AgentSummaryInfoStruct),
-        )
+    def agent_summary_info_list(self) -> list[AgentSummaryInfoStruct] | None:
+        values = self._values(self.agent_summary_info_array, AgentSummaryInfoStruct)
+        return cast(list[AgentSummaryInfoStruct], values) if values is not None else None
 
     @property
-    def h00A8_ptrs(self) -> list[int]:
+    def h00A8_ptrs(self) -> list[int] | None:
         return self._pointer_values(self.h00A8_array)
 
     @property
-    def h00B8_ptrs(self) -> list[int]:
+    def h00B8_ptrs(self) -> list[int] | None:
         return self._pointer_values(self.h00B8_array)
 
     @property
-    def agent_movement_ptrs(self) -> list[AgentMovementStruct]:
-        return cast(
-            list[AgentMovementStruct],
-            GWArrayView(
-                self._require_reader(),
-                self.agent_movement_array,
-                AgentMovementStruct,
-            ).to_list(),
-        )
+    def agent_movement_ptrs(self) -> list[AgentMovementStruct | None] | None:
+        """Read movement pointers while preserving source indexes and nulls."""
+
+        array = self.agent_movement_array
+        if not array.m_buffer or not array.m_size or array.m_size > array.m_capacity:
+            return None
+
+        reader = self._require_reader()
+        result: list[AgentMovementStruct | None] = []
+        for index in range(int(array.m_size)):
+            pointer_address = int.from_bytes(
+                reader.read(int(array.m_buffer) + index * 4, 4), "little"
+            )
+            if pointer_address < 0x10000:
+                result.append(None)
+                continue
+            raw_value = reader.read(
+                pointer_address, ctypes.sizeof(AgentMovementStruct)
+            )
+            result.append(AgentMovementStruct.from_buffer_copy(raw_value))
+        return result
 
     @property
     def valid_agents_ids(self) -> list[int]:
         """Return indexes whose movement pointers are currently non-null."""
 
         pointers = self._pointer_values(self.agent_movement_array)
+        if pointers is None:
+            return []
         return [index for index, pointer in enumerate(pointers) if pointer >= 0x10000]
 
     @property
-    def h00F8_ptrs(self) -> list[int]:
+    def h00F8_ptrs(self) -> list[int] | None:
         return self._pointer_values(self.h00F8_array)
 
     @property
-    def h014C_ptrs(self) -> list[int]:
+    def h014C_ptrs(self) -> list[int] | None:
         return self._pointer_values(self.h014C_array)
 
     @property
-    def h015C_ptrs(self) -> list[int]:
+    def h015C_ptrs(self) -> list[int] | None:
         return self._pointer_values(self.h015C_array)
 
 

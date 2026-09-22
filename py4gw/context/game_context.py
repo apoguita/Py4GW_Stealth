@@ -50,6 +50,48 @@ class GameContextStruct(Structure):
         ("trade_context", c_uint32),
     ]
 
+    # Native C++ field spellings remain available alongside the Reforged
+    # Python names. These aliases do not change the target layout.
+    @property
+    def agent(self) -> int:
+        return int(self.agent_context)
+
+    @property
+    def map(self) -> int:
+        return int(self.map_context)
+
+    @property
+    def account(self) -> int:
+        return int(self.account_context)
+
+    @property
+    def world(self) -> int:
+        return int(self.world_context)
+
+    @property
+    def gadget(self) -> int:
+        return int(self.gadget_context)
+
+    @property
+    def guild(self) -> int:
+        return int(self.guild_context)
+
+    @property
+    def items(self) -> int:
+        return int(self.item_context)
+
+    @property
+    def character(self) -> int:
+        return int(self.char_context)
+
+    @property
+    def party(self) -> int:
+        return int(self.party_context)
+
+    @property
+    def trade(self) -> int:
+        return int(self.trade_context)
+
 
 assert ctypes.sizeof(GameContextStruct) == 0x5C
 

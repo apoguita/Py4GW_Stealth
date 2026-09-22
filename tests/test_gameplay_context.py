@@ -53,9 +53,11 @@ class LiveGameplayContextTests(unittest.TestCase):
         """Keep the fixed-width layout aligned with the native source."""
 
         self.assertEqual(ctypes.sizeof(GameplayContextStruct), 0x78)
-        self.assertEqual(GameplayContextStruct.h0000.offset, 0x00)
-        self.assertEqual(GameplayContextStruct.mission_map_zoom.offset, 0x4C)
-        self.assertEqual(GameplayContextStruct.unk.offset, 0x50)
+        self.assertEqual(getattr(GameplayContextStruct, "h0000").offset, 0x00)
+        self.assertEqual(
+            getattr(GameplayContextStruct, "mission_map_zoom").offset, 0x4C
+        )
+        self.assertEqual(getattr(GameplayContextStruct, "unk").offset, 0x50)
 
     def test_resolves_live_gameplay_pointer(self) -> None:
         """Resolve and cache the JSON global-pointer location."""

@@ -56,7 +56,8 @@ class LiveContextTests(unittest.TestCase):
         self.assertEqual(ctypes.sizeof(CharContextStruct), 0x448)
         self.assertEqual(len(bytes(snapshot)), 0x448)
         self.assertEqual(
-            snapshot.is_logged_in, bool(snapshot.player_name_str.strip())
+            snapshot.is_logged_in,
+            bool(snapshot.player_name_str and snapshot.player_name_str.strip()),
         )
         self.assertIsInstance(self.context.is_logged_in, bool)
         description = snapshot.player_name_str or "in selection menus"

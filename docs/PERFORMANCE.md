@@ -105,6 +105,29 @@ The UI timing does not include formatting the table after the snapshot is
 returned. Derived properties such as `GWArray` views may perform additional
 remote reads while the table is being built.
 
+The AgentArray reader keeps its steady-state work separate: one bulk read for
+the agent pointer table, one bulk read for the movement-pointer table, and a
+small field reads for each non-null candidate, plus type, item-owner, living
+effects, and allegiance reads for accepted references. It returns at most 300 accepted references
+while allowing the target table itself to contain more entries. Complete
+agent records are read only on demand; complete living snapshots are available
+when frequent local queries are needed.
+
+Complete living-agent data is available through an explicit refresh. That
+refresh preserves the full native `AgentLivingStruct` for every current
+living reference and stores one local snapshot for repeated queries. It does
+not reduce the record to effects or health fields. The snapshot reports its
+generation, age, and records rejected during refresh; a later refresh replaces
+the previous records after pointer and ID validation.
+
+The live AgentArray check can pass one `PerfCounter` into the reader. It
+reports `agent_array.pointer_table`, `agent_array.movement_table`,
+`agent_array.classification`, and `agent_array.agent_record` independently.
+`agent_array.resolver` is recorded only when the JSON resolver first runs
+during connection setup; later refreshes use the cached address. The offline
+checks in `tests/test_agent_array_offline.py` cover malformed headers, null
+buffers, truncation, and fixed-width pointer decoding.
+
 ## Detailed live harness
 
 Use the direct harness when diagnosing a slowdown:
@@ -119,6 +142,17 @@ Optional arguments:
 python tests/perf_context.py --samples 20
 python tests/perf_context.py --pid 1234
 ```
+
+For the complete AgentArray and living-agent path, use:
+
+```text
+python tests/perf_agent_array.py --samples 10
+```
+
+This reports the one-time resolver, repeated bounded AgentArray refresh,
+complete living-record refresh, validity checks, and nested visible-effect,
+equipment, and tag reads. It also prints the pointer-slot and returned-reference
+safety limits for the selected client.
 
 The harness measures, separately:
 
@@ -150,3 +184,20 @@ cached context.read         about 0.026 ms
 The values are evidence from one client and host, not a performance guarantee
 for every Guild Wars build or machine. Run the harness again after changing
 the scanner, resolver, structure reader, or UI property set.
+
+One live AgentArray observation was approximately:
+
+```text
+agent_array.resolver       130.9 ms (one-time connection scan)
+agent_array.read           2.1 ms
+agent_array.pointer_table  0.45 ms
+agent_array.movement_table 0.40 ms
+agent_array.classification 1.19 ms
+agent_array.reference_validation 0.045 ms
+agent_array.agent_record   0.03 ms
+agent_array.living_refresh 3.7 ms for 56 living records
+```
+
+Classification was the largest recurring stage in that sample because it
+reads the common type and living allegiance fields for accepted references.
+These values are observations, not universal benchmarks.

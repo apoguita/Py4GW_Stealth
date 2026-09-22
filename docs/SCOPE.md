@@ -11,6 +11,33 @@ This is capability-by-capability work. Stealth is not a complete replacement
 for Py4GW Reforged, and no feature is assumed to be externally possible until
 its design and evidence are clear.
 
+**Current parity status: full source/API parity has been achieved for no
+context.** Existing readers are verified external read slices with documented
+gaps, not completed Reforged/native context replacements.
+
+When a context is migrated, the target is parity with the active behavior in
+`Py4GW_Reforged_Native` and `Py4GW_Reforged`. We migrate fields and helpers
+that those sources actually use or expose. We do not treat every unused native
+declaration as required work, and we do not invent a different public contract
+for the external reader. Only the process-memory transport changes.
+
+The current reader inventory is not a parity claim by itself. See
+[`CONTEXT_PARITY_AUDIT.md`](CONTEXT_PARITY_AUDIT.md) for the source-by-source
+status of every migrated reader and the missing work recorded for partial
+surfaces.
+
+Work that requires target-code execution, writes, hooks, callbacks, or
+injected state is deliberately frozen in
+[`DEFERRED_INJECTION.md`](DEFERRED_INJECTION.md). It is not part of the active
+read-only migration until its architecture and safety contract are approved.
+
+The long-term intent is broader than reading contexts: some future features
+may need code to execute on the Guild Wars game thread. An external reader
+cannot do that by itself. The intended direction is to avoid loading a DLL,
+while evaluating a smaller in-process payload/hook approach similar to the
+mechanism observed in GwAu3. That is still injection in the technical sense
+and is not implemented yet.
+
 ## Current deliverable
 
 The first deliverable has three deliberately separated parts:
@@ -48,8 +75,14 @@ The current `py4gw` package can:
 - resolve and read the maintained `CharContext`, `GameContext`,
   `PreGameContext`, `Cinematic`, `GameplayContext`, `ServerRegion`,
   `InstanceInfo`, `TextParser`, `AvailableCharacterArray`, `PartyContext`,
-  `GuildContext`, and `AccAgentContext`
+  `GuildContext`, `AccAgentContext`, `Camera`, `FriendList`, `ChatBuffer`,
+  `WorldContext`, `TradeContext`, `ItemContext`, `AccountContext`,
+  `GadgetContext`, and the read-only `MapContext` root with bounded spawn and
+  initial pathing-context records
   structures; and
+- read the source-defined ItemContext auxiliary tables (formulas,
+  composite-model records, storage state, and PvP metadata) through cached
+  offset resolvers; and
 - expose a selected-client connection for scripts and the root UI; and
 - measure execution time in the external Python controller.
 

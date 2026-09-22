@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import Structure, c_uint16, c_uint32
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from ..scanner import PatternCatalog, RemoteScanner
 from .gw_array import GWArray, GWArrayValueView, RemoteMemoryReader
@@ -44,16 +44,29 @@ class AvailableCharacterInfoStruct(Structure):
     _pack_ = 1
     _fields_ = [
         ("h0000", c_uint32 * 2),
-        ("uuid", c_uint32 * 4),
+        ("uuid_ptr", c_uint32 * 4),
         ("player_name_enc", c_uint16 * 20),
         ("props", c_uint32 * 17),
     ]
+
+    @property
+    def uuid(self) -> tuple[int, int, int, int]:
+        """Return the four UUID words using the Reforged property name."""
+
+        values = tuple(int(value) for value in self.uuid_ptr)
+        return (values[0], values[1], values[2], values[3])
 
     @property
     def player_name_encoded_str(self) -> str:
         """Return the raw fixed-width UTF-16 name before formatting."""
 
         return _decode_wide_field(self.player_name_enc)
+
+    @property
+    def player_name_encoded_string(self) -> str:
+        """Return the Reforged-compatible name for the encoded value."""
+
+        return self.player_name_encoded_str
 
     @property
     def player_name_str(self) -> str:
@@ -146,9 +159,20 @@ class AvailableCharacterArrayStruct(Structure):
 assert ctypes.sizeof(AvailableCharacterInfoStruct) == 0x84
 assert ctypes.sizeof(AvailableCharacterArrayStruct) == 0x10
 
+# Reforged names this record ``AvailableCharacterStruct``.  Keep the
+# descriptive ``Info`` name as the implementation name while exporting the
+# source-compatible alias.
+AvailableCharacterStruct = AvailableCharacterInfoStruct
+
 
 class AvailableCharacterArray:
     """Resolve and read the native account-wide character roster."""
+
+    # Source-compatible static facade state. The injected source updates this
+    # through a callback; the external reader refreshes it explicitly.
+    _ptr: int = 0
+    _cached_ctx: AvailableCharacterArrayStruct | None = None
+    _callback_name = "AvailableCharacterArrayContext.UpdatePtr"
 
     _RESOLVER = "player.available_characters_addr"
 
@@ -164,6 +188,53 @@ class AvailableCharacterArray:
         self._scanner = scanner
         self._patterns = patterns
         self._context_address: int | None = None
+
+    @staticmethod
+    def get_ptr() -> int:
+        """Return the last externally refreshed roster-array address."""
+
+        return AvailableCharacterArray._ptr
+
+    @staticmethod
+    def _update_ptr() -> None:
+        """Refresh the source-compatible facade from the selected client."""
+
+        from ..client import current_client
+
+        client = current_client()
+        if client is None:
+            AvailableCharacterArray._ptr = 0
+            AvailableCharacterArray._cached_ctx = None
+            return
+        try:
+            context = client.available_characters
+            address = context.resolve_address()
+            AvailableCharacterArray._ptr = address or 0
+            AvailableCharacterArray._cached_ctx = cast(Any, context.read())
+        except (OSError, RuntimeError):
+            AvailableCharacterArray._ptr = 0
+            AvailableCharacterArray._cached_ctx = None
+
+    @staticmethod
+    def enable() -> None:
+        """Declare the source callback operation; callbacks require injection."""
+
+        raise NotImplementedError(
+            "AvailableCharacterArray.enable requires the in-process callback runtime."
+        )
+
+    @staticmethod
+    def disable() -> None:
+        """Clear the external facade cache."""
+
+        AvailableCharacterArray._ptr = 0
+        AvailableCharacterArray._cached_ctx = None
+
+    @staticmethod
+    def get_context() -> AvailableCharacterArrayStruct | None:
+        """Return the last snapshot refreshed through ``_update_ptr``."""
+
+        return AvailableCharacterArray._cached_ctx
 
     def resolve_address(self) -> int | None:
         """Return the current native ``GWArray`` address, if available."""
@@ -209,4 +280,4 @@ def get() -> AvailableCharacterArrayStruct | None:
     from ..client import current_client
 
     client = current_client()
-    return client.read_available_characters() if client is not None else None
+    return cast(Any, client.read_available_characters() if client is not None else None)

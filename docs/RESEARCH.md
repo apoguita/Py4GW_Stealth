@@ -7,7 +7,7 @@ project's short description or installation guide.
 Status: current active research project; read-only process discovery and the
 reusable scanner slice implemented
 Scope: establish what an external Guild Wars controller can read, write, execute, and observe before expanding capabilities.
-Authority: inspected current Py4GW Reforged and Py4GW Reforged Native sources; inspected the GwAu3 source checkout; and verified process discovery, section scanning, and the CharContext, GameContext, PreGameContext, Cinematic, GameplayContext, ServerRegion, InstanceInfo, TextParser, AvailableCharacterArray, PartyContext, GuildContext, and AccAgentContext read paths against one live client build. Other context behavior remains unverified.
+Authority: inspected current Py4GW Reforged and Py4GW Reforged Native sources; inspected the GwAu3 source checkout; and verified process discovery, section scanning, and the CharContext, GameContext, PreGameContext, Cinematic, GameplayContext, ServerRegion, InstanceInfo, TextParser, AvailableCharacterArray, PartyContext, GuildContext, AccAgentContext, Camera, FriendList, ChatBuffer, WorldContext root, and MapContext root/spawn read paths against one live client build. Other context behavior remains unverified.
 
 ## Intent
 
@@ -26,6 +26,13 @@ The immediate purpose is to understand the capability boundary between:
 1. a pure external process that does not place executable code or patches in `Gw.exe`;
 2. an external controller that uses a small remote payload rather than an injected DLL; and
 3. the current Py4GW Reforged model, where a DLL embeds Python and owns an in-process runtime.
+
+The longer-term intent includes capabilities that may need code to run on the
+Guild Wars game thread, not only context reads. A pure external reader cannot
+provide that. The current direction is to avoid DLL injection and evaluate a
+smaller in-process payload/hook bridge, similar to the mechanism observed in
+GwAu3. This remains future scope. It is still injection technically, even
+without loading a DLL.
 
 This document deliberately does not select an architecture, promise a botting surface, or prescribe an implementation. Those decisions depend on research into individual Guild Wars data and command paths.
 
@@ -140,7 +147,8 @@ operations. Their section and resolver path, plus the `CharContext`,
 `GameContext`, `PreGameContext`, `Cinematic`, `GameplayContext`,
 `ServerRegion`, `InstanceInfo`, and `TextParser` readers have been implemented
 and verified. `AvailableCharacterArray`, `PartyContext`, `GuildContext`, and
-`AccAgentContext` have also been implemented and verified
+`AccAgentContext`, the read-only `Camera` context, `FriendList`, and
+`ChatBuffer` have also been implemented and verified
 against one live client build. This does not establish compatibility with
 other builds.
 
@@ -285,10 +293,11 @@ surface that can:
 
 The implemented part is generic Windows process handling, a bounded memory
 reader, PE section discovery, a reusable pattern scanner, an offsets
-resolver, and the first seven Guild Wars structure readers, migrated in this
-order: `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
-`GameplayContext`, `ServerRegion`, and `InstanceInfo`. It does
-not yet contain the
+resolver, and the migrated Guild Wars structure readers. The current migration
+order is: `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
+`GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
+`AvailableCharacterArray`, `PartyContext`, `GuildContext`, `AccAgentContext`,
+`Camera`, `FriendList`, `ChatBuffer`, and the `WorldContext` root. It does not yet contain the
 remaining context readers, command paths, or behavior interpretation. The root
 UI exposes process discovery and these read-only context surfaces without
 adding a second process layer.
@@ -517,9 +526,10 @@ resulting `GameContext` bytes. The resolver location is cached for the
 connection, while the base table and current context pointer are re-read for
 each snapshot.
 
-The live test observed `GameContext` at `0x024D9018`, with its character and
-world pointers matching the independently read context addresses. This is a
-read-only observation for one client build, not a cross-build guarantee.
+An earlier live test observed `GameContext` at `0x024D9018`. The latest focused
+run on 2026-09-22 observed `GameContext` at `0x00A94398`, with
+`char_context=0x00ADDD98` and `world_context=0x00AD3A40`. These are read-only
+observations for individual client runs, not cross-build guarantees.
 
 ## PreGameContext implementation and resolution
 
@@ -539,9 +549,10 @@ allowed to be null: that is the expected state while the client is outside the
 selection menus, so `read()` returns `None` rather than treating it as a
 resolver failure.
 
-The live test resolved the global pointer at `0x015EA2EC`. During the recorded
-run the pointed-to value was null because the client was already in-game; the
-reader reported the inactive pre-game state correctly.
+An earlier live test resolved the global pointer at `0x015EA2EC`. The latest
+focused run on 2026-09-22 resolved it at `0x017CA2EC`. During that run the
+pointed-to value was null because the client was already in-game; the reader
+reported the inactive pre-game state correctly.
 
 ## Cinematic implementation and resolution
 
@@ -554,9 +565,10 @@ reads that pointer for each snapshot, and returns `None` when the pointer is
 null. This keeps the context optional while preserving the native pointer
 relationship; it does not add a second signature scan.
 
-The live test resolved `Cinematic` at `0x025065D8` and read both fields as
-`0x00000000` during the recorded run. The address and values are observations
-for one client build, not cross-build guarantees.
+An earlier live test resolved `Cinematic` at `0x025065D8`. The latest focused
+run on 2026-09-22 resolved it at `0x00ABF730` and read both fields as
+`0x00000000`. The address and values are observations for one client build,
+not cross-build guarantees.
 
 ## GameplayContext implementation and resolution
 
@@ -574,10 +586,12 @@ connection, re-reads the pointed-to gameplay context for each snapshot, and
 returns `None` when the target pointer is null. It uses the copied JSON
 resolver and does not add a second signature definition.
 
-The live test resolved the global pointer at `0x015EAAB8`, the current
-`GameplayContext` at `0x02421248`, and read `mission_map_zoom` as `1.500`.
-These addresses and values are observations for one client build, not
-cross-build guarantees.
+An earlier live test resolved the global pointer at `0x015EAAB8` and the
+`GameplayContext` at `0x02421248`, with `mission_map_zoom` equal to `1.500`.
+The latest focused run on 2026-09-22 resolved the global pointer at
+`0x017CAAB8`, the current context at `0x0A211370`, and read
+`mission_map_zoom` as `1.000`. These addresses and values are observations for
+one client build, not cross-build guarantees.
 
 ## ServerRegion implementation and resolution
 
@@ -623,9 +637,11 @@ and `terrain_info2` properties follow their target-process pointers through
 pointers. The `AreaInfoStruct` flag and file-ID properties are ported from the
 Reforged source.
 
-The live test resolved `InstanceInfo` at `0x01C4A150`, read instance type `0`,
-and read current map metadata with campaign `1`, region `0`, and file ID `0`.
-These values and addresses are observations for one client build.
+An earlier live test resolved `InstanceInfo` at `0x01C4A150`, read instance
+type `0`, and observed campaign `1`, region `0`, and file ID `0`. The latest
+focused run on 2026-09-22 resolved the same address and read instance type
+`0`, campaign `3`, region `15`, and file ID `0`. These values and addresses are
+observations for one client build.
 
 ## TextParser implementation and resolution
 
@@ -639,8 +655,10 @@ the auxiliary structure pointer at `+0x180`, and `language_id` at `+0x1D0`.
 Those pointer fields are followed through the external memory reader when the
 corresponding properties are requested.
 
-The live test read `TextParser` at `0x0257E9E0` and observed language ID `0`.
-That address and value are observations for one client build.
+An earlier live test read `TextParser` at `0x0257E9E0` and observed language
+ID `0`. The latest focused run on 2026-09-22 read `TextParser` at
+`0x07453C38` and observed language ID `0`. These addresses and values are
+observations for one client build.
 
 ## AvailableCharacterArray implementation and resolution
 
@@ -654,9 +672,10 @@ buffer through the external memory reader. Each entry is `0x84` bytes and
 includes the fixed UTF-16 name plus packed map, profession, campaign, level,
 and PvP properties.
 
-The live test resolved the roster array at `0x017AF28C`, read 14 entries, and
-observed `Fezzik The Untamed` as the first entry. These values and the address
-are observations for one client build.
+The latest focused run on 2026-09-22 resolved the roster array at
+`0x017AF28C`, read 14 entries, and observed `Fezzik The Untamed` as the first
+entry (level 20, map 449). These values and the address are observations for
+one client build.
 
 ## PartyContext implementation and resolution
 
@@ -668,9 +687,12 @@ remote `GWArray` headers for parties and searches plus intrusive request and
 sending lists. Stealth reads those arrays and traverses `GwList` links with
 fixed-width x86 addresses and a bounded loop guard.
 
-The live test resolved `PartyContext` at `0x024A5D78`, observed one party, one
-party-search entry, and a party-leader state. These values and the address are
-observations for one client build.
+The live test resolved `PartyContext` at `0x00A07388`, observed one party,
+68 party-search entries, and a party-leader state. These values and the address
+are observations for one client build. The focused parity tests also verify all
+source field offsets, fixed sizes, flag/text properties, record aliases, and
+the declared facade cache. Callback registration remains externally unavailable
+because it requires the injected runtime.
 
 `WorldMapContext` is intentionally not claimed as migrated yet. The native
 implementation receives its pointer from an injected UI callback and publishes
@@ -768,10 +790,13 @@ player_name    non-empty UTF-16 name decoded successfully
 ```
 
 The name was read from `CharContext + 0x74` as a fixed 20-code-unit
-UTF-16LE field. This verifies the initial target-specific read path: a copied
-resolver, explicit 32-bit pointer reads, and a structure field decode. The
-same path is now exposed by `py4gw.context.CharContext`; the observation does
-not prove that the same offsets work across other client builds.
+UTF-16LE field. The latest focused run on 2026-09-22 observed
+`CharContext=0x00ADDD98`, decoded `Fezzik The Untamed`, and read
+`GW_Array.h0014=0` with `observer_matches=0`. This verifies the initial
+target-specific read path: a copied resolver, explicit 32-bit pointer reads,
+and a structure field decode. The same path is now exposed by
+`py4gw.context.CharContext`; the observation does not prove that the same
+offsets work across other client builds.
 
 The context port also includes the Reforged `GW_Array` header and its two
 array-view behaviors. `GWArrayValueView` reads contiguous values from a
@@ -830,10 +855,12 @@ the external memory reader. The native header contains an older `0x3BC` size
 comment, but its explicit field offsets end at the 0x368-byte roster array;
 the Python layout follows those concrete offsets.
 
-The live test resolved `GuildContext` at `0x025732D8` and observed player
-`Fezzik The Untamed`, 101 guild records, 42 roster entries, and 20 history
-entries. These values are one observation and are not assumed stable across
-client builds or account state.
+The live test resolved `GuildContext` at `0x00AD42A0` and observed player
+`Fezzik The Untamed`, 243 guild records, 42 roster entries, and 20 history
+entries. Offline parity tests also cover the source aliases, `GHKey.from_hex`,
+the native `GHKey.k` view, and empty-array `None` semantics. These values are
+one observation and are not assumed stable across client builds or account
+state.
 
 ## Live Observation: AccAgentContext
 
@@ -851,6 +878,169 @@ The live test resolved `AgentContext` at `0x0257E208` and observed 2,296
 summary entries, 45 movement entries, 45 valid movement IDs, and instance
 timer `1709016840`. These values are one observation and are not assumed
 stable across client builds or account state.
+
+## Live Observation: Camera
+
+Status: verified against the same running client build with
+`tests/test_camera.py`.
+
+The native camera pointer is resolved by `camera.camera_ptr`, which follows
+the assertion anchor, finds the nearby pointer reference, dereferences it,
+and validates the resulting object in the module data section. Unlike the
+context-base resolvers, this resolver returns the camera object address
+itself. Stealth therefore caches that address for the connection and reads
+the maintained `0x120` bytes on each snapshot.
+
+The live test resolved Camera at `0x017CAC10` and observed look-at agent
+`605`, yaw `-1.702`, pitch `0.421`, and distance `900.0`. These values are one
+observation and are not assumed stable across client builds or camera state.
+
+## Live Observation: FriendList
+
+Status: verified against the same running client build with
+`tests/test_friend_list.py`.
+
+The native friend list is a standalone `FriendList` object resolved by
+`friend_list.friend_list_addr`; it is not published through the Reforged
+shared-memory pointer snapshot. Stealth reads the fixed `0xA4` root, validates
+the `GWArray` header, and bounds friend-pointer traversal at 512 records. Each
+friend record is decoded as the native `0x70` x86 layout, including UTF-16
+alias and character-name fields.
+
+The live test resolved FriendList at `0x01C4AE78` and observed 59 friend-array
+entries, zero ignores, and player status `online`. These values are one
+observation and are not assumed stable across client builds or account state.
+
+## Live Observation: ChatBuffer
+
+Status: verified against the same running client build with
+`tests/test_chat_buffer.py`.
+
+The native chat accessor exposes a pointer slot (`ChatBuffer**`), not a direct
+object address. Stealth caches the slot resolved by `chat.chat_buffer_addr`,
+re-reads the current buffer pointer for each snapshot, and reads the fixed
+`0x80C` root containing 512 message pointers. Each non-null message header is
+the fixed `0x10` prefix; its UTF-16 payload is decoded only when requested and
+is bounded to 512 characters. The typing state is read from the separate
+`chat.is_typing_frame_id` slot.
+
+The live test observed buffer address `0x26FA73D8`, all 512 ring slots
+populated, next index `268`, and typing state `False`. These values are one
+observation and are not assumed stable across client builds or chat activity.
+
+The remaining parity gap is the decoded-history helper. Reforged's
+`Player.GetChatHistory()` queues native `AsyncDecodeStr` work on the Guild
+Wars game thread and returns injected-runtime state; it is not equivalent to
+reading the ring bytes. A read-only probe against the same running client
+could open `Gw.dat` only for metadata: requesting `GENERIC_READ` failed with
+Windows sharing-violation error 32. This is why the Reforged `PyDatReader`
+cannot simply be reused by Stealth while the client is running. The raw
+encoded messages remain available; decoded-history parity is unresolved unless
+the project adds and validates a separate external archive/data source or
+changes its architecture to permit in-process execution. A follow-up attempt
+to duplicate the client's existing file handle remained read-only but could
+not obtain `PROCESS_DUP_HANDLE` access (Windows error 5), so that route is not
+currently a verified capability either.
+
+The checked-out GwAu3 source confirms the same boundary rather than providing
+an external decoder: `Utils_DecodeEncStringAsync` copies the encoded string
+into a command buffer and queues an assembly payload that calls the client's
+`ValidateAsyncDecodeStr` function. That is process injection/code execution,
+not a pure external read. GwAu3 therefore supplies comparative evidence for
+why its decoded result cannot be copied into Stealth without changing the
+current architecture.
+
+## Live Observation: WorldContext root
+
+Status: verified against the same running client build with
+`tests/test_world_context.py`.
+
+The native world pointer is already present in the maintained `GameContext`
+layout at `GameContext + 0x2C`; no second signature scan is needed. Stealth
+reads the complete fixed `0x854`-byte root and exposes its scalar progression
+fields, party-flag coordinates, and bounded `GWArray` headers. Child arrays are
+not materialized by the root read in one operation; their source-backed player,
+NPC, quest, hero, skill, and title readers are available as bounded child
+properties on the external context.
+
+The live test resolved `WorldContext` at `0x02572A78` and observed player
+number `37`, level `20`, experience `12511518`, and `101` player records in
+the advertised array header. The same live read observed one party-attribute
+block with 11 populated attributes and one party-effects block with one active
+effect and no buffs. These values are one observation and are not assumed
+stable across client builds or account state.
+
+Party attributes use the native `0x43C` inline record with 54 attributes.
+Party effects use the native `0x24` record and follow its buff/effect arrays
+only when requested, capped at 64 buffs and 128 effects per block. The root
+read itself does not materialize those child arrays.
+
+Player records use the native `0x50` layout and NPC model records use the
+native `0x30` layout. Their array traversal is capped at 512 records. Names
+and NPC model-file lists are indirect reads and are only followed through
+bounded properties, not during the root read.
+
+Hero flags use the native `0x24` record, hero information uses `0x78`, and
+pet records use `0x1C`. Their arrays are capped at 64 records. The live
+observation contained 23 hero-information records and no active hero flags or
+pet records.
+
+## Live Observation: MapContext root
+
+Status: verified against the same running client build with
+`tests/test_map_context.py`.
+
+`MapContext` is reached through the maintained `GameContext.map_context` field
+at `GameContext + 0x14`; it does not require a second root signature scan.
+Stealth reads the fixed `0x138` Reforged root and follows the three native
+spawn arrays only through bounded lazy reads. The live test resolved
+`MapContext` at `0x4A1AF688`, observed map ID `449`, map type `0`, spawn counts
+of `7`, `22`, and `16`, and a non-null path pointer at `0x2F2930F0`. The
+pathing-root check then read `PathContext` at `0x2F2930F0`, its static-data
+root at `0x4B6EE588`, and a bounded set of 32 `PathingMap` root records.
+
+The native header names the first five words as `map_boundaries`, while the
+Reforged Python structure uses the same bytes for `map_type`, `start_pos`, and
+`end_pos`. Both views are exposed so this source difference is explicit.
+Pathing child traversal (trapezoids, nodes, and portals), map props, terrain,
+and zones are not migrated yet; the current reader reports their direct
+pointers and counts without interpreting those pointer-rich trees. The first
+pathing step is intentionally context-only: no Python-owned pathing snapshots
+or map-ID cache. See
+[`PATHING_MIGRATION_PLAN.md`](PATHING_MIGRATION_PLAN.md).
+
+Skillbar slots use the native `0x14` slot and `0xBC` skillbar layouts. The
+root's learnable, unlocked, and duplicate-skill arrays are bounded at 512
+entries. The live observation contained one skillbar, 108 unlocked values,
+one duplicate-skill record, and no learnable values.
+
+Quest and mission-objective records use the native `0x34` and `0x0C` layouts.
+Title and title-tier records use the native `0x2C` and `0x0C` layouts. Their
+arrays are bounded at 256 entries and indirect text is read only through
+bounded properties. The live observation contained 23 quests, 47 titles, and
+256 title tiers; no mission objectives were present.
+
+`TradeContext` uses the direct `GameContext.trade_context` pointer and the
+native `0x38` root, `0x14` side, and `0x08` item layouts. The live client had
+an allocated trade root with zero offered items on both sides. Stealth only
+reads state; it does not initiate, offer, accept, or cancel trades.
+
+`ItemContext` uses the direct `GameContext.item_context` pointer and the
+native fixed `0x10C` root. The live client exposed 22 bag entries and a raw
+`item_array.m_size` of 26,354 in one observation. That header value is not
+treated as an inventory-item count: Reforged's public `ItemArray` path walks
+selected bags through `PyInventory.Bag.GetItems()`. Stealth now follows the
+native `ItemContext` bag array, each `Bag.items` array, and bounded `Item`
+records; the global array is not required for that path. One live read
+traversed 22 bags and 340 item records.
+
+The native `Item` layout also contains `mod_struct` at `+0x10` and
+`mod_struct_size` at `+0x14`. These are an indirect array of `ItemModifier`
+records, each a `0x4`-byte raw modifier word. Stealth now reads those words
+lazily with a 64-entry safety bound and exposes the native identifier/argument
+bit rules plus the native uses, tome/kit, and rare-material helpers. A separate
+semantic layer may later adopt the Reforged `mods_types.py`/`mods_core.py`
+effect catalog; that catalog is not needed to read the native context itself.
 
 ## AgentArray traversal and materialization
 
@@ -872,7 +1062,7 @@ full `Agent` structure for each traversal.
 The native shared-memory updater does traverse the populated array each frame.
 For every valid pointer it reads the common `Agent` fields needed for
 classification: type flags at `Agent + 0x9C`, and, for living agents,
-allegiance at `AgentLiving + 0xB5` and the related living flags. It publishes
+allegiance at `AgentLiving + 0x1B5` and the related living flags. It publishes
 only the agent pointer, agent ID, and categorized ID/index references. The
 shared-memory cap is 300 entries.
 
@@ -910,10 +1100,10 @@ is:
 1. Read the bounded pointer table once and capture `(agent_id, address)`
    references.
 2. Apply the movement-array stale-agent check.
-3. Read a small classification projection containing the common type and the
-   living fields needed for allegiance/dead-state categorization.
-4. Build ID/reference lists for all, ally, enemy, items, gadgets, and other
-   categories.
+3. Read a small classification projection containing the common type, item
+   owner, living allegiance, and living effects needed for category views.
+4. Build ID/reference lists for all, ally, enemy, dead ally, dead enemy,
+   owned item, living, item, gadget, and other categories.
 5. Materialize the complete `Agent`, `AgentLiving`, `AgentItem`, or
    `AgentGadget` structure only for callers that request detailed data.
 
@@ -921,6 +1111,72 @@ This preserves the native/Reforged separation: classification traverses the
 populated array, while detailed structures remain on demand. The cost should
 be measured as remote-read calls, bytes transferred, and Python object count;
 the number of agents alone is not enough to identify the bottleneck.
+
+### Verified Stealth first milestone
+
+`py4gw.context.agent_array.AgentArray` now resolves the JSON
+`agent.agent_array_addr` result once per connection, bulk-reads the pointer
+table, reads only each candidate's `agent_id` at `Agent + 0x2C`, and applies
+the movement-pointer validity gate. It returns lightweight references and does
+not materialize complete agent structures during ordinary refreshes.
+
+The live test observed a table of 2,217 entries with capacity 2,304 and
+58–70 accepted current references across recent samples. The table was scanned without
+reaching the 4,096-slot safety limit or the 300-reference output limit. Basic
+living, item, gadget, and allegiance categories are now available. A selected
+reference can also be read as a complete common, living, item, or gadget
+record. Before that complete read, Stealth now rechecks the reference's
+current pointer-table slot and movement entry, then verifies the record ID
+again after reading it. This narrows, but does not eliminate, the race window
+between remote reads. The complete living record now exposes the native effect
+bit properties and bounded visible-effect list, and optional equipment/tag
+records are readable through their target pointers. The reference snapshot
+also publishes owned-item, dead-ally, and dead-enemy categories.
+
+The live AgentArray check now records the resolver and steady-state stages
+with `PerfCounter`. One observed client reported about 130.9 ms for the
+one-time AgentArray resolver scan and about 2.1 ms for the full bounded
+refresh: 0.45 ms for the pointer table, 0.40 ms for the movement table, and
+1.19 ms for classification. Reading one selected complete record took about
+0.045 ms for the final validity check and 0.032 ms for the record read. The
+resolver remains a one-time connection operation and is not repeated during
+refreshes. Offline checks separately cover impossible
+headers, null buffers, truncation, and fixed-width x86 pointer decoding.
+
+Stealth now also provides an explicit complete living-agent refresh. It reads
+the full native `0x1C4` `AgentLivingStruct` for each current living reference,
+retains the effects bitmap and all other fields, and serves repeated queries
+from one local snapshot until the caller refreshes it. A live sample captured
+56 living records in about 3.7 ms, with zero stale or unreadable records. This
+is a refresh boundary, not an atomic target snapshot; each record is still
+validated as it is read.
+
+A ten-refresh harness run later measured 58 living records at an average of
+4.05 ms per complete refresh (p95 4.53 ms), with average AgentArray reference
+refreshes at 1.80 ms. Nested reads remained small and bounded: visible effects
+averaged 0.005 ms, equipment 0.011 ms, and tags 0.006 ms for the selected
+record. The one-time resolver scan was 128.0 ms in that run.
+
+## Account and gadget roots
+
+The native `GameContext` contains direct pointers for both `AccountContext`
+(`+0x28`) and `GadgetContext` (`+0x38`). Stealth now follows those existing
+parent pointers; no new signature or callback source is needed.
+
+`AccountContext` is read as its fixed `0x138`-byte x86 root and reports the
+six maintained `GWArray` headers without traversing account-wide unlock data.
+`GadgetContext` is read as its fixed `0x10`-byte root and exposes a lazy
+`GadgetInfo` value-array reader capped by the caller. On the verified client,
+the account root was `0x0257EBC8` with six array headers, and the gadget root
+was `0x0256FFB0` with 9,500 advertised entries. The live check materialized
+only a 32-record gadget sample.
+
+This completes the remaining small direct-pointer root readers identified in
+the current inventory at their implemented read boundary. It does not claim
+source parity for every nested helper: the field and API gaps are recorded in
+`docs/CONTEXT_PARITY_AUDIT.md`. Item child records now have a live-verified
+bag-based access path; render, salvage, and callback-owned map contexts still
+lack an external object-pointer source.
 
 ## Sources Consulted
 

@@ -63,8 +63,8 @@ class LivePartyContextTests(unittest.TestCase):
         self.assertEqual(ctypes.sizeof(PartyInfoStruct), 0x84)
         self.assertEqual(ctypes.sizeof(PartySearchStruct), 0x94)
         self.assertEqual(ctypes.sizeof(PartyContextStruct), 0xD0)
-        self.assertEqual(PartyContextStruct.player_party_ptr.offset, 0x54)
-        self.assertEqual(PartyContextStruct.party_search_array.offset, 0xC0)
+        self.assertEqual(getattr(PartyContextStruct, "player_party_ptr").offset, 0x54)
+        self.assertEqual(getattr(PartyContextStruct, "party_search_array").offset, 0xC0)
 
     def test_resolves_live_party_context(self) -> None:
         """Follow the direct GameContext.party pointer."""

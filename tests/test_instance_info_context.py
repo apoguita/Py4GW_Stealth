@@ -57,7 +57,9 @@ class LiveInstanceInfoTests(unittest.TestCase):
         self.assertEqual(ctypes.sizeof(MapDimensionsStruct), 0x18)
         self.assertEqual(ctypes.sizeof(AreaInfoStruct), 0x7C)
         self.assertEqual(ctypes.sizeof(InstanceInfoStruct), 0x14)
-        self.assertEqual(InstanceInfoStruct.current_map_info_ptr.offset, 0x08)
+        self.assertEqual(
+            getattr(InstanceInfoStruct, "current_map_info_ptr").offset, 0x08
+        )
 
     def test_resolves_live_instance_info(self) -> None:
         """Resolve and cache the JSON InstanceInfo address."""

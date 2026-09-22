@@ -65,10 +65,10 @@ class LiveGuildContextTests(unittest.TestCase):
         self.assertEqual(ctypes.sizeof(GuildStruct), 0xAC)
         self.assertEqual(ctypes.sizeof(GuildPlayerStruct), 0x174)
         self.assertEqual(ctypes.sizeof(GuildContextStruct), 0x368)
-        self.assertEqual(GuildContextStruct.player_name_enc.offset, 0x34)
-        self.assertEqual(GuildContextStruct.player_gh_key.offset, 0x64)
-        self.assertEqual(GuildContextStruct.guild_array_array.offset, 0x2F8)
-        self.assertEqual(GuildContextStruct.player_roster_array.offset, 0x358)
+        self.assertEqual(getattr(GuildContextStruct, "player_name_enc").offset, 0x34)
+        self.assertEqual(getattr(GuildContextStruct, "player_gh_key").offset, 0x64)
+        self.assertEqual(getattr(GuildContextStruct, "guild_array_array").offset, 0x2F8)
+        self.assertEqual(getattr(GuildContextStruct, "player_roster_array").offset, 0x358)
 
     def test_resolves_live_guild_context(self) -> None:
         """Follow the direct GameContext.guild pointer."""
@@ -88,9 +88,9 @@ class LiveGuildContextTests(unittest.TestCase):
 
         self.assertEqual(len(bytes(snapshot)), 0x368)
         self.assertIsInstance(snapshot.player_name_str, str)
-        guilds = snapshot.guild_array
-        roster = snapshot.player_roster
-        history = snapshot.player_guild_history
+        guilds = snapshot.guild_array or []
+        roster = snapshot.player_roster or []
+        history = snapshot.player_guild_history or []
         print(
             "Live guild: "
             f"player={snapshot.player_name_str or 'in selection menus'}, "

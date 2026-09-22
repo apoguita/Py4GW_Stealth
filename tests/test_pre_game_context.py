@@ -55,9 +55,9 @@ class LivePreGameContextTests(unittest.TestCase):
 
         self.assertEqual(ctypes.sizeof(LoginCharacter), 0x78)
         self.assertEqual(ctypes.sizeof(PreGameContextStruct), 0x100)
-        self.assertEqual(PreGameContextStruct.camera_mode.offset, 0x4C)
-        self.assertEqual(PreGameContextStruct.max_characters.offset, 0xD0)
-        self.assertEqual(PreGameContextStruct.chars_array.offset, 0xE0)
+        self.assertEqual(getattr(PreGameContextStruct, "camera_mode").offset, 0x4C)
+        self.assertEqual(getattr(PreGameContextStruct, "max_characters").offset, 0xD0)
+        self.assertEqual(getattr(PreGameContextStruct, "chars_array").offset, 0xE0)
 
     def test_resolves_live_pregame_pointer_location(self) -> None:
         """Resolve and cache the JSON global-pointer location."""

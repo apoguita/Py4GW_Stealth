@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import Structure, c_float, c_int32, c_uint8, c_uint16, c_uint32
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from ..scanner import PatternCatalog, RemoteScanner
 from .gw_array import GWArray, GWArrayValueView, GWArrayView, RemoteMemoryReader
@@ -224,7 +224,7 @@ class CharContextStruct(Structure):
     def is_logged_in(self) -> bool:
         """Return whether this snapshot contains a logged-in character."""
 
-        return bool(self.player_name_str.strip())
+        return bool(self.player_name_str and self.player_name_str.strip())
 
     @property
     def h0000_ptrs(self) -> list[int] | None:
@@ -277,28 +277,30 @@ class CharContextStruct(Structure):
         return ProgressBar.from_buffer_copy(raw)
 
     @property
-    def player_name_encoded_str(self) -> str:
-        """Return the fixed-width player name with encoded values visible."""
-
-        return _format_encoded_text(_decode_wide_field(self.player_name_enc))
-
-    @property
-    def player_name_str(self) -> str:
-        """Return the readable player name."""
+    def player_name_encoded_str(self) -> str | None:
+        """Return the source encoded player name value."""
 
         return _decode_wide_field(self.player_name_enc)
 
     @property
-    def player_email_encoded_str(self) -> str:
-        """Return the fixed-width email with encoded values visible."""
+    def player_name_str(self) -> str | None:
+        """Return the player name with encoded values made visible."""
 
-        return _format_encoded_text(_decode_wide_field(self.player_email_ptr))
+        encoded = self.player_name_encoded_str
+        return _format_encoded_text(encoded) if encoded is not None else None
 
     @property
-    def player_email_str(self) -> str:
-        """Return the readable player email."""
+    def player_email_encoded_str(self) -> str | None:
+        """Return the source encoded player email value."""
 
         return _decode_wide_field(self.player_email_ptr)
+
+    @property
+    def player_email_str(self) -> str | None:
+        """Return the player email with encoded values made visible."""
+
+        encoded = self.player_email_encoded_str
+        return _format_encoded_text(encoded) if encoded is not None else None
 
 
 assert ctypes.sizeof(ProgressBar) == 0x2C
@@ -307,6 +309,12 @@ assert ctypes.sizeof(CharContextStruct) == 0x448
 
 class CharContext:
     """Resolve and decode one external ``CharContext`` snapshot."""
+
+    # Source-compatible static facade state. The external implementation
+    # refreshes this explicitly instead of registering an in-process callback.
+    _ptr: int = 0
+    _cached_ctx: CharContextStruct | None = None
+    _callback_name = "CharContext.UpdatePtr"
 
     _BASE_RESOLVER = "context.base_ptr"
     _GAME_CONTEXT_OFFSET = 0x18
@@ -326,6 +334,52 @@ class CharContext:
         self._patterns = patterns
         self._game_context = game_context
         self._base_pointer_address: int | None = None
+
+    @staticmethod
+    def get_ptr() -> int:
+        """Return the last externally refreshed CharContext address."""
+
+        return CharContext._ptr
+
+    @staticmethod
+    def _update_ptr() -> None:
+        """Refresh the source-compatible facade from the selected client."""
+
+        from ..client import current_client
+
+        client = current_client()
+        if client is None:
+            CharContext._ptr = 0
+            CharContext._cached_ctx = None
+            return
+        try:
+            context = client.context
+            CharContext._ptr = context.resolve_address()
+            CharContext._cached_ctx = cast(Any, context.read())
+        except (OSError, RuntimeError):
+            CharContext._ptr = 0
+            CharContext._cached_ctx = None
+
+    @staticmethod
+    def enable() -> None:
+        """Declare the source callback operation; callbacks require injection."""
+
+        raise NotImplementedError(
+            "CharContext.enable requires the in-process callback runtime."
+        )
+
+    @staticmethod
+    def disable() -> None:
+        """Clear the external facade cache."""
+
+        CharContext._ptr = 0
+        CharContext._cached_ctx = None
+
+    @staticmethod
+    def get_context() -> CharContextStruct | None:
+        """Return the last snapshot refreshed through ``_update_ptr``."""
+
+        return CharContext._cached_ctx
 
     def resolve_address(self) -> int:
         """Return the current target address using the cached resolver."""
@@ -412,7 +466,7 @@ class CharContext:
     def read_player_name(self) -> str:
         """Read the current player name through the complete context layout."""
 
-        return self.read().player_name_str
+        return self.read().player_name_str or ""
 
 
 def get() -> CharContextStruct | None:
@@ -421,4 +475,4 @@ def get() -> CharContextStruct | None:
     from ..client import current_client
 
     client = current_client()
-    return client.read_char_context() if client is not None else None
+    return cast(Any, client.read_char_context()) if client is not None else None

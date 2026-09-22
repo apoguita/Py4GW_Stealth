@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import Structure, c_float, c_uint32
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 from ..scanner import PatternCatalog, RemoteScanner
 from .gw_array import RemoteMemoryReader
@@ -32,6 +32,12 @@ assert GameplayContextStruct.mission_map_zoom.offset == 0x4C
 class GameplayContext:
     """Resolve and decode one external ``GameplayContext`` snapshot."""
 
+    # Source-compatible static facade state. The injected source updates this
+    # through a callback; the external reader refreshes it explicitly.
+    _ptr: int = 0
+    _cached_ctx: GameplayContextStruct | None = None
+    _callback_name = "GameplayContext.UpdatePtr"
+
     _RESOLVER = "context.gameplay_context_addr"
 
     def __init__(
@@ -46,6 +52,53 @@ class GameplayContext:
         self._scanner = scanner
         self._patterns = patterns
         self._pointer_address: int | None = None
+
+    @staticmethod
+    def get_ptr() -> int:
+        """Return the last externally refreshed GameplayContext address."""
+
+        return GameplayContext._ptr
+
+    @staticmethod
+    def _update_ptr() -> None:
+        """Refresh the source-compatible facade from the selected client."""
+
+        from ..client import current_client
+
+        client = current_client()
+        if client is None:
+            GameplayContext._ptr = 0
+            GameplayContext._cached_ctx = None
+            return
+        try:
+            context = client.gameplay_context
+            address = context.resolve_address()
+            GameplayContext._ptr = address or 0
+            GameplayContext._cached_ctx = cast(Any, context.read())
+        except (OSError, RuntimeError):
+            GameplayContext._ptr = 0
+            GameplayContext._cached_ctx = None
+
+    @staticmethod
+    def enable() -> None:
+        """Declare the source callback operation; callbacks require injection."""
+
+        raise NotImplementedError(
+            "GameplayContext.enable requires the in-process callback runtime."
+        )
+
+    @staticmethod
+    def disable() -> None:
+        """Clear the external facade cache."""
+
+        GameplayContext._ptr = 0
+        GameplayContext._cached_ctx = None
+
+    @staticmethod
+    def get_context() -> GameplayContextStruct | None:
+        """Return the last snapshot refreshed through ``_update_ptr``."""
+
+        return GameplayContext._cached_ctx
 
     def resolve_address(self) -> int | None:
         """Return the current target address, or ``None`` when inactive."""
@@ -97,4 +150,4 @@ def get() -> GameplayContextStruct | None:
     from ..client import current_client
 
     client = current_client()
-    return client.read_gameplay_context() if client is not None else None
+    return cast(Any, client.read_gameplay_context() if client is not None else None)

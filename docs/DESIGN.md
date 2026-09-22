@@ -44,6 +44,15 @@ py4gw/
     party_context.py External PartyContext hierarchy and list readers
     guild_context.py External GuildContext hierarchy and guild record readers
     acc_agent_context.py External AgentContext summary and movement readers
+    camera_context.py External Camera layout and reader
+    friend_list_context.py External FriendList layout and reader
+    chat_buffer_context.py External ChatBuffer layout and reader
+    world_context.py External WorldContext root and child readers
+    trade_context.py External TradeContext root and offer readers
+    item_context.py External ItemContext, Bag, Item, Inventory, formula,
+                    composite-model, storage, and PvP readers
+    account_context.py External AccountContext root reader
+    gadget_context.py External GadgetContext root and bounded info reader
     gw_list.py     External intrusive GwList/link readers
     gw_array.py    External GW_Array and array-view readers
 ```
@@ -57,6 +66,50 @@ The source inventory for the context layer is maintained in
 comparing native C++ roots, Reforged Python modules, and external Stealth
 readers. Context work must account for the fact that one Python module can
 aggregate several native structures; a file-for-file copy is not the design.
+The per-context parity verdict, including missing source-backed properties and
+helpers, is maintained in
+[CONTEXT_PARITY_AUDIT.md](CONTEXT_PARITY_AUDIT.md).
+The binary, one-context-at-a-time certification procedure is maintained in
+[PARITY_CERTIFICATION_CHECKLIST.md](PARITY_CERTIFICATION_CHECKLIST.md).
+
+## Source-port migration contract
+
+The primary implementation task is an exhaustive source port, not a reduced
+read-only redesign. `Py4GW_Reforged_Native` and `Py4GW_Reforged` are the
+authority for the context declarations and public Python surface.
+
+The Reforged Python context is the first porting source for class names,
+properties, helpers, and facade methods. The native C++ context is used to
+verify the byte layout, pointer ownership, resolver relationship, and any
+operation that has no Python declaration. When the two sources expose
+different names for the same bytes, preserve the source name and add a
+documented alias rather than choosing one and deleting the other.
+
+For every source context we port:
+
+1. copy every `ctypes.Structure`, `_fields_` entry, fixed-size array, field
+   name, property, helper, lifecycle method, and public alias from the source;
+2. preserve source names, offsets, relationships, and behavior; additive
+   snake-case aliases may be provided for this project's style, but source
+   names are never removed or renamed;
+3. copy declarations even when their operation cannot work from an external
+   controller. A write, callback, injected cache, or game-thread operation is
+   declared with the same public signature and reports an explicit
+   `NotImplementedError`/unsupported status until its required mechanism is
+   authorized;
+4. adapt only the transport boundary: in-process `POINTER(T)` dereferences
+   become fixed-width target addresses plus a remote read, and direct
+   `GW_Array` views become bounded remote views; and
+5. record the exact source operation and the external limitation. Do not
+   remove a declaration because it is inconvenient, infer a new meaning from
+   an offset, or replace a source traversal with an invented one.
+
+This produces two separate answers for each member: **declared parity** (the
+source field/property/method exists with the source contract) and **runtime
+availability** (the operation can currently execute through the external
+transport). A context is not called source/API-parity complete until both are
+complete, but an unavailable operation is still part of the port and must be
+visible in the code and stubs.
 
 ## Current capability
 
@@ -74,8 +127,9 @@ The library does not change a process, inject anything, or run code in a
 process. The first target-specific structure readers were migrated in this
 order: `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
 `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
-`AvailableCharacterArray`, `PartyContext`, `GuildContext`, and
-`AccAgentContext`; broader
+`AvailableCharacterArray`, `PartyContext`, `GuildContext`, `AccAgentContext`,
+`Camera`, `FriendList`, `ChatBuffer`, `WorldContext`, `TradeContext`,
+`ItemContext`, `AccountContext`, and `GadgetContext`; broader
 Guild Wars structure interpretation remains outside
 the current capability.
 A `Gw.exe` result is a candidate found by filename, and a scanner result is
@@ -155,14 +209,18 @@ The first tab is named `Guild Wars clients` and provides:
 - a live character read through `ConnectedClient` for each discovered client.
 
 After a connection succeeds, the `Client data` tab is enabled. Its subtabs
-currently expose `Cinematic`, `GameplayContext`, `ServerRegion`, `InstanceInfo`,
+currently expose `Cinematic`, `Camera`, `FriendList`, `ChatBuffer`, `WorldContext`, `GameplayContext`, `ServerRegion`, `InstanceInfo`,
 `TextParser`, `AvailableCharacters`, `PartyContext`, `GuildContext`,
 `PreGameContext`, `GameContext`, and `CharContext`,
 each displaying every field in its maintained structure with the target offset.
 The migration order for these readers is `CharContext`, `GameContext`,
 `PreGameContext`, `Cinematic`, `GameplayContext`, `ServerRegion`,
 `InstanceInfo`, `TextParser`, `AvailableCharacterArray`, `PartyContext`,
-`GuildContext`, then `AccAgentContext`.
+`GuildContext`, `AccAgentContext`, `Camera`, `FriendList`, `ChatBuffer`, then
+the `WorldContext` root, party attributes/effects, player/NPC, hero/pet, and
+skillbar, quest, title, TradeContext, and the ItemContext bag/item plus
+source-defined auxiliary-table readers.
+World child arrays, trade offers, and item arrays are bounded and read lazily.
 The tables are paginated, sortable, filterable where applicable, and
 selectable; long values wrap inside the normal window. `PreGameContext` is
 allowed to be inactive while the client is in-game; in that state it reports
@@ -181,7 +239,7 @@ process-memory transport are implemented, and `context.CharContext`,
 `context.GameplayContext`, `context.ServerRegion`, `context.InstanceInfo`,
 `context.TextParser`, `context.AvailableCharacterArray`,
 `context.PartyContext`, `context.GuildContext`, and
-`context.AccAgentContext` are the
+`context.AccAgentContext`, and `context.Camera` are the
 first target-specific structure readers.
 
 ### Scanner
@@ -256,6 +314,17 @@ offsets definitions -> Scanner -> address/pointer
 The scanner and memory reader remain target-agnostic at their core. Guild
 Wars-specific signatures, pointer interpretation, and structure layouts belong
 in the target-specific `context` layer that consumes these primitives.
+
+#### Item and modifier boundary
+
+The native item record stores a `mod_struct` pointer at `+0x10` and a
+`mod_struct_size` count at `+0x14`. Those fields are represented as fixed-width
+target values and are followed only through the bounded lazy modifier reader.
+The reader exposes the native `ItemModifier` raw word (`0x4` bytes), its bit
+accessors, and the native item helper rules. The semantic modifier types and
+identifier tables from Reforged's `mods_types.py` and `mods_core.py` remain a
+separate future layer. The current item reader follows the bag-owned item
+arrays and keeps the raw global item array explicitly bounded and optional.
 
 `ConnectedClient` is the small composition layer for scripts and the UI. It
 selects one discovered PID, creates the reader, scanner, and context objects,
@@ -404,6 +473,11 @@ the same interpreter where the project dependencies are installed.
 The current implementation is pure external and read-only. It can read
 validated target ranges but does not modify any process. A `Gw.exe` result or
 scanner address is not proof of a supported Guild Wars build.
+
+Future game-thread execution would require code inside the target process; it
+cannot be achieved through the current external reader alone. The intended
+direction is to avoid DLL loading and investigate a smaller payload/hook
+bridge, but its mechanism and safety boundary are not yet designed.
 
 The user-provided live observation recorded in `RESEARCH.md` found PID `39212`
 at `F:\GW\GW1\Gw.exe` with the client open and no candidates after the client

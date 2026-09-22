@@ -4,15 +4,33 @@ Py4GW Stealth is an external Python library for recreating selected Py4GW
 Reforged capabilities without injecting a Python runtime or executable
 payload into the Guild Wars process.
 
-The project is being developed one capability at a time. The current library
+The project is being developed one capability at a time. **Full source/API
+parity has been achieved for no context.** The current library
 provides read-only `Gw.exe` discovery, a reusable x86 pattern scanner, and
 external readers for Reforged's maintained `CharContext`, `GameContext`,
 `PreGameContext`, `Cinematic`, `GameplayContext`, `ServerRegion`,
 `InstanceInfo`, `TextParser`, `AvailableCharacterArray`, `PartyContext`,
-`GuildContext`, and `AccAgentContext`
+`GuildContext`, `AccAgentContext`, `Camera`, `FriendList`, `ChatBuffer`,
+`WorldContext`, `TradeContext`, `ItemContext`, `AccountContext`, and
+`GadgetContext`, plus the read-only `MapContext` root, bounded spawn arrays,
+and initial pathing-context records
 layouts. A small NiceGUI
 window exercises the
 client-selection and read-only connection surface.
+The library also has a bounded AgentArray reader with native category
+classification, lazy agent-record reads, and explicit living-agent snapshots
+for frequent queries. Living effects, visible effects, equipment, and tags are
+available from those records.
+
+The existence of a reader does not imply complete parity with the source
+projects. The current field/helper inventory and every recorded gap are in
+[`docs/CONTEXT_PARITY_AUDIT.md`](docs/CONTEXT_PARITY_AUDIT.md).
+Contexts are certified one at a time using a binary source-port checklist;
+runtime limitations are recorded separately and never substitute for parity.
+Pathing is a first-class MapContext surface; its current status and migration
+boundary are recorded in [`docs/PATHING_MIGRATION_PLAN.md`](docs/PATHING_MIGRATION_PLAN.md).
+The correction between external read slices and full source/API parity is in
+[`docs/PARITY_STATUS_CORRECTION.md`](docs/PARITY_STATUS_CORRECTION.md).
 
 ## Install
 
@@ -80,13 +98,24 @@ The first tab lists every running Guild Wars client, shows its live character
 name when available, labels clients at the selection menus, and lets you
 refresh and connect to a selected PID. After connecting, the `Client data`
 tab becomes available; its context subtabs display the live structure fields:
-`Cinematic`, `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
+`Cinematic`, `Camera`, `FriendList`, `ChatBuffer`, `WorldContext`, `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
 `AvailableCharacters`, `PartyContext`, `GuildContext`, `AccAgentContext`,
+`AccountContext`, `GadgetContext`, `TradeContext`, `ItemContext`,
+`MapContext` (root, bounded spawn arrays, and initial pathing-context records),
 `PreGameContext`, `GameContext`, and `CharContext`. The migration order for
 these readers is `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
 `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
 `AvailableCharacterArray`, `PartyContext`, `GuildContext`, then
-`AccAgentContext`.
+`AccAgentContext`, `Camera`, `FriendList`, `ChatBuffer`, then the verified
+read-only `WorldContext` root and its source-backed child records (including
+party, map-agent, player, NPC, hero, pet, skillbar, quest, title, morale, and
+mission-map records), followed by `TradeContext`, `ItemContext`,
+AccountContext, and GadgetContext. Item records are read through the bounded
+`ItemContext -> Bag -> Item` path, plus the cached source item-global tables
+for formulas, composite models, storage state, and PvP metadata; modifier
+pointers are read lazily as bounded native modifier words and expose the
+native bit/helper rules; the higher-level semantic modifier catalog remains
+separate.
 `PreGameContext` reports when the client is outside the selection menus.
 The context tables support sorting by their
 headers, pagination, filtering, row selection, and wrapped values for long
@@ -177,6 +206,9 @@ inside Guild Wars.
 - [Design contract](docs/DESIGN.md) — current implementation rules
 - [Performance](docs/PERFORMANCE.md) — timing, resolver caching, and the live harness
 - [Context inventory](docs/CONTEXT_INVENTORY.md) — native/Reforged context mapping and Stealth status
+- [Parity certification checklist](docs/PARITY_CERTIFICATION_CHECKLIST.md) — the one-context-at-a-time binary parity gate
+- [Context parity audit](docs/CONTEXT_PARITY_AUDIT.md) — source-backed fields, helpers, and explicit gaps for every migrated reader
+- [Deferred injection work](docs/DEFERRED_INJECTION.md) — frozen features that require target-code execution, writes, hooks, or injected state
 - [AgentArray plan](docs/AGENT_ARRAY_PLAN.md) — the staged plan for bounded agent traversal and lazy reads
 - [Programming style](docs/STYLE.md) — naming and coding conventions
 - [Research record](docs/RESEARCH.md) — detailed source analysis and history
@@ -186,3 +218,10 @@ inside Guild Wars.
 The current library only performs read-only operations. It can discover
 processes and scan/read selected process memory, but it does not write to a
 process, inject code, create remote threads, or install hooks.
+
+Features that would require those mechanisms are intentionally frozen and
+tracked in [`docs/DEFERRED_INJECTION.md`](docs/DEFERRED_INJECTION.md).
+
+Long-term work may include game-thread execution through a small in-process
+payload bridge rather than a loaded DLL. That direction is still future scope
+and remains injection technically.

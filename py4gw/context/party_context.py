@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import Structure, c_uint8, c_uint16, c_uint32
-from typing import Protocol, TypeVar
+from enum import IntEnum
+from typing import Any, Protocol, TypeVar, cast
 
 from ..scanner import PatternCatalog, RemoteScanner
 from .game_context import GameContext, GameContextStruct
@@ -54,6 +55,12 @@ class PlayerPartyMemberStruct(Structure):
     ]
 
     @property
+    def calledTargetId(self) -> int:
+        """Return the native C++ spelling of ``called_target_id``."""
+
+        return int(self.called_target_id)
+
+    @property
     def is_connected(self) -> bool:
         """Return whether the member is connected."""
 
@@ -64,6 +71,16 @@ class PlayerPartyMemberStruct(Structure):
         """Return whether the member is ticked by the party state."""
 
         return bool(int(self.state) & 2)
+
+    def connected(self) -> bool:
+        """Return the native C++ connected-state helper result."""
+
+        return self.is_connected
+
+    def ticked(self) -> bool:
+        """Return the native C++ ticked-state helper result."""
+
+        return self.is_ticked
 
 
 class HeroPartyMemberStruct(Structure):
@@ -117,6 +134,11 @@ class PartyInfoStruct(Structure):
         self._remote_reader = reader
         self._remote_address = address
         return self
+
+    def GetPartySize(self) -> int:
+        """Return the native C++ count of player, henchman, and hero members."""
+
+        return len(self.players) + len(self.henchmen) + len(self.heroes)
 
     def _require_reader(self) -> _memory_reader:
         if self._remote_reader is None:
@@ -225,6 +247,21 @@ class PartySearchStruct(Structure):
         return _format_encoded_text(self.party_leader_encoded_str)
 
 
+class PartySearchType(IntEnum):
+    """Native party-search category values."""
+
+    PartySearchType_Hunting = 0
+    PartySearchType_Mission = 1
+    PartySearchType_Quest = 2
+    PartySearchType_Trade = 3
+    PartySearchType_Guild = 4
+    HUNTING = PartySearchType_Hunting
+    MISSION = PartySearchType_Mission
+    QUEST = PartySearchType_Quest
+    TRADE = PartySearchType_Trade
+    GUILD = PartySearchType_Guild
+
+
 class PartyContextStruct(Structure):
     """The complete fixed-width native ``PartyContext`` layout."""
 
@@ -258,6 +295,12 @@ class PartyContextStruct(Structure):
         self._remote_address = address
         return self
 
+    @property
+    def h0004(self) -> GWArray:
+        """Return the native C++ spelling of the auxiliary array header."""
+
+        return self.h0004_array
+
     def _require_reader(self) -> _memory_reader:
         if self._remote_reader is None:
             raise RuntimeError("This context snapshot is not bound to a memory reader.")
@@ -281,6 +324,21 @@ class PartyContextStruct(Structure):
 
         return bool((int(self.flag) >> 7) & 1)
 
+    def InHardMode(self) -> bool:
+        """Return the native C++ hard-mode helper result."""
+
+        return self.in_hard_mode
+
+    def IsDefeated(self) -> bool:
+        """Return the native C++ defeated-state helper result."""
+
+        return self.is_defeated
+
+    def IsPartyLeader(self) -> bool:
+        """Return the native C++ party-leader helper result."""
+
+        return self.is_party_leader
+
     @property
     def h0004_ptrs(self) -> list[int]:
         """Read the maintained auxiliary pointer values."""
@@ -301,6 +359,12 @@ class PartyContextStruct(Structure):
             PartyInfoStruct,
         )
         return view.to_list()
+
+    @property
+    def request(self) -> list[PartyInfoStruct]:
+        """Return the Reforged-compatible singular request-list property."""
+
+        return self.requests
 
     @property
     def sending(self) -> list[PartyInfoStruct]:
@@ -345,6 +409,12 @@ class PartyContextStruct(Structure):
         )
         return [value for value in view.to_list()]
 
+    @property
+    def party_search(self) -> list[PartySearchStruct]:
+        """Return party-search entries using the native field spelling."""
+
+        return self.party_searches
+
 
 assert ctypes.sizeof(PlayerPartyMemberStruct) == 0x0C
 assert ctypes.sizeof(HeroPartyMemberStruct) == 0x18
@@ -357,13 +427,73 @@ assert PartyContextStruct.party_search_array.offset == 0xC0
 
 
 class PartyContext:
-    """Resolve and read the current native ``PartyContext``."""
+    """Resolve and read the current native ``PartyContext``.
+
+    The static members mirror Reforged's in-process facade.  In Stealth they
+    are refreshed explicitly through :meth:`_update_ptr`; callback registration
+    remains unavailable because it requires code running inside ``Gw.exe``.
+    """
+
+    _ptr: int = 0
+    _cached_ptr: int = 0
+    _cached_ctx: PartyContextStruct | None = None
+    _callback_name = "PartyContext.UpdatePtr"
 
     def __init__(self, reader: _memory_reader, game_context: GameContext) -> None:
         """Create a reader using the connected client's cached GameContext."""
 
         self._reader = reader
         self._game_context = game_context
+
+    @staticmethod
+    def get_ptr() -> int:
+        """Return the last externally refreshed PartyContext address."""
+
+        return PartyContext._ptr
+
+    @staticmethod
+    def _update_ptr() -> None:
+        """Refresh the source-compatible facade from the selected client."""
+
+        from ..client import current_client
+
+        client = current_client()
+        if client is None:
+            PartyContext._ptr = 0
+            PartyContext._cached_ptr = 0
+            PartyContext._cached_ctx = None
+            return
+        try:
+            context = client.party_context
+            address = context.resolve_address()
+            PartyContext._ptr = address or 0
+            PartyContext._cached_ctx = cast(Any, context.read())
+        except (OSError, RuntimeError):
+            PartyContext._ptr = 0
+            PartyContext._cached_ptr = 0
+            PartyContext._cached_ctx = None
+
+    @staticmethod
+    def enable() -> None:
+        """Declare the source callback operation; callbacks require injection."""
+
+        raise NotImplementedError(
+            "PartyContext.enable requires the in-process callback runtime."
+        )
+
+    @staticmethod
+    def disable() -> None:
+        """Clear the external facade cache."""
+
+        PartyContext._ptr = 0
+        PartyContext._cached_ptr = 0
+        PartyContext._cached_ctx = None
+
+    @staticmethod
+    def get_context() -> PartyContextStruct | None:
+        """Return the last snapshot refreshed through ``_update_ptr``."""
+
+        return PartyContext._cached_ctx
 
     def resolve_address(self) -> int | None:
         """Return the current party-context address, if available."""
@@ -393,4 +523,12 @@ def get() -> PartyContextStruct | None:
     from ..client import current_client
 
     client = current_client()
-    return client.read_party_context() if client is not None else None
+    return cast(Any, client.read_party_context() if client is not None else None)
+
+
+# The Reforged source uses the concise names for these fixed-width records.
+# Keep the implementation's ``*Struct`` names while exporting one object per
+# layout so callers can use either spelling without changing the ABI.
+PlayerPartyMember = PlayerPartyMemberStruct
+HeroPartyMember = HeroPartyMemberStruct
+HenchmanPartyMember = HenchmanPartyMemberStruct

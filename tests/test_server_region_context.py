@@ -53,7 +53,7 @@ class LiveServerRegionTests(unittest.TestCase):
         """Keep the fixed-width layout aligned with the native source."""
 
         self.assertEqual(ctypes.sizeof(ServerRegionStruct), 0x04)
-        self.assertEqual(ServerRegionStruct.region_id.offset, 0x00)
+        self.assertEqual(getattr(ServerRegionStruct, "region_id").offset, 0x00)
 
     def test_resolves_live_server_region_pointer(self) -> None:
         """Resolve and cache the JSON region-value address."""

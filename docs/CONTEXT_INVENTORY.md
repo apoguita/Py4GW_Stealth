@@ -5,8 +5,23 @@ the current `Py4GW_Reforged_Native` C++ context layer with the
 `Py4GW_Reforged` Python context layer, then records what has and has not been
 ported to Stealth.
 
-An inventory is not an implementation. It tells us what exists, how the two
-source projects name it, and what still needs an external reader.
+An inventory is not an implementation. It tells us what the native and
+Reforged Python sources declare, how the two projects name each surface, and
+what still needs an external reader. Every structure, field, property, and
+public method in a selected context is a porting requirement even when its
+operation later proves to require injection or game-thread execution.
+
+The ordered execution roadmap is maintained in
+[`docs/CONTEXT_MIGRATION_PLAN.md`](CONTEXT_MIGRATION_PLAN.md). The inventory
+records status; the roadmap records what we do next and what remains blocked.
+The detailed source-parity verdict for every migrated reader is maintained in
+[`docs/CONTEXT_PARITY_AUDIT.md`](CONTEXT_PARITY_AUDIT.md). A reader being
+listed as implemented below means that a live reader exists; consult the audit
+before treating it as source/API parity.
+
+**Full source/API parity: none.** The entries below document verified external
+read slices and their gaps. No `[x]` entry makes its parent context a complete
+replacement for the native or Reforged context API.
 
 ## Sources and meaning
 
@@ -29,10 +44,10 @@ nested data structures, and support types. The Python package groups some of
 those structures together, so the lists are not expected to match one for
 one.
 
-The native and Reforged projects are comparative sources for Stealth. A
-source entry is not yet a live-client result, and a context is not ready for
-Stealth until its address resolution, layout, pointer fields, and live read
-behavior have been verified externally.
+The native and Reforged projects are the source contract for Stealth. A source
+entry is not yet a live-client result. Declaration parity and live external
+availability are recorded separately; an externally unavailable member must
+remain declared and be marked with its required mechanism.
 
 ## Native C++ context headers
 
@@ -164,7 +179,8 @@ This is the practical mapping we should use when planning external readers.
 | `ItemContext` | `WorldContext.py` and item/inventory wrappers | No single same-named Python context module. |
 | `AgentContext` | `AgentContext.py` and `WorldContext.py` | Agent arrays and agent records are grouped in Python. |
 | `MapContext` | `MapContext.py`, `InstanceInfoContext.py` | Map, area, instance, and pathing data are split across modules. |
-| `AccountContext` | `AccAgentContext.py`, `AvailableCharacterContext.py`, `WorldContext.py` | Account-level data is split by use. |
+| `AccountContext` | `AccAgentContext.py`, `AvailableCharacterContext.py`, `WorldContext.py` | Account-level data is split by use; Stealth now has a direct root reader. |
+| `GadgetContext` | `AgentContext.py` and agent helpers | Native root has a direct Stealth reader; gadget-agent records remain under `AgentArray`. |
 | `TradeContext` | trade wrappers outside this directory | No direct `TradeContext.py` module in the inspected directory. |
 | `GameplayContext` | `GameplayContext.py` | Direct context family. |
 | `TextParser` | `TextContext.py` | Exists as a source module but is not a direct `context/__init__` import. |
@@ -184,7 +200,7 @@ keeps in another module.
 
 ## Stealth status
 
-### Implemented
+### Verified external read slices (not full source parity)
 
 - `Win32`: read-only process discovery and module information.
 - `ProcessMemoryReader`: bounded read-only `ReadProcessMemory` transport.
@@ -192,8 +208,10 @@ keeps in another module.
 - `PatternCatalog`: copied JSON signatures and resolver chains.
 - `ConnectedClient`: selected-process ownership and connection state.
 - `context.CharContext`: external `CharContextStruct`, pointer-chain read,
-  character-name decoding, and `GWArray` views.
-- `context.GameContext`: external root context and cached base-pointer resolver.
+  character-name decoding, `GWArray` views, and the declared source facade
+  methods; callback registration remains externally unavailable.
+- `context.GameContext`: external root context, cached base-pointer resolver,
+  and additive aliases for the native C++ field spellings.
 - `context.PreGameContext`: optional selection-menu context and login-character
   array.
 - `context.Cinematic`: optional 8-byte context reached through
@@ -206,37 +224,88 @@ keeps in another module.
   `map.instance_info_addr`, with external nested `MapDimensions` and
   `AreaInfo` reads.
 - `context.TextParser`: native `GameContext.text_parser` pointer at `+0x18`,
-  complete `TextParser` root layout, and nested cache/sub-structure reads.
+  the complete fixed-width root layout, typed `LanguageSlotStruct` and
+  `TextFileSlotStruct` records, bounded language-slot/file-slot traversal,
+  file-hash lookup, language ID, cache pointer, and sub-structure reads.
+  This matches the source-backed read-only surface used by the Reforged
+  text-parser code.
 - `context.AvailableCharacterArray`: native account-roster `GWArray` resolved
   through `player.available_characters_addr`, with packed character properties.
-- `context.PartyContext`: direct `GameContext.party` pointer, nested party
-  arrays, party searches, and bounded intrusive-list readers.
+- `context.PartyContext`: direct `GameContext.party` pointer, exact native
+  party/member/search structures, nested arrays, bounded invite/request/
+  sending-list readers, source aliases, and the declared static facade cache.
 - `context.GuildContext`: direct `GameContext.guild` pointer, complete
   maintained guild layout, and nested guild, history, alliance, and roster
   array readers.
 - `context.AccAgentContext`: direct `GameContext.agent` pointer, maintained
   agent-summary and movement layouts, and bounded remote array readers.
+- `context.Camera`: JSON-resolved native camera pointer and the maintained
+  read-only camera layout through `camera_mode`.
+- `context.FriendList`: JSON-resolved friend-list root, bounded friend-pointer
+  traversal, and decoded friend records.
+- `context.ChatBuffer`: JSON-resolved chat ring-buffer pointer, bounded message
+  header/payload reads, and typing-state inspection.
+- `context.WorldContext`: the maintained 0x854-byte root layout reached through
+  `GameContext.world_context`, all source-backed read-only child records, and
+  bounded `GWArray` traversal. The injected-runtime pointer lifecycle helpers
+  are intentionally excluded.
+- `context.TradeContext`: direct `GameContext.trade_context` root with bounded
+  player/partner gold and offered-item reads. Trade actions remain out of
+  scope.
+- `context.ItemContext`: direct `GameContext.item_context` root with the
+  maintained 0x10C layout, bounded core bag/item readers, and fixed-width
+  inventory relationship metadata. The live raw `item_array.m_size` header is
+  not verified as an inventory-item count. Reforged's public item enumeration is
+  Stealth follows `ItemContext -> bags -> Bag.items -> Item` for bounded
+  item reads. The unexplained global array is a separate optional surface, not
+  a blocker for ordinary inventory access. A recent live run read 24 bags and
+  352 item records; these counts are observations, not fixed contracts.
+  Native item records expose bounded modifier-word reads and the native bit
+  helpers (uses, tome/kit, and rare-material rules). The higher-level
+  Reforged semantic modifier catalog remains a separate pending feature. The
+  formula/composite/PvP tables are read through cached JSON resolvers.
+- `context.AccountContext`: direct `GameContext.account_context` root with the
+  maintained 0x138 layout and account-wide array-header inspection. Child
+  unlock records remain lazy and bounded.
+- `context.GadgetContext`: direct `GameContext.gadget_context` root with the
+  maintained 0x10 layout and a bounded lazy `GadgetInfo` reader.
 
-The first twelve context readers are live-verified. Resolver scans are
+The current 21 Stealth reader classes (including `AgentArray`) have live
+verification at their implemented read boundary. Resolver
+scans are
 performed during connection and stable resolver locations are cached; dynamic
-context pointers and structure bytes are re-read for each snapshot.
+context pointers and structure bytes are re-read for each snapshot. The
+camera resolver currently returns the native camera object pointer itself, so
+that pointer is cached for the lifetime of the connection while its bytes are
+read afresh. `FriendList` uses the same direct-object resolver model. The
+ChatBuffer resolver caches its global pointer slot and re-reads the current
+buffer pointer for each snapshot.
 
 The migration sequence so far is: `CharContext`, `GameContext`,
 `PreGameContext`, `Cinematic`, `GameplayContext`, `ServerRegion`,
 `InstanceInfo`, `TextParser`, `AvailableCharacterArray`, `PartyContext`,
-`GuildContext`, then `AccAgentContext`. The live GuildContext check resolved
-address `0x025732D8` and
-read player `Fezzik The Untamed`, 101 guild records, 42 roster entries, and 20
+`GuildContext`, `AccAgentContext`, `Camera`, `FriendList`, `ChatBuffer`, then
+the verified read-only `WorldContext`, `TradeContext`, `ItemContext` root,
+`AccountContext`, and `GadgetContext`, followed by the `MapContext` root and
+bounded spawn arrays. The live GuildContext check resolved
+address `0x00AD42A0` and
+read player `Fezzik The Untamed`, 243 guild records, 42 roster entries, and 20
 history entries on the verified client build.
+The same client resolved `AccountContext` at `0x0257EBC8` with six maintained
+array headers and `GadgetContext` at `0x0256FFB0` with 9,500 advertised gadget
+records; the live test read only a bounded 32-record sample.
 `WorldMapContext` remains pending because its source pointer
 is published by injected UI callback/shared-memory state rather than a
 currently available external resolver.
 
-### Not yet implemented in Stealth
+### Remaining or incomplete in Stealth
 
-The remaining native and Reforged contexts listed above do not yet have an
-external Stealth reader. The offsets directory may already contain signatures
-for several surfaces, but a signature definition alone is not a context reader.
+The remaining native and Reforged contexts listed above either do not yet have
+an external Stealth reader or have a partial reader. The offsets directory may
+already contain signatures for several surfaces, but a signature definition
+alone is not a context reader. The exact missing source-backed fields and
+helpers for existing readers are listed in
+[`CONTEXT_PARITY_AUDIT.md`](CONTEXT_PARITY_AUDIT.md).
 Each new reader still needs:
 
 1. a documented root-address resolver;
@@ -245,8 +314,9 @@ Each new reader still needs:
 4. a public context API and connection-lifetime behavior; and
 5. offline tests plus a separately recorded live-client verification.
 
-The next implementation decision should be made from this inventory. It
-should not be inferred from the number of files in either source project.
+The next implementation decision follows
+[`docs/CONTEXT_MIGRATION_PLAN.md`](CONTEXT_MIGRATION_PLAN.md). It should not be
+inferred from the number of files in either source project.
 
 ## Migration complexity categories
 
@@ -277,15 +347,22 @@ to migrate as one focused task:
 These aggregate many independently meaningful structures and should be left
 until the smaller roots are available:
 
-- `MapContext.py`
-- `WorldContext.py`
-- `AgentContext.py`
+- `MapContext.py` has a live root/spawn slice and the first pathing context
+  roots; its first-class pathing migration is tracked in
+  [`PATHING_MIGRATION_PLAN.md`](PATHING_MIGRATION_PLAN.md). Graph children and
+  map-prop traversal remain pending.
+- `WorldContext` has a verified read-only slice; its native injected
+  pointer-lifecycle helpers remain intentionally out of scope.
+- `AgentContext.py` has a verified read-only external category/materialization
+  surface; injected cache lifecycle helpers remain intentionally out of scope.
 
-The native-only or distributed surfaces (`ItemContext`, trade, friend list,
-camera, render, UI, salvage, and related records) should be scheduled after
-the root context that owns their pointers is understood. `WorldMapContext` and
-`MissionMapContext` are separately tracked as callback-owned contexts below;
-they are not treated as ordinary JSON-resolver readers.
+The remaining native-only or distributed surfaces (render, UI, salvage, and
+related records) should be scheduled after the root context that owns their
+pointers is understood. Item children are not in that category: their native
+bag and item pointers are already owned by `ItemContext` and are the next
+focused migration. `WorldMapContext` and `MissionMapContext` are separately
+tracked as callback-owned contexts below; they are not treated as ordinary
+JSON-resolver readers.
 
 The resolver-backed moderate candidates are now implemented; callback-owned
 contexts remain postponed until their pointer source is explicitly in scope.
@@ -293,23 +370,51 @@ contexts remain postponed until their pointer source is explicitly in scope.
 ## Migration checklist
 
 This is the working checklist for adding external readers. A checked item
-means the context has a reader in Stealth and a live verification record; it
-does not mean that every nested record in the source project is complete.
+means the named reader has a live verification record. `[~]` means the reader
+works but source-parity gaps remain; those gaps are not approved to disappear
+from the roadmap.
+The distinction between a verified external read slice and full source/API
+parity is recorded in
+[`PARITY_STATUS_CORRECTION.md`](PARITY_STATUS_CORRECTION.md).
 
-### Completed
+### Verified external read slices (not full source parity)
 
-- [x] `CharContext`
-- [x] `GameContext` / base context pointer surface
-- [x] `PreGameContext`
-- [x] `Cinematic`
-- [x] `GameplayContext`
-- [x] `ServerRegion`
-- [x] `InstanceInfo`
-- [x] `TextParser`
-- [x] `AvailableCharacterArray`
-- [x] `PartyContext`
-- [x] `GuildContext`
-- [x] `AccAgentContext`
+- [~] `CharContext` external read-only slice (lifecycle API remains)
+- [~] `GameContext` / base context pointer surface (verified root slice; no total context parity)
+- [~] `PreGameContext` declaration parity complete; external read path verified;
+  callback registration remains externally unavailable
+- [~] `Cinematic` declaration parity complete; external pointer/read path
+  verified; callback registration remains externally unavailable
+- [~] `GameplayContext` declaration parity complete; external pointer/read path
+  verified; callback registration remains externally unavailable
+- [~] `ServerRegion` declaration parity complete; external value-address/read
+  path verified; callback registration remains externally unavailable
+- [~] `InstanceInfo` declaration parity complete; external root/nested read
+  path verified; callback registration remains externally unavailable
+- [~] `TextParser` declaration parity complete; external root/slot/cache read
+  path verified; callback and string-table trigger remain externally unavailable
+- [~] `AvailableCharacterArray` declaration parity complete; external roster
+  resolver/read path verified; callback registration remains unavailable
+- [~] `PartyContext` declaration parity complete; external root, member/search,
+  list, and helper reads verified; callback registration remains unavailable
+- [~] `GuildContext` declaration parity complete; external root, guild,
+  alliance, history, roster, and helper reads verified; callback registration
+  remains unavailable
+- [~] `AccAgentContext` external read-only slice (lifecycle API remains)
+- [~] `Camera` external read-only slice (setters/patch state excluded)
+- [~] `FriendList` external read-only slice (mutations excluded)
+- [~] `ChatBuffer` (raw encoded message text/codepoints work; decoded history helper is missing)
+- [~] `AccountContext` external consumer slice (no direct Reforged facade)
+- [~] `GadgetContext` external read-only slice (lifecycle/actions remain)
+- [~] `TradeContext` root and bounded offers (actions remain)
+- [~] `ItemContext` root, bounded bag/item traversal, empty-slot searches,
+  item names, rarity/type/material/salvage helpers, inventory/storage
+  classification, bounded native modifier-word reads and helper rules, and
+  formula/composite/PvP table readers (semantic modifier catalog remains
+  separate)
+- [~] `WorldContext` root and verified source-backed read-only child records
+- [~] `MapContext` root, three bounded spawn arrays, and pathing context roots
+  (graph children and map-prop records remain)
 
 ### Pending: simple contexts
 
@@ -321,21 +426,35 @@ map contexts remain listed separately below.
 - [ ] `WorldMapContext` (native UI callback publishes the pointer)
 - [ ] `MissionMapContext` (native UI callback publishes the pointer)
 
+These remain deferred until an external pointer source is defined. The full
+injection-dependent freeze and resume conditions are in
+[`DEFERRED_INJECTION.md`](DEFERRED_INJECTION.md).
+
 ### Pending: moderate contexts
 
 No pending moderate context is currently selected.
 
 ### Pending: complex contexts
 
-- [ ] `MapContext`
-- [ ] `WorldContext`
-- [ ] `AgentContext` and `AgentArray`
+- [~] `MapContext` root/spawn and pathing-context slice; graph children and
+  map-prop records remain. See
+  [`PATHING_MIGRATION_PLAN.md`](PATHING_MIGRATION_PLAN.md).
+- [~] `AgentContext` and `AgentArray` read-only records and category helpers
+  (lifecycle/cache API remains)
+
+`AgentArray` has a live-verified source-shaped view: bounded external
+pointer-table traversal, native `agent_id` validation, movement-table stale
+filtering, source category methods, and explicit raw-record materialization.
+Core common, living, item, and gadget records have lazy live readers. A full
+living-agent record can also be refreshed into a local snapshot for frequent
+queries, including corpse diagnostics, effects, visible effects, equipment,
+and tags. Injected cache lifecycle helpers remain outside the external
+read-only boundary.
 
 ### Pending: native-only or distributed surfaces
 
-- [ ] Native-only or distributed surfaces: item, trade, friend list, camera,
-  render, salvage, UI, gadget, chat, quest, title, skill, hero, player, NPC,
-  and pathing data.
+- [ ] Native-only or distributed surfaces: deferred modifier catalog semantics, render,
+  UI, remaining gadget relationships, and pathing data.
 
 The final line is intentionally grouped. Those native headers contain many
 records that may be reached through another root context rather than through

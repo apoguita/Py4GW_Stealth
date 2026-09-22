@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import Structure, c_uint32
-from typing import Protocol, TypeVar
+from typing import Any, Protocol, TypeVar, cast
 
 from ..scanner import PatternCatalog, RemoteScanner
 from .gw_array import RemoteMemoryReader
@@ -76,10 +76,22 @@ class AreaInfoStruct(Structure):
         return ((int(self.file_id) - 1) % 0xFF00) + 0x100
 
     @property
+    def file_id1(self) -> int:
+        """Return the Reforged-compatible spelling of :attr:`file_id_1`."""
+
+        return self.file_id_1
+
+    @property
     def file_id_2(self) -> int:
         """Return the second archive identifier derived by Reforged."""
 
         return ((int(self.file_id) - 1) // 0xFF00) + 0x100
+
+    @property
+    def file_id2(self) -> int:
+        """Return the Reforged-compatible spelling of :attr:`file_id_2`."""
+
+        return self.file_id_2
 
     @property
     def has_enter_button(self) -> bool:
@@ -189,6 +201,12 @@ assert ctypes.sizeof(InstanceInfoStruct) == 0x14
 class InstanceInfo:
     """Resolve and decode one external ``InstanceInfo`` snapshot."""
 
+    # Source-compatible static facade state. The injected source updates this
+    # through a callback; the external reader refreshes it explicitly.
+    _ptr: int = 0
+    _cached_ctx: InstanceInfoStruct | None = None
+    _callback_name = "InstanceInfoContext.UpdatePtr"
+
     _RESOLVER = "map.instance_info_addr"
 
     def __init__(
@@ -203,6 +221,53 @@ class InstanceInfo:
         self._scanner = scanner
         self._patterns = patterns
         self._context_address: int | None = None
+
+    @staticmethod
+    def get_ptr() -> int:
+        """Return the last externally refreshed InstanceInfo address."""
+
+        return InstanceInfo._ptr
+
+    @staticmethod
+    def _update_ptr() -> None:
+        """Refresh the source-compatible facade from the selected client."""
+
+        from ..client import current_client
+
+        client = current_client()
+        if client is None:
+            InstanceInfo._ptr = 0
+            InstanceInfo._cached_ctx = None
+            return
+        try:
+            context = client.instance_info
+            address = context.resolve_address()
+            InstanceInfo._ptr = address or 0
+            InstanceInfo._cached_ctx = cast(Any, context.read())
+        except (OSError, RuntimeError):
+            InstanceInfo._ptr = 0
+            InstanceInfo._cached_ctx = None
+
+    @staticmethod
+    def enable() -> None:
+        """Declare the source callback operation; callbacks require injection."""
+
+        raise NotImplementedError(
+            "InstanceInfo.enable requires the in-process callback runtime."
+        )
+
+    @staticmethod
+    def disable() -> None:
+        """Clear the external facade cache."""
+
+        InstanceInfo._ptr = 0
+        InstanceInfo._cached_ctx = None
+
+    @staticmethod
+    def get_context() -> InstanceInfoStruct | None:
+        """Return the last snapshot refreshed through ``_update_ptr``."""
+
+        return InstanceInfo._cached_ctx
 
     def resolve_address(self) -> int | None:
         """Return the current ``InstanceInfo`` address, if available."""
@@ -246,4 +311,4 @@ def get() -> InstanceInfoStruct | None:
     from ..client import current_client
 
     client = current_client()
-    return client.read_instance_info() if client is not None else None
+    return cast(Any, client.read_instance_info() if client is not None else None)

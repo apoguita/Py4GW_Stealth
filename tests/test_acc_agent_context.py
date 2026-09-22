@@ -83,12 +83,18 @@ class LiveAccAgentContextTests(unittest.TestCase):
         summaries = snapshot.agent_summary_info_list
         movement = snapshot.agent_movement_ptrs
         valid_ids = snapshot.valid_agents_ids
-        self.assertLessEqual(len(summaries), int(snapshot.agent_summary_info_array.m_capacity))
-        self.assertLessEqual(len(movement), int(snapshot.agent_movement_array.m_capacity))
+        if summaries is not None:
+            self.assertLessEqual(
+                len(summaries), int(snapshot.agent_summary_info_array.m_capacity)
+            )
+        if movement is not None:
+            self.assertLessEqual(
+                len(movement), int(snapshot.agent_movement_array.m_capacity)
+            )
         self.assertTrue(all(isinstance(value, int) for value in valid_ids))
         print(
             "Live agents: "
-            f"summary={len(summaries)}, movement={len(movement)}, "
+            f"summary={len(summaries or [])}, movement={len(movement or [])}, "
             f"valid_ids={len(valid_ids)}, timer={int(snapshot.instance_timer)}"
         )
 

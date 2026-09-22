@@ -55,8 +55,10 @@ class LiveAvailableCharacterTests(unittest.TestCase):
 
         self.assertEqual(ctypes.sizeof(AvailableCharacterInfoStruct), 0x84)
         self.assertEqual(ctypes.sizeof(AvailableCharacterArrayStruct), 0x10)
-        self.assertEqual(AvailableCharacterInfoStruct.player_name_enc.offset, 0x18)
-        self.assertEqual(AvailableCharacterInfoStruct.props.offset, 0x40)
+        self.assertEqual(
+            getattr(AvailableCharacterInfoStruct, "player_name_enc").offset, 0x18
+        )
+        self.assertEqual(getattr(AvailableCharacterInfoStruct, "props").offset, 0x40)
 
     def test_resolves_live_roster_array(self) -> None:
         """Resolve the copied player.available_characters_addr chain."""

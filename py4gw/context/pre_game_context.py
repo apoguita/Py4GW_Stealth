@@ -5,7 +5,7 @@ from __future__ import annotations
 import ctypes
 import struct
 from ctypes import Structure, c_float, c_int32, c_uint16, c_uint32
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from ..scanner import PatternCatalog, RemoteScanner
 from .gw_array import GWArray, GWArrayValueView, GWBaseArray, RemoteMemoryReader
@@ -92,7 +92,7 @@ class LoginCharacter(Structure):
         return _decode_wide_field(self.character_name_enc)
 
     @property
-    def character_name(self) -> str:
+    def character_name(self) -> str | None:
         """Return the Reforged-compatible encoded name representation."""
 
         return self.character_name_encoded_str
@@ -183,6 +183,12 @@ assert ctypes.sizeof(PreGameContextStruct) == 0x100
 class PreGameContext:
     """Resolve and decode one external ``PreGameContext`` snapshot."""
 
+    # Source-compatible static facade state.  The in-process source updates
+    # this through a callback; the external reader refreshes it explicitly.
+    _ptr: int = 0
+    _cached_ctx: PreGameContextStruct | None = None
+    _callback_name = "PreGameContext.UpdatePtr"
+
     _RESOLVER = "context.pregame_context_addr"
 
     def __init__(
@@ -197,6 +203,53 @@ class PreGameContext:
         self._scanner = scanner
         self._patterns = patterns
         self._pointer_address: int | None = None
+
+    @staticmethod
+    def get_ptr() -> int:
+        """Return the last externally refreshed PreGameContext address."""
+
+        return PreGameContext._ptr
+
+    @staticmethod
+    def _update_ptr() -> None:
+        """Refresh the source-compatible facade from the selected client."""
+
+        from ..client import current_client
+
+        client = current_client()
+        if client is None:
+            PreGameContext._ptr = 0
+            PreGameContext._cached_ctx = None
+            return
+        try:
+            context = client.pre_game_context
+            address = context.resolve_address()
+            PreGameContext._ptr = address or 0
+            PreGameContext._cached_ctx = cast(Any, context.read())
+        except (OSError, RuntimeError):
+            PreGameContext._ptr = 0
+            PreGameContext._cached_ctx = None
+
+    @staticmethod
+    def enable() -> None:
+        """Declare the source callback operation; callbacks require injection."""
+
+        raise NotImplementedError(
+            "PreGameContext.enable requires the in-process callback runtime."
+        )
+
+    @staticmethod
+    def disable() -> None:
+        """Clear the external facade cache."""
+
+        PreGameContext._ptr = 0
+        PreGameContext._cached_ctx = None
+
+    @staticmethod
+    def get_context() -> PreGameContextStruct | None:
+        """Return the last snapshot refreshed through ``_update_ptr``."""
+
+        return PreGameContext._cached_ctx
 
     def resolve_address(self) -> int | None:
         """Return the current target address using the cached resolver."""
@@ -250,4 +303,4 @@ def get() -> PreGameContextStruct | None:
     from ..client import current_client
 
     client = current_client()
-    return client.read_pre_game_context() if client is not None else None
+    return cast(Any, client.read_pre_game_context() if client is not None else None)
