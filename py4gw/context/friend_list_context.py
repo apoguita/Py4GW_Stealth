@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_uint8, c_uint16, c_uint32
 from enum import IntEnum
-from typing import Protocol
+from typing import NoReturn, Protocol
 
 from ..scanner import PatternCatalog, RemoteScanner
 from .gw_array import GWArray, RemoteMemoryReader
@@ -47,7 +49,7 @@ def _decode_wide_array(values: ctypes.Array[c_uint16]) -> str:
     return "".join(characters)
 
 
-class FriendStruct(Structure):
+class FriendStruct(TargetStruct):
     """The fixed-width x86 native ``Friend`` record.
 
     The native header's comment beside ``charname`` says ``+0x2C``, but its
@@ -58,21 +60,21 @@ class FriendStruct(Structure):
 
     _pack_ = 1
     _fields_ = [
-        ("friend_type", c_uint32),
+        ("type", c_uint32),
         ("status", c_uint32),
         ("uuid", c_uint8 * 16),
         ("alias", c_uint16 * 20),
-        ("character_name", c_uint16 * 20),
+        ("charname", c_uint16 * 20),
         ("friend_id", c_uint32),
         ("zone_id", c_uint32),
     ]
 
     @property
-    def type(self) -> FriendType:
+    def friend_type(self) -> FriendType:
         """Return the decoded native friend type when known."""
 
         try:
-            return FriendType(int(self.friend_type))
+            return FriendType(int(self.type))
         except ValueError:
             return FriendType.unknown
 
@@ -95,13 +97,13 @@ class FriendStruct(Structure):
     def character_name_str(self) -> str:
         """Return the decoded character name."""
 
-        return _decode_wide_array(self.character_name)
+        return _decode_wide_array(self.charname)
 
     @property
-    def charname(self) -> ctypes.Array[c_uint16]:
-        """Return the native ``charname`` field under its source name."""
+    def character_name(self) -> ctypes.Array[c_uint16]:
+        """Return the source character-name field under a readable alias."""
 
-        return self.character_name
+        return self.charname
 
     @property
     def charname_str(self) -> str:
@@ -116,18 +118,18 @@ class FriendStruct(Structure):
         return bytes(self.uuid)
 
 
-class FriendListStruct(Structure):
+class FriendListStruct(TargetStruct):
     """The fixed-width x86 native ``FriendList`` root record."""
 
     _pack_ = 1
     _fields_ = [
-        ("friends_array", GWArray),
-        ("unknown_0010", c_uint8 * 20),
-        ("number_of_friends", c_uint32),
-        ("number_of_ignores", c_uint32),
-        ("number_of_partners", c_uint32),
-        ("number_of_trades", c_uint32),
-        ("unknown_0034", c_uint8 * 108),
+        ("friends", GWArray),
+        ("h0010", c_uint8 * 20),
+        ("number_of_friend", c_uint32),
+        ("number_of_ignore", c_uint32),
+        ("number_of_partner", c_uint32),
+        ("number_of_trade", c_uint32),
+        ("h0034", c_uint8 * 108),
         ("player_status", c_uint32),
     ]
 
@@ -157,13 +159,13 @@ class FriendListStruct(Structure):
             return FriendStatus.unknown
 
     @property
-    def friends(self) -> list[FriendStruct]:
+    def friend_records(self) -> list[FriendStruct]:
         """Read the bounded list of current friend records."""
 
         if self._remote_reader is None:
             raise RuntimeError("FriendList is not bound to a memory reader.")
 
-        array = self.friends_array
+        array = self.friends
         size = int(array.m_size)
         capacity = int(array.m_capacity)
         if not array.m_buffer or size > capacity:
@@ -181,7 +183,7 @@ class FriendListStruct(Structure):
 
         if self._remote_reader is None:
             raise RuntimeError("FriendList is not bound to a memory reader.")
-        array = self.friends_array
+        array = self.friends
         size = int(array.m_size)
         if (
             index < 0
@@ -216,12 +218,12 @@ class FriendListStruct(Structure):
 
         if alias is None and character_name is None:
             return None
-        array_size = min(int(self.friends_array.m_size), self._max_friend_records)
+        array_size = min(int(self.friends.m_size), self._max_friend_records)
         for index in range(array_size):
             friend = self._read_friend_at(index)
             if friend is None:
                 continue
-            if friend_type != FriendType.unknown and friend.type != friend_type:
+            if friend_type != FriendType.unknown and friend.friend_type != friend_type:
                 continue
             if alias is not None and friend.alias_str == alias:
                 return friend
@@ -234,7 +236,7 @@ class FriendListStruct(Structure):
 
         if len(uuid) != 16:
             return None
-        array_size = min(int(self.friends_array.m_size), self._max_friend_records)
+        array_size = min(int(self.friends.m_size), self._max_friend_records)
         for index in range(array_size):
             friend = self._read_friend_at(index)
             if friend is not None and friend.uuid_bytes == uuid:
@@ -245,11 +247,17 @@ class FriendListStruct(Structure):
         """Return the native count for one friend category."""
 
         return {
-            FriendType.friend: int(self.number_of_friends),
-            FriendType.ignore: int(self.number_of_ignores),
-            FriendType.player: int(self.number_of_partners),
-            FriendType.trade: int(self.number_of_trades),
+            FriendType.friend: int(self.number_of_friend),
+            FriendType.ignore: int(self.number_of_ignore),
+            FriendType.player: int(self.number_of_partner),
+            FriendType.trade: int(self.number_of_trade),
         }.get(friend_type, 0)
+
+    @property
+    def friends_array(self) -> GWArray:
+        """Compatibility alias for the source ``friends`` array field."""
+
+        return self.friends
 
     def get_number_of_ignores(self) -> int:
         """Return the native ignore count."""
@@ -271,10 +279,41 @@ class FriendListStruct(Structure):
 
         return self.status
 
+    @property
+    def number_of_friends(self) -> int:
+        """Readable plural alias for the native ``number_of_friend`` field."""
+
+        return int(self.number_of_friend)
+
+    @property
+    def number_of_ignores(self) -> int:
+        return int(self.number_of_ignore)
+
+    @property
+    def number_of_partners(self) -> int:
+        return int(self.number_of_partner)
+
+    @property
+    def number_of_trades(self) -> int:
+        return int(self.number_of_trade)
+
+
+class FriendEventDataStruct(TargetStruct):
+    """Fixed header for native ``FriendEventData``'s flexible-array record."""
+
+    _pack_ = 1
+    _fields_ = [
+        ("event_id", c_uint32),
+        ("unk", c_uint32),
+        ("data_size", c_uint32),
+        ("data", c_uint32 * 0),
+    ]
+
 
 assert ctypes.sizeof(FriendStruct) == 0x70
 assert ctypes.sizeof(FriendListStruct) == 0xA4
-assert FriendListStruct.number_of_friends.offset == 0x24
+assert ctypes.sizeof(FriendEventDataStruct) == 0x0C
+assert FriendListStruct.number_of_friend.offset == 0x24
 assert FriendListStruct.player_status.offset == 0xA0
 
 
@@ -337,6 +376,69 @@ class FriendList:
         return FriendListStruct.from_buffer_copy(raw_context).bind_reader(
             self._reader,
             self._max_friend_records,
+        )
+
+    def get_number_of_friends(self, friend_type: int = 1) -> int:
+        """Return the native count for one friend category."""
+
+        context = self.read()
+        if context is None:
+            return 0
+        try:
+            selected_type = FriendType(friend_type)
+        except ValueError:
+            selected_type = FriendType.unknown
+        return context.get_number_of_friends(selected_type)
+
+    def get_number_of_ignores(self) -> int:
+        """Return the native ignore count."""
+
+        context = self.read()
+        return context.get_number_of_ignores() if context is not None else 0
+
+    def get_number_of_partners(self) -> int:
+        """Return the native partner count."""
+
+        context = self.read()
+        return context.get_number_of_partners() if context is not None else 0
+
+    def get_number_of_traders(self) -> int:
+        """Return the native trade-friend count."""
+
+        context = self.read()
+        return context.get_number_of_traders() if context is not None else 0
+
+    def get_my_status(self) -> int:
+        """Return the native current player's friend status value."""
+
+        context = self.read()
+        return (
+            int(context.get_my_status())
+            if context is not None
+            else int(FriendStatus.offline)
+        )
+
+    def set_friend_list_status(self, status: int) -> bool:
+        """Declare the source action without changing remote client memory."""
+
+        self._raise_action_unavailable("set_friend_list_status")
+
+    def add_friend(self, name: str, alias: str = "") -> bool:
+        """Declare the source action without changing remote client memory."""
+
+        self._raise_action_unavailable("add_friend")
+
+    def add_ignore(self, name: str, alias: str = "") -> bool:
+        """Declare the source action without changing remote client memory."""
+
+        self._raise_action_unavailable("add_ignore")
+
+    @staticmethod
+    def _raise_action_unavailable(operation: str) -> NoReturn:
+        """Refuse friend-list actions that require in-client execution."""
+
+        raise NotImplementedError(
+            f"FriendList.{operation} requires in-client execution and is unavailable."
         )
 
 

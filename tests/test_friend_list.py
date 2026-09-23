@@ -65,10 +65,10 @@ class LiveFriendListTests(unittest.TestCase):
         assert snapshot is not None
         self.assertIsInstance(snapshot, FriendListStruct)
         self.assertLessEqual(
-            int(snapshot.friends_array.m_size),
-            int(snapshot.friends_array.m_capacity),
+            int(snapshot.friends.m_size),
+            int(snapshot.friends.m_capacity),
         )
-        friends = snapshot.friends
+        friends = snapshot.friend_records
         self.assertLessEqual(len(friends), 512)
         print(
             "Live friend list: "
@@ -80,4 +80,3 @@ class LiveFriendListTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
-

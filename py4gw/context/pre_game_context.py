@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 import struct
 from ctypes import Structure, c_float, c_int32, c_uint16, c_uint32
@@ -39,7 +41,7 @@ def _format_encoded_text(value: str) -> str:
     return "".join(output)
 
 
-class LoginCharacter(Structure):
+class LoginCharacter(TargetStruct):
     """The fixed-width x86 port of Reforged ``LoginCharacter``."""
 
     _pack_ = 1
@@ -98,7 +100,7 @@ class LoginCharacter(Structure):
         return self.character_name_encoded_str
 
 
-class PreGameContextStruct(Structure):
+class PreGameContextStruct(TargetStruct):
     """The fixed-width x86 port of Reforged ``PreGameContextStruct``."""
 
     _pack_ = 1

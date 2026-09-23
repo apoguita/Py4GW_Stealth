@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_uint16, c_uint32
 from typing import Any, Protocol, cast
@@ -38,7 +40,7 @@ def _format_encoded_text(value: str) -> str:
     return "".join(output)
 
 
-class AvailableCharacterInfoStruct(Structure):
+class AvailableCharacterInfoStruct(TargetStruct):
     """The native ``GW::Context::AvailableCharacterInfo`` layout."""
 
     _pack_ = 1
@@ -117,7 +119,7 @@ class AvailableCharacterInfoStruct(Structure):
         return bool((int(self.props[7]) >> 9) & 0x1)
 
 
-class AvailableCharacterArrayStruct(Structure):
+class AvailableCharacterArrayStruct(TargetStruct):
     """The native ``GWArray<AvailableCharacterInfo>`` header."""
 
     _pack_ = 1

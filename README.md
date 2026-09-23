@@ -1,21 +1,60 @@
 # Py4GW Stealth
 
-Py4GW Stealth is an external Python library for recreating selected Py4GW
-Reforged capabilities without injecting a Python runtime or executable
-payload into the Guild Wars process.
+Py4GW Stealth is an independent external-host project for reading Guild Wars
+data and, eventually, executing source-backed work on the game's thread.
+Reforged source projects are research references, not runtime dependencies.
+The current implementation is read-only. The selected architecture for
+source-backed callbacks and game-thread work is an external controller with a
+Stealth-owned in-process payload or patch, without a conventional injected
+DLL. This modifies `Gw.exe` and is injection. That payload is not implemented
+yet, because the first pointer it was needed for now has a read-only route:
+`WorldMapContext` is acquired by walking the client's UI frame array, which
+writes nothing to the client. See
+[`docs/UI_FRAME_TREE.md`](docs/UI_FRAME_TREE.md). “No DLL” describes the
+chosen delivery approach; it does not mean the target is unmodified or that the
+payload is undetectable. See
+[`docs/NATIVE_EXECUTION_PLAN.md`](docs/NATIVE_EXECUTION_PLAN.md)
+for the inventory and resumable plan.
 
 The project is being developed one capability at a time. **Full source/API
-parity has been achieved for no context.** The current library
+parity has been achieved for no context.** A mechanical sweep of every source
+context struct with data fields (`include/GW/context/*.h` plus
+`include/GW/ui/ui.h`) counts **1803 declared fields across 205 structs**: 70
+structs are fully represented, 47 are present with fields still unmatched, and
+88 have no Stealth declaration — of which **64 are UI-message/packet structs**
+(217 fields) and 24 are other data structs (152 fields). That UI-message block
+is the largest single body of unported declared data. Method, calibration, and
+the naming caveat are in
+[`docs/CONTEXT_PARITY_AUDIT.md`](docs/CONTEXT_PARITY_AUDIT.md).
+
+Two map contexts were live-verified open **and** closed through the read-only
+frame route: `MissionMapContext` (frame 1591, direct callback registration) and
+`WorldMapContext` (frame 3698, registered through a `jmp` thunk). No hook,
+payload, or write was involved. `SalvageSessionInfo` is captured by a hook in
+the source project but is **not used by either reference project**, and salvage
+is driven through UI frames and client-to-server packets, so it is not a
+pointer-acquisition gap.
+
+The current library
 provides read-only `Gw.exe` discovery, a reusable x86 pattern scanner, and
 external readers for Reforged's maintained `CharContext`, `GameContext`,
 `PreGameContext`, `Cinematic`, `GameplayContext`, `ServerRegion`,
 `InstanceInfo`, `TextParser`, `AvailableCharacterArray`, `PartyContext`,
 `GuildContext`, `AccAgentContext`, `Camera`, `FriendList`, `ChatBuffer`,
 `WorldContext`, `TradeContext`, `ItemContext`, `AccountContext`, and
-`GadgetContext`, plus the read-only `MapContext` root, bounded spawn arrays,
-and initial pathing-context records
-layouts. A small NiceGUI
-window exercises the
+`GadgetContext`, plus the read-only `MapContext` pathing, props, snapshots,
+travel-portal helpers, and per-client pathing cache. `MissionMapContext` and
+`WorldMapContext` structures and data readers are also ported, plus the native
+`SalvageSessionInfo` record. All three acquire their root address the same
+read-only way: by walking the client's UI frame array to the frame that
+registered the relevant callback. Resolution and array structure are confirmed
+on one live client; the callback handoff itself is still pending an open/close
+test. See
+[`docs/CALLBACK_POINTER_RESEARCH.md`](docs/CALLBACK_POINTER_RESEARCH.md) for the
+callback-route status and [`docs/UI_FRAME_TREE.md`](docs/UI_FRAME_TREE.md) for
+the frame-tree route and its test scripts. Any target-side payload or patch is
+still injection, even without a DLL.
+A small NiceGUI window exercises the
 client-selection and read-only connection surface.
 The library also has a bounded AgentArray reader with native category
 classification, lazy agent-record reads, and explicit living-agent snapshots
@@ -101,7 +140,7 @@ tab becomes available; its context subtabs display the live structure fields:
 `Cinematic`, `Camera`, `FriendList`, `ChatBuffer`, `WorldContext`, `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
 `AvailableCharacters`, `PartyContext`, `GuildContext`, `AccAgentContext`,
 `AccountContext`, `GadgetContext`, `TradeContext`, `ItemContext`,
-`MapContext` (root, bounded spawn arrays, and initial pathing-context records),
+`MapContext` (root, pathing arrays/links, props, snapshots, and travel portals),
 `PreGameContext`, `GameContext`, and `CharContext`. The migration order for
 these readers is `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
 `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
@@ -208,20 +247,30 @@ inside Guild Wars.
 - [Context inventory](docs/CONTEXT_INVENTORY.md) — native/Reforged context mapping and Stealth status
 - [Parity certification checklist](docs/PARITY_CERTIFICATION_CHECKLIST.md) — the one-context-at-a-time binary parity gate
 - [Context parity audit](docs/CONTEXT_PARITY_AUDIT.md) — source-backed fields, helpers, and explicit gaps for every migrated reader
-- [Deferred injection work](docs/DEFERRED_INJECTION.md) — frozen features that require target-code execution, writes, hooks, or injected state
-- [AgentArray plan](docs/AGENT_ARRAY_PLAN.md) — the staged plan for bounded agent traversal and lazy reads
+- [Target-side work](docs/DEFERRED_INJECTION.md) — planned features that require code, writes, hooks, or patches in the client
+- [Native execution plan](docs/NATIVE_EXECUTION_PLAN.md) — source inventory and phased, extensible plan for hooks, callbacks, and game-thread execution
+- [Callback pointer research](docs/CALLBACK_POINTER_RESEARCH.md) — the self-sufficient pointer acquisition direction and research steps
+- [UI frame tree](docs/UI_FRAME_TREE.md) — the `py4gw/ui/` package and the read-only frame-array route to frame-published contexts
 - [Programming style](docs/STYLE.md) — naming and coding conventions
 - [Research record](docs/RESEARCH.md) — detailed source analysis and history
 
 ## Current boundary
 
-The current library only performs read-only operations. It can discover
-processes and scan/read selected process memory, but it does not write to a
-process, inject code, create remote threads, or install hooks.
+The current implementation only performs read-only operations. It can
+discover processes and scan/read selected process memory, but it does not write
+to a process, inject code, create remote threads, or install hooks. This
+describes what exists now, not a requirement that the final project remain
+pure external. The UI frame-tree route is read-only: it reads the client's
+frame array, the frame that registered a context's callback, and the context
+that frame publishes. It writes nothing and is not a hook or a payload. It
+covers `WorldMapContext`, `MissionMapContext`, and `SalvageSessionInfo`;
+`GwDxContext` still needs target-side code.
 
-Features that would require those mechanisms are intentionally frozen and
-tracked in [`docs/DEFERRED_INJECTION.md`](docs/DEFERRED_INJECTION.md).
+Features that require those mechanisms are not implemented yet and are tracked
+in [`docs/DEFERRED_INJECTION.md`](docs/DEFERRED_INJECTION.md) and the phased
+[`docs/NATIVE_EXECUTION_PLAN.md`](docs/NATIVE_EXECUTION_PLAN.md).
 
-Long-term work may include game-thread execution through a small in-process
-payload bridge rather than a loaded DLL. That direction is still future scope
-and remains injection technically.
+The selected plan includes game-thread execution through a reusable
+Stealth-owned payload/patch bridge rather than a conventional DLL. The
+mechanism remains unimplemented, is technically injection, and must preserve
+the source-backed behavior documented in the execution plan.

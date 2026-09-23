@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+import time
 
 from py4gw import (
     AgentAllegiance,
@@ -121,7 +122,9 @@ class LiveAgentArrayTests(unittest.TestCase):
         snapshot = self.client.read_agent_array()
         if snapshot is None:
             self.skipTest("The connected client has no active AgentContext.")
+        cache_started = time.perf_counter_ns()
         context = self.client.agent_array.read_context()
+        cache_elapsed_ms = (time.perf_counter_ns() - cache_started) / 1_000_000
         self.assertIsNotNone(context)
         assert context is not None
         self.assertEqual(context.GetAgentArray(), snapshot.GetAgentArray())
@@ -132,9 +135,17 @@ class LiveAgentArrayTests(unittest.TestCase):
         self.assertEqual(
             context.GetOwnedItemAgentArray(), snapshot.GetOwnedItemAgentArray()
         )
+        if context.GetAgentArray():
+            first_id = context.GetAgentArray()[0]
+            first_agent = context.GetAgentByID(first_id)
+            self.assertIsNotNone(first_agent)
+            assert first_agent is not None
+            self.assertEqual(int(first_agent.agent_id), first_id)
+            self.assertIs(context.GetAgentByID(first_id), first_agent)
         self.assertLessEqual(len(context.raw_agents), self.client.agent_array.max_pointer_slots)
         print(
             "Live AgentArray source view: "
+            f"cache_build={cache_elapsed_ms:.3f} ms, "
             f"all={len(context.GetAgentArray())}, "
             f"ally={len(context.GetAllyArray())}, "
             f"enemy={len(context.GetEnemyArray())}, "
@@ -184,7 +195,6 @@ class LiveAgentArrayTests(unittest.TestCase):
         first = snapshot.records[0]
         self.assertIs(self.client.get_living_agent(int(first.agent_id)), first)
         self.assertGreaterEqual(int(first.effects), 0)
-        self.assertEqual(len(first.corpse_exploit_signature), 18)
         print(
             "Live living snapshot: "
             f"generation={snapshot.generation}, records={snapshot.count}, "

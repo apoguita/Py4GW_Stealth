@@ -1,3 +1,4 @@
+from ..target_struct import TargetStruct
 from ctypes import Structure
 from typing import Any, Optional
 
@@ -5,7 +6,7 @@ from ..scanner import PatternCatalog, RemoteScanner
 from .gw_array import RemoteMemoryReader
 
 
-class GameplayContextStruct(Structure):
+class GameplayContextStruct(TargetStruct):
     h0000: Any
     mission_map_zoom: float
     unk: Any

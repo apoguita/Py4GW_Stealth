@@ -63,12 +63,19 @@ class LiveTradeContextTests(unittest.TestCase):
         self.assertIsNotNone(snapshot)
         if snapshot is None:
             return
-        self.assertLessEqual(len(snapshot.player_offer.items), 64)
-        self.assertLessEqual(len(snapshot.partner_offer.items), 64)
+        self.assertEqual(
+            len(snapshot.player_offer.offered_items),
+            snapshot.player_offer.items.m_size,
+        )
+        self.assertEqual(
+            len(snapshot.partner_offer.offered_items),
+            snapshot.partner_offer.items.m_size,
+        )
         print(
             "Live TradeContext: "
-            f"0x{address:08X}, player_items={len(snapshot.player_offer.items)}, "
-            f"partner_items={len(snapshot.partner_offer.items)}"
+            f"0x{address:08X}, "
+            f"player_items={len(snapshot.player_offer.offered_items)}, "
+            f"partner_items={len(snapshot.partner_offer.offered_items)}"
         )
 
 

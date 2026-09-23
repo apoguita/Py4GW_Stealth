@@ -10,10 +10,12 @@ normal bag reader.
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_uint8, c_uint16, c_uint32
 from enum import IntEnum
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 from ..scanner import PatternCatalog, RemoteScanner
 from .game_context import GameContext, GameContextStruct
@@ -23,10 +25,20 @@ from .gw_array import (
     GWArrayView,
     RemoteMemoryReader,
 )
+from .trade_context import TradeContext
+
+
+_MAX_ITEM_MODIFIER_READ_BYTES = 16 * 1024 * 1024
 
 
 class _memory_reader(RemoteMemoryReader, Protocol):
     """The byte-reading operation needed by item records."""
+
+
+# Native aliases over the same fixed-width GWArray header. The element type
+# differs in C++, but is not part of the header stored in the target process.
+ItemArray = GWArray
+MerchItemArray = GWArray
 
 
 def _read_encoded_wide(
@@ -84,42 +96,51 @@ _WEAPON_TYPES = frozenset({2, 5, 12, 15, 22, 24, 26, 27, 32, 35, 36})
 _ARMOR_TYPES = frozenset({4, 7, 13, 16, 19})
 
 
-class DyeInfoStruct(Structure):
+class DyeInfoStruct(TargetStruct):
     """The native three-byte dye record."""
 
     _pack_ = 1
     _fields_ = [
         ("dye_tint", c_uint8),
-        ("_dye12", c_uint8),
-        ("_dye34", c_uint8),
+        ("dye1", c_uint8, 4),
+        ("dye2", c_uint8, 4),
+        ("dye3", c_uint8, 4),
+        ("dye4", c_uint8, 4),
     ]
 
-    @property
-    def dye1(self) -> int:
-        """Return the first four-bit dye value."""
 
-        return int(self._dye12) & 0x0F
+class ItemDataStruct(TargetStruct):
+    """The native 0x10-byte item-context item data record.
 
-    @property
-    def dye2(self) -> int:
-        """Return the second four-bit dye value."""
+    This record is declared by ``GW::Context::item.h``. It intentionally lives
+    in this module even though AgentArray has a distinct source record with
+    the same C++ name and layout; keeping each context's declaration local
+    avoids making one context depend on another.
+    """
 
-        return (int(self._dye12) >> 4) & 0x0F
-
-    @property
-    def dye3(self) -> int:
-        """Return the third four-bit dye value."""
-
-        return int(self._dye34) & 0x0F
-
-    @property
-    def dye4(self) -> int:
-        """Return the fourth four-bit dye value."""
-
-        return (int(self._dye34) >> 4) & 0x0F
+    _pack_ = 1
+    _fields_ = [
+        ("model_file_id", c_uint32),
+        ("type", c_uint8),
+        ("dye", DyeInfoStruct),
+        ("value", c_uint32),
+        ("interaction", c_uint32),
+    ]
 
 
-class ItemModifierStruct(Structure):
+class MaterialCostStruct(TargetStruct):
+    """The native 0x10-byte material-cost record."""
+
+    _pack_ = 1
+    _fields_ = [
+        ("material", c_uint32),
+        ("amount", c_uint32),
+        ("h0008", c_uint32),
+        ("h000c", c_uint32),
+    ]
+
+
+class ItemModifierStruct(TargetStruct):
     """One native four-byte ``ItemModifier`` word.
 
     The native item stores modifiers indirectly as an array of these words.
@@ -237,7 +258,7 @@ class ItemModifierStruct(Structure):
     ToString = to_string
 
 
-class ItemStruct(Structure):
+class ItemStruct(TargetStruct):
     """The native fixed-width x86 ``Item`` record (0x54 bytes).
 
     Pointer fields remain target-process addresses.  In particular,
@@ -245,7 +266,7 @@ class ItemStruct(Structure):
     array of :class:`ItemModifierStruct` values.
     """
 
-    _pack_ = 1
+    _pack_ = 4
     _fields_ = [
         ("item_id", c_uint32),
         ("agent_id", c_uint32),
@@ -273,19 +294,23 @@ class ItemStruct(Structure):
         ("equipped", c_uint8),
         ("profession", c_uint8),
         ("slot", c_uint8),
-        ("h0051", c_uint8 * 3),
     ]
 
     _remote_reader: _memory_reader | None = None
     _remote_address: int | None = None
+    _trade_context: TradeContext | None = None
 
     def bind_reader(
-        self, reader: _memory_reader, address: int | None = None
+        self,
+        reader: _memory_reader,
+        address: int | None = None,
+        trade_context: TradeContext | None = None,
     ) -> ItemStruct:
-        """Attach the target address represented by this item snapshot."""
+        """Attach the target address and context readers for this item."""
 
         self._remote_reader = reader
         self._remote_address = address
+        self._trade_context = trade_context
         return self
 
     @property
@@ -356,7 +381,38 @@ class ItemStruct(Structure):
     def get_modifier(self, identifier: int) -> ItemModifierStruct | None:
         """Return the first modifier whose native identifier matches."""
 
-        for modifier in self.read_modifiers():
+        if self._remote_reader is None:
+            return None
+        address = self.modifier_address
+        count = int(self.mod_struct_size)
+        if address is None or count == 0:
+            return None
+        if address < 0x10000:
+            raise ValueError(
+                f"Item modifier array has an implausible address: 0x{address:08X}"
+            )
+
+        item_size = ctypes.sizeof(ItemModifierStruct)
+        byte_count = count * item_size
+        if byte_count > _MAX_ITEM_MODIFIER_READ_BYTES:
+            raise ValueError(
+                "Item modifier array exceeds the per-array read limit: "
+                f"count={count}, bytes={byte_count}"
+            )
+        if address + byte_count > 0x1_0000_0000:
+            raise ValueError(
+                "Item modifier array extends beyond the 32-bit target address space: "
+                f"address=0x{address:08X}, bytes={byte_count}"
+            )
+
+        raw = self._remote_reader.read(address, byte_count)
+        if len(raw) != byte_count:
+            raise OSError(
+                "Item modifier array read returned an unexpected byte count: "
+                f"address=0x{address:08X}, requested={byte_count}, received={len(raw)}"
+            )
+        for offset in range(0, byte_count, item_size):
+            modifier = ItemModifierStruct.from_buffer_copy(raw, offset)
             if modifier.identifier == int(identifier):
                 return modifier
         return None
@@ -667,54 +723,200 @@ class ItemStruct(Structure):
         bag = self._read_owner_bag()
         return bag is not None and (bag.is_storage_bag or bag.is_material_storage)
 
-    # Source-compatible method spellings retained for callers ported from the
-    # native/Reforged item surface.
-    GetIsZcoin = property(lambda self: self.is_zcoin)
-    GetIsMaterial = property(lambda self: self.is_material)
-    IsBlue = property(lambda self: self.is_blue)
-    IsPurple = property(lambda self: self.is_purple)
-    IsGreen = property(lambda self: self.is_green)
-    IsGold = property(lambda self: self.is_gold)
-    GetRarity = property(lambda self: self.rarity)
-    IsWeapon = property(lambda self: self.is_weapon)
-    IsArmor = property(lambda self: self.is_armor)
-    IsSalvagable = property(lambda self: self.is_salvagable)
-    IsInventoryItem = property(lambda self: self.is_inventory_item)
-    IsStorageItem = property(lambda self: self.is_storage_item)
-    GetUses = property(lambda self: self.uses)
-    IsTome = property(lambda self: self.is_tome)
-    IsIdentificationKit = property(lambda self: self.is_identification_kit)
-    IsLesserKit = property(lambda self: self.is_lesser_kit)
-    IsExpertSalvageKit = property(lambda self: self.is_expert_salvage_kit)
-    IsPerfectSalvageKit = property(lambda self: self.is_perfect_salvage_kit)
-    IsSalvageKit = property(lambda self: self.is_salvage_kit)
-    IsRareMaterial = property(lambda self: self.is_rare_material)
+    # Keep the native method names callable. The snake_case properties above
+    # are convenience spellings; these methods preserve the C++ call surface.
+    def GetIsStackable(self) -> bool:
+        """Return the native stackability flag."""
+
+        return self.is_stackable
+
+    def GetIsInscribable(self) -> bool:
+        """Return the native inscribability flag."""
+
+        return self.is_inscribable
+
+    def GetIsMaterial(self) -> bool:
+        """Return whether this item is a material other than ZCoins."""
+
+        return self.is_material
+
+    def GetIsZcoin(self) -> bool:
+        """Return whether this item is one of the native ZCoin models."""
+
+        return self.is_zcoin
+
+    def GetModifier(self, identifier: int) -> ItemModifierStruct | None:
+        """Return the first matching native modifier, if present."""
+
+        return self.get_modifier(identifier)
+
+    def IsSparkly(self) -> bool:
+        """Return the native sparkly flag result."""
+
+        return self.is_sparkly
+
+    def GetIsIdentified(self) -> bool:
+        """Return whether the native identified bit is set."""
+
+        return self.is_identified
+
+    def IsPrefixUpgradable(self) -> bool:
+        """Return whether the native prefix slot is upgradable."""
+
+        return self.is_prefix_upgradable
+
+    def IsSuffixUpgradable(self) -> bool:
+        """Return whether the native suffix slot is upgradable."""
+
+        return self.is_suffix_upgradable
+
+    def IsUsable(self) -> bool:
+        """Return whether the native usable bit is set."""
+
+        return self.is_usable
+
+    def IsTradable(self) -> bool:
+        """Return whether the item is not marked non-tradable."""
+
+        return self.is_tradable
+
+    def IsInscription(self) -> bool:
+        """Return whether the native inscription bit pattern matches."""
+
+        return self.is_inscription
+
+    def IsBlue(self) -> bool:
+        """Return the native blue-rarity result."""
+
+        return self.is_blue
+
+    def IsPurple(self) -> bool:
+        """Return whether the native purple bit is set."""
+
+        return self.is_purple
+
+    def IsGreen(self) -> bool:
+        """Return whether the native green bit is set."""
+
+        return self.is_green
+
+    def IsGold(self) -> bool:
+        """Return whether the native gold bit is set."""
+
+        return self.is_gold
+
+    def IsInventoryItem(self) -> bool:
+        """Return whether the owning bag is an inventory/equipped bag."""
+
+        return self.is_inventory_item
+
+    def IsStorageItem(self) -> bool:
+        """Return whether the owning bag is a storage bag."""
+
+        return self.is_storage_item
+
+    def GetUses(self) -> int:
+        """Return the native uses modifier value or stack quantity."""
+
+        return self.uses
+
+    def IsTome(self) -> bool:
+        """Return whether this item's tome modifier is in the native range."""
+
+        return self.is_tome
+
+    def IsIdentificationKit(self) -> bool:
+        """Return whether the identification-kit modifier matches."""
+
+        return self.is_identification_kit
+
+    def IsLesserKit(self) -> bool:
+        """Return whether the lesser salvage-kit modifier matches."""
+
+        return self.is_lesser_kit
+
+    def IsExpertSalvageKit(self) -> bool:
+        """Return whether the expert salvage-kit modifier matches."""
+
+        return self.is_expert_salvage_kit
+
+    def IsPerfectSalvageKit(self) -> bool:
+        """Return whether the perfect salvage-kit modifier matches."""
+
+        return self.is_perfect_salvage_kit
+
+    def IsSalvageKit(self) -> bool:
+        """Return whether any native salvage-kit classification matches."""
+
+        return self.is_salvage_kit
+
+    def IsRareMaterial(self) -> bool:
+        """Return whether the native rare-material modifier matches."""
+
+        return self.is_rare_material
+
+    def GetRarity(self) -> ItemRarity:
+        """Return rarity using native green/gold/purple/blue precedence."""
+
+        return self.rarity
+
+    def IsWeapon(self) -> bool:
+        """Return whether the item type is a native weapon type."""
+
+        return self.is_weapon
+
+    def IsArmor(self) -> bool:
+        """Return whether the item type is a native armor type."""
+
+        return self.is_armor
+
+    def IsSalvagable(self) -> bool:
+        """Return the native salvageability result."""
+
+        return self.is_salvagable
+
+    def IsOfferedInTrade(self) -> bool:
+        """Return whether the current client's player offer contains this item."""
+
+        if self._trade_context is None:
+            raise RuntimeError("Item snapshot is not bound to a TradeContext reader.")
+        trade_snapshot = self._trade_context.read()
+        return (
+            trade_snapshot is not None
+            and trade_snapshot.is_item_offered(int(self.item_id))
+        )
 
 
-class BagStruct(Structure):
+class BagStruct(TargetStruct):
     """The native fixed-width x86 ``Bag`` record (0x28 bytes)."""
 
     _pack_ = 1
     _fields_ = [
         ("bag_type", c_uint32),
         ("index", c_uint32),
-        ("unknown_0", c_uint32),
+        ("_unknown0", c_uint32),
         ("container_item", c_uint32),
         ("items_count", c_uint32),
         ("bag_array", c_uint32),
-        ("items_array", GWArray),
+        ("items", GWArray),
     ]
 
     _remote_reader: _memory_reader | None = None
     _remote_address: int | None = None
+    _trade_context: TradeContext | None = None
+    npos: ClassVar[int] = 0xFFFFFFFF
 
     def bind_reader(
-        self, reader: _memory_reader, address: int | None = None
+        self,
+        reader: _memory_reader,
+        address: int | None = None,
+        trade_context: TradeContext | None = None,
     ) -> BagStruct:
         """Attach the reader used by the nested item-pointer array."""
 
         self._remote_reader = reader
         self._remote_address = address
+        self._trade_context = trade_context
         return self
 
     @property
@@ -724,10 +926,31 @@ class BagStruct(Structure):
         return self._remote_address
 
     @property
+    def unknown_0(self) -> int:
+        """Compatibility spelling for the native ``_unknown0`` field."""
+
+        return int(self._unknown0)
+
+    @property
+    def items_array(self) -> GWArray:
+        """Compatibility alias for the native ``items`` array header."""
+
+        return self.items
+
+    @items_array.setter
+    def items_array(self, value: GWArray) -> None:
+        self.items = value
+
     def bag_id(self) -> int:
         """Return the native one-based bag index."""
 
         return int(self.index) + 1
+
+    @property
+    def bag_id_value(self) -> int:
+        """Return the one-based bag index as a Python-style property."""
+
+        return self.bag_id()
 
     @property
     def is_inventory_bag(self) -> bool:
@@ -752,30 +975,32 @@ class BagStruct(Structure):
 
         if self._remote_reader is None:
             raise RuntimeError("Bag snapshot is not bound to a reader.")
-        view = GWArrayView(self._remote_reader, self.items_array, ItemStruct)
+        view = GWArrayView(self._remote_reader, self.items, ItemStruct)
         if not view.valid() or index < 0 or index >= view.size():
             return None
         try:
             raw_pointer = self._remote_reader.read(
-                int(self.items_array.m_buffer) + index * 4, 4
+                int(self.items.m_buffer) + index * 4, 4
             )
         except (OSError, ValueError):
             return None
         pointer = int.from_bytes(raw_pointer, "little")
+        if pointer == 0:
+            return 0
         return pointer if pointer >= 0x10000 else None
 
     def item_at(self, index: int) -> ItemStruct | None:
         """Read one item slot, returning ``None`` for empty/stale slots."""
 
         pointer = self._item_pointer(index)
-        if pointer is None or self._remote_reader is None:
+        if pointer is None or pointer == 0 or self._remote_reader is None:
             return None
         try:
             raw_item = self._remote_reader.read(pointer, ctypes.sizeof(ItemStruct))
         except (OSError, ValueError):
             return None
         return ItemStruct.from_buffer_copy(raw_item).bind_reader(
-            self._remote_reader, pointer
+            self._remote_reader, pointer, self._trade_context
         )
 
     def items_with_slots(self, limit: int = 256) -> list[ItemStruct | None]:
@@ -783,7 +1008,7 @@ class BagStruct(Structure):
 
         if self._remote_reader is None:
             raise RuntimeError("Bag snapshot is not bound to a reader.")
-        view = GWArrayView(self._remote_reader, self.items_array, ItemStruct)
+        view = GWArrayView(self._remote_reader, self.items, ItemStruct)
         if not view.valid():
             return []
         return [
@@ -791,7 +1016,7 @@ class BagStruct(Structure):
             for index in range(min(view.size(), max(0, limit)))
         ]
 
-    def items(self, limit: int = 256) -> list[ItemStruct]:
+    def read_items(self, limit: int = 256) -> list[ItemStruct]:
         """Read at most ``limit`` item records from this bag."""
 
         return [
@@ -800,61 +1025,88 @@ class BagStruct(Structure):
             if value is not None
         ]
 
-    def find1(self, model_id: int, pos: int = 0) -> int | None:
+    def item_records(self, limit: int = 256) -> list[ItemStruct]:
+        """Readable alias for :meth:`read_items`."""
+
+        return self.read_items(limit)
+
+    def find1(self, model_id: int, pos: int = 0) -> int:
         """Find the first matching item slot, preserving native slot order."""
 
+        pos = int(pos) & 0xFFFFFFFF
         if self._remote_reader is None:
             raise RuntimeError("Bag snapshot is not bound to a reader.")
-        view = GWArrayView(self._remote_reader, self.items_array, ItemStruct)
+        view = GWArrayView(self._remote_reader, self.items, ItemStruct)
         if not view.valid():
-            return None
-        for index in range(max(0, pos), view.size()):
+            return self.npos
+        for index in range(pos, view.size()):
             pointer = self._item_pointer(index)
-            if pointer is None:
+            if pointer == 0:
                 if model_id == 0:
                     return index
+                continue
+            if pointer is None:
                 continue
             item = self.item_at(index)
             if item is not None and int(item.model_id) == model_id:
                 return index
-        return None
+        return self.npos
 
     def find_dye(
         self, model_id: int, dye: DyeInfoStruct, pos: int = 0
-    ) -> int | None:
+    ) -> int:
         """Find a model and exact packed-dye match in the item slots."""
 
+        pos = int(pos) & 0xFFFFFFFF
         if self._remote_reader is None:
             raise RuntimeError("Bag snapshot is not bound to a reader.")
-        view = GWArrayView(self._remote_reader, self.items_array, ItemStruct)
+        view = GWArrayView(self._remote_reader, self.items, ItemStruct)
         if not view.valid():
-            return None
-        for index in range(max(0, pos), view.size()):
+            return self.npos
+        for index in range(pos, view.size()):
             pointer = self._item_pointer(index)
-            if pointer is None:
+            if pointer == 0:
                 if model_id == 0:
                     return index
+                continue
+            if pointer is None:
                 continue
             item = self.item_at(index)
             if item is not None and int(item.model_id) == model_id and bytes(item.dye) == bytes(dye):
                 return index
-        return None
+        return self.npos
 
-    def find2(self, item: ItemStruct, pos: int = 0) -> int | None:
+    def find2(self, item: ItemStruct, pos: int = 0) -> int:
         """Find an item using the native dye-aware search rule."""
 
         if int(item.model_id) == 146:  # ItemID::Dye
             return self.find_dye(int(item.model_id), item.dye, pos)
         return self.find1(int(item.model_id), pos)
 
-    # Source-compatible method spellings retained for callers ported from the
-    # native/Reforged item surface.
-    IsInventoryBag = property(lambda self: self.is_inventory_bag)
-    IsStorageBag = property(lambda self: self.is_storage_bag)
-    IsMaterialStorage = property(lambda self: self.is_material_storage)
+    def IsInventoryBag(self) -> bool:
+        """Return whether the native bag type is inventory."""
+
+        return self.is_inventory_bag
+
+    def IsStorageBag(self) -> bool:
+        """Return whether the native bag type is storage."""
+
+        return self.is_storage_bag
+
+    def IsMaterialStorage(self) -> bool:
+        """Return whether the native bag type is material storage."""
+
+        return self.is_material_storage
 
 
-class InventoryStruct(Structure):
+class WeaponSetStruct(TargetStruct):
+    """The native 0x08-byte weapon/offhand pointer pair."""
+
+    _pack_ = 1
+    _fields_ = [("weapon", c_uint32), ("offhand", c_uint32)]
+
+
+class InventoryStruct(TargetStruct):
     """The native fixed-width x86 ``Inventory`` record (0x98 bytes)."""
 
     _pack_ = 1
@@ -862,7 +1114,7 @@ class InventoryStruct(Structure):
         ("bags", c_uint32 * 23),
         ("bundle", c_uint32),
         ("storage_panes_unlocked", c_uint32),
-        ("weapon_sets", c_uint32 * 8),
+        ("weapon_sets", WeaponSetStruct * 4),
         ("active_weapon_set", c_uint32),
         ("h0088", c_uint32 * 2),
         ("gold_character", c_uint32),
@@ -881,6 +1133,135 @@ class InventoryStruct(Structure):
         self._remote_address = address
         return self
 
+    def _bag_address(self, index: int) -> int:
+        """Return one bag pointer by its native array index."""
+
+        return int(self.bags[index])
+
+    @property
+    def unused_bag(self) -> int:
+        return self._bag_address(0)
+
+    @property
+    def backpack(self) -> int:
+        return self._bag_address(1)
+
+    @property
+    def belt_pouch(self) -> int:
+        return self._bag_address(2)
+
+    @property
+    def bag1(self) -> int:
+        return self._bag_address(3)
+
+    @property
+    def bag2(self) -> int:
+        return self._bag_address(4)
+
+    @property
+    def equipment_pack(self) -> int:
+        return self._bag_address(5)
+
+    @property
+    def material_storage(self) -> int:
+        return self._bag_address(6)
+
+    @property
+    def unclaimed_items(self) -> int:
+        return self._bag_address(7)
+
+    @property
+    def storage1(self) -> int:
+        return self._bag_address(8)
+
+    @property
+    def storage2(self) -> int:
+        return self._bag_address(9)
+
+    @property
+    def storage3(self) -> int:
+        return self._bag_address(10)
+
+    @property
+    def storage4(self) -> int:
+        return self._bag_address(11)
+
+    @property
+    def storage5(self) -> int:
+        return self._bag_address(12)
+
+    @property
+    def storage6(self) -> int:
+        return self._bag_address(13)
+
+    @property
+    def storage7(self) -> int:
+        return self._bag_address(14)
+
+    @property
+    def storage8(self) -> int:
+        return self._bag_address(15)
+
+    @property
+    def storage9(self) -> int:
+        return self._bag_address(16)
+
+    @property
+    def storage10(self) -> int:
+        return self._bag_address(17)
+
+    @property
+    def storage11(self) -> int:
+        return self._bag_address(18)
+
+    @property
+    def storage12(self) -> int:
+        return self._bag_address(19)
+
+    @property
+    def storage13(self) -> int:
+        return self._bag_address(20)
+
+    @property
+    def storage14(self) -> int:
+        return self._bag_address(21)
+
+    @property
+    def equipped_items(self) -> int:
+        return self._bag_address(22)
+
+    @property
+    def weapon_set0(self) -> int:
+        return int(self.weapon_sets[0].weapon)
+
+    @property
+    def offhand_set0(self) -> int:
+        return int(self.weapon_sets[0].offhand)
+
+    @property
+    def weapon_set1(self) -> int:
+        return int(self.weapon_sets[1].weapon)
+
+    @property
+    def offhand_set1(self) -> int:
+        return int(self.weapon_sets[1].offhand)
+
+    @property
+    def weapon_set2(self) -> int:
+        return int(self.weapon_sets[2].weapon)
+
+    @property
+    def offhand_set2(self) -> int:
+        return int(self.weapon_sets[2].offhand)
+
+    @property
+    def weapon_set3(self) -> int:
+        return int(self.weapon_sets[3].weapon)
+
+    @property
+    def offhand_set3(self) -> int:
+        return int(self.weapon_sets[3].offhand)
+
     @property
     def bag_addresses(self) -> list[int]:
         """Return non-null inventory bag addresses."""
@@ -891,7 +1272,12 @@ class InventoryStruct(Structure):
     def weapon_set_addresses(self) -> list[int]:
         """Return the eight weapon/offhand item addresses."""
 
-        return [int(address) for address in self.weapon_sets if int(address)]
+        return [
+            int(address)
+            for weapon_set in self.weapon_sets
+            for address in (weapon_set.weapon, weapon_set.offhand)
+            if int(address)
+        ]
 
     @property
     def inventory_bag_addresses(self) -> list[int]:
@@ -953,7 +1339,7 @@ class InventoryStruct(Structure):
         ]
 
 
-class ItemFormulaStruct(Structure):
+class ItemFormulaStruct(TargetStruct):
     """The native 0x14 item-formula record.
 
     The material-cost pointer is retained as a target address.  The native
@@ -978,7 +1364,7 @@ class ItemFormulaStruct(Structure):
         return address or None
 
 
-class PvPItemUpgradeInfoStruct(Structure):
+class PvPItemUpgradeInfoStruct(TargetStruct):
     """The native 0x28 unlocked-PvP-upgrade record."""
 
     _pack_ = 1
@@ -1003,14 +1389,14 @@ class PvPItemUpgradeInfoStruct(Structure):
         return address or None
 
 
-class PvPItemInfoStruct(Structure):
+class PvPItemInfoStruct(TargetStruct):
     """The native 0x24 PvP-item metadata record."""
 
     _pack_ = 1
-    _fields_ = [("unknown", c_uint32 * 9)]
+    _fields_ = [("unk", c_uint32 * 9)]
 
 
-class CompositeModelInfoStruct(Structure):
+class CompositeModelInfoStruct(TargetStruct):
     """The native 0x30 composite-model lookup record."""
 
     _pack_ = 1
@@ -1026,20 +1412,51 @@ class CompositeModelInfoStruct(Structure):
         return [int(file_id) for file_id in self.file_ids]
 
 
-class ItemContextStruct(Structure):
+class SalvageSessionInfoStruct(TargetStruct):
+    """The native 0x24-byte salvage-session record layout."""
+
+    _pack_ = 1
+    _fields_ = [
+        ("vtable", c_uint32),
+        ("frame_id", c_uint32),
+        ("item_id", c_uint32),
+        ("salvagable_1", c_uint32),
+        ("salvagable_2", c_uint32),
+        ("salvagable_3", c_uint32),
+        ("chosen_salvagable", c_uint32),
+        ("h001c", c_uint32),
+        ("kit_id", c_uint32),
+    ]
+
+
+class ItemClickParamStruct(TargetStruct):
+    """The native 0x0C-byte item-click parameter record."""
+
+    _pack_ = 1
+    _fields_ = [("unk0", c_uint32), ("slot", c_uint32), ("type", c_uint32)]
+
+
+class InventoryTableEntryStruct(TargetStruct):
+    """The native 0x0C-byte inventory-table entry header."""
+
+    _pack_ = 1
+    _fields_ = [("stride", c_uint32), ("end", c_uint32), ("start", c_uint32)]
+
+
+class ItemContextStruct(TargetStruct):
     """The maintained fixed-width x86 0x10C item-context layout."""
 
     _pack_ = 1
     _fields_ = [
-        ("h0000_array", GWArray),
-        ("h0010_array", GWArray),
+        ("h0000", GWArray),
+        ("h0010", GWArray),
         ("h0020", c_uint32),
         ("bags_array", GWArray),
         ("h0034", c_uint32),
         ("h0038", c_uint32),
         ("h003C", c_uint32),
-        ("h0040_array", GWArray),
-        ("h0050_array", GWArray),
+        ("h0040", GWArray),
+        ("h0050", GWArray),
         ("h0060", c_uint32),
         ("h0064", c_uint32),
         ("h0068", c_uint32),
@@ -1072,20 +1489,25 @@ class ItemContextStruct(Structure):
         ("h00E0", c_uint32),
         ("inventory_table", GWArray),
         ("h00F4", c_uint32),
-        ("inventory_ptr", c_uint32),
-        ("h00FC_array", GWArray),
+        ("inventory", c_uint32),
+        ("h00FC", GWArray),
     ]
 
     _remote_address: int | None = None
     _remote_reader: _memory_reader | None = None
+    _trade_context: TradeContext | None = None
 
     def bind_reader(
-        self, reader: _memory_reader, address: int | None = None
+        self,
+        reader: _memory_reader,
+        address: int | None = None,
+        trade_context: TradeContext | None = None,
     ) -> ItemContextStruct:
         """Attach the target address represented by this root snapshot."""
 
         self._remote_reader = reader
         self._remote_address = address
+        self._trade_context = trade_context
         return self
 
     @property
@@ -1093,6 +1515,12 @@ class ItemContextStruct(Structure):
         """Return the target address represented by this snapshot."""
 
         return self._remote_address
+
+    @property
+    def inventory_ptr(self) -> int:
+        """Compatibility spelling for the native ``inventory`` pointer."""
+
+        return int(self.inventory)
 
     @property
     def array_sizes(self) -> dict[str, int]:
@@ -1114,9 +1542,13 @@ class ItemContextStruct(Structure):
         if not view.valid():
             return []
         return [
-            value
+            value.bind_reader(
+                self._remote_reader,
+                value.address,
+                self._trade_context,
+            )
             for index in range(min(view.size(), max(0, limit)))
-            if (value := view.get(index)) is not None
+            if isinstance((value := view.get(index)), BagStruct)
         ]
 
     def global_items(self, limit: int = 256) -> list[ItemStruct]:
@@ -1133,9 +1565,13 @@ class ItemContextStruct(Structure):
         if not view.valid():
             return []
         return [
-            value
+            value.bind_reader(
+                self._remote_reader,
+                value.address,
+                self._trade_context,
+            )
             for index in range(min(view.size(), max(0, limit)))
-            if (value := view.get(index)) is not None
+            if isinstance((value := view.get(index)), ItemStruct)
         ]
 
     def read_inventory(self) -> InventoryStruct | None:
@@ -1143,7 +1579,7 @@ class ItemContextStruct(Structure):
 
         if self._remote_reader is None:
             raise RuntimeError("ItemContext snapshot is not bound to a reader.")
-        address = int(self.inventory_ptr)
+        address = int(self.inventory)
         if address < 0x10000:
             return None
         raw_inventory = self._remote_reader.read(
@@ -1163,16 +1599,21 @@ assert ctypes.sizeof(ItemFormulaStruct) == 0x14
 assert ctypes.sizeof(PvPItemUpgradeInfoStruct) == 0x28
 assert ctypes.sizeof(PvPItemInfoStruct) == 0x24
 assert ctypes.sizeof(CompositeModelInfoStruct) == 0x30
+assert ctypes.sizeof(MaterialCostStruct) == 0x10
+assert ctypes.sizeof(WeaponSetStruct) == 0x08
+assert ctypes.sizeof(SalvageSessionInfoStruct) == 0x24
+assert ctypes.sizeof(ItemClickParamStruct) == 0x0C
+assert ctypes.sizeof(InventoryTableEntryStruct) == 0x0C
 assert ItemStruct.mod_struct.offset == 0x10
 assert ItemStruct.mod_struct_size.offset == 0x14
 assert ItemStruct.dye.offset == 0x21
 assert ItemStruct.interaction.offset == 0x28
 assert ItemStruct.quantity.offset == 0x4C
-assert BagStruct.items_array.offset == 0x18
+assert BagStruct.items.offset == 0x18
 assert ItemContextStruct.bags_array.offset == 0x24
 assert ItemContextStruct.item_array.offset == 0xB8
 assert ItemContextStruct.inventory_table.offset == 0xE4
-assert ItemContextStruct.inventory_ptr.offset == 0xF8
+assert ItemContextStruct.inventory.offset == 0xF8
 
 
 class ItemContext:
@@ -1206,6 +1647,7 @@ class ItemContext:
 
         self._reader = reader
         self._game_context = game_context
+        self._trade_context = TradeContext(reader, game_context)
         self._scanner = scanner
         self._patterns = patterns
         self._auxiliary_addresses: dict[str, int] = {}
@@ -1330,6 +1772,23 @@ class ItemContext:
             values.append(ItemFormulaStruct.from_buffer_copy(raw_value))
         return values
 
+    def get_item_formula_count(self) -> int:
+        """Return the count reported by the native ``GetItemFormulaCount``.
+
+        The native helper returns the count associated with the item-formula
+        pointer. Stealth resolves and caches both values during initialization;
+        if that optional resolver is unavailable, its initial value is zero,
+        matching the native global's startup value.
+        """
+
+        self._ensure_auxiliary_initialized()
+        return int(self._auxiliary_addresses.get("item_formulas_count", 0))
+
+    def GetItemFormulaCount(self) -> int:
+        """Expose the native helper spelling for directly ported callers."""
+
+        return self.get_item_formula_count()
+
     def read_item_formula(self, index: int) -> ItemFormulaStruct | None:
         """Read one item formula by its native zero-based index."""
 
@@ -1416,7 +1875,7 @@ class ItemContext:
             return None
         raw_context = self._reader.read(address, ctypes.sizeof(ItemContextStruct))
         return ItemContextStruct.from_buffer_copy(raw_context).bind_reader(
-            self._reader, address
+            self._reader, address, self._trade_context
         )
 
 

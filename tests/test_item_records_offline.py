@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import unittest
+from typing import cast
 
 from py4gw import (
     BagStruct,
@@ -14,6 +15,7 @@ from py4gw import (
     ItemModifierStruct,
     ItemRarity,
     ItemStruct,
+    TradeContext,
 )
 
 
@@ -37,6 +39,19 @@ class _Memory:
         raise OSError(f"unmapped test address 0x{address:08X}")
 
 
+class _TradeLookup:
+    """Stand in for the source trade-context item lookup."""
+
+    def __init__(self, offered_ids: set[int]) -> None:
+        self.offered_ids = offered_ids
+
+    def is_item_offered(self, item_id: int) -> bool:
+        return item_id in self.offered_ids
+
+    def read(self) -> _TradeLookup:
+        return self
+
+
 class ItemRecordOfflineTests(unittest.TestCase):
     """Keep item records fixed-width and lazily traversed."""
 
@@ -51,15 +66,17 @@ class ItemRecordOfflineTests(unittest.TestCase):
         self.assertEqual(ItemStruct.mod_struct.offset, 0x10)
         self.assertEqual(ItemStruct.mod_struct_size.offset, 0x14)
         self.assertEqual(ItemStruct.quantity.offset, 0x4C)
-        self.assertEqual(BagStruct.items_array.offset, 0x18)
+        self.assertEqual(BagStruct.items.offset, 0x18)
 
     def test_dye_nibbles_are_decoded_without_remote_reads(self) -> None:
         """The native packed dye bytes remain local fields."""
 
         dye = DyeInfoStruct()
         dye.dye_tint = 7
-        dye._dye12 = 0xA3
-        dye._dye34 = 0x5C
+        dye.dye1 = 3
+        dye.dye2 = 10
+        dye.dye3 = 12
+        dye.dye4 = 5
         self.assertEqual((dye.dye_tint, dye.dye1, dye.dye2), (7, 3, 10))
         self.assertEqual((dye.dye3, dye.dye4), (12, 5))
 
@@ -96,14 +113,20 @@ class ItemRecordOfflineTests(unittest.TestCase):
 
         context = ItemContextStruct()
         context.bags_array = GWArray(0x00200000, 1, 1, 0)
-        context.bind_reader(memory, 0x00100000)
+        context.bind_reader(
+            memory,
+            0x00100000,
+            cast(TradeContext, _TradeLookup({101})),
+        )
 
         bags = context.bags()
         self.assertEqual(len(bags), 1)
-        items = bags[0].items()
+        items = bags[0].read_items()
         self.assertEqual([item.item_id for item in items], [101, 102])
         self.assertEqual(items[0].modifier_address, 0x00500000)
         self.assertEqual(items[0].modifier_count, 2)
+        self.assertTrue(items[0].IsOfferedInTrade())
+        self.assertFalse(items[1].IsOfferedInTrade())
         self.assertNotIn((0x00500000, 4), memory.reads)
 
     def test_modifier_words_match_native_bit_rules(self) -> None:
@@ -136,6 +159,24 @@ class ItemRecordOfflineTests(unittest.TestCase):
         self.assertIsNotNone(item.get_modifier(0x2458))
         self.assertIsNone(item.get_modifier(0x9999))
 
+    def test_source_modifier_lookup_checks_the_full_advertised_count(self) -> None:
+        """GetModifier does not silently stop at the convenience-view limit."""
+
+        memory = _Memory()
+        modifiers = [ItemModifierStruct() for _ in range(70)]
+        modifiers[-1].mod = 0x76540123
+        memory.add(0x00500000, b"".join(bytes(modifier) for modifier in modifiers))
+        item = ItemStruct()
+        item.mod_struct = 0x00500000
+        item.mod_struct_size = len(modifiers)
+        item.bind_reader(memory, 0x00400000)
+
+        found = item.GetModifier(0x7654)
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.identifier, 0x7654)
+
     def test_source_item_properties_use_local_fields_and_bounded_names(self) -> None:
         """Source-backed classification and name reads stay at the item boundary."""
 
@@ -163,6 +204,64 @@ class ItemRecordOfflineTests(unittest.TestCase):
         self.assertEqual(item.name_str, "Axe")
         self.assertEqual(item.info_string_str, "Weapon")
 
+    def test_native_item_helpers_are_callable_methods(self) -> None:
+        """The source's Item methods keep method-call behavior in Python."""
+
+        item = ItemStruct()
+        item.quantity = 7
+        item.type = 11
+        item.interaction = 0x08000000 | 0x00080000 | 1
+
+        self.assertTrue(item.GetIsStackable())
+        self.assertTrue(item.GetIsInscribable())
+        self.assertTrue(item.GetIsIdentified())
+        self.assertTrue(item.GetIsMaterial())
+        self.assertFalse(item.GetIsZcoin())
+        self.assertEqual(item.GetUses(), 7)
+        self.assertEqual(item.GetRarity(), ItemRarity.white)
+        self.assertTrue(item.IsSparkly())
+        self.assertTrue(item.IsPrefixUpgradable())
+        self.assertTrue(item.IsSuffixUpgradable())
+        self.assertTrue(item.IsTradable())
+        self.assertIsNone(item.GetModifier(0x2458))
+
+        source_method_names = (
+            "GetIsStackable",
+            "GetIsInscribable",
+            "GetIsMaterial",
+            "GetIsZcoin",
+            "GetModifier",
+            "IsSparkly",
+            "GetIsIdentified",
+            "IsPrefixUpgradable",
+            "IsSuffixUpgradable",
+            "IsUsable",
+            "IsTradable",
+            "IsInscription",
+            "IsBlue",
+            "IsPurple",
+            "IsGreen",
+            "IsGold",
+            "IsInventoryItem",
+            "IsStorageItem",
+            "GetUses",
+            "IsTome",
+            "IsIdentificationKit",
+            "IsLesserKit",
+            "IsExpertSalvageKit",
+            "IsPerfectSalvageKit",
+            "IsSalvageKit",
+            "IsRareMaterial",
+            "GetRarity",
+            "IsWeapon",
+            "IsArmor",
+            "IsSalvagable",
+            "IsOfferedInTrade",
+        )
+        self.assertTrue(all(callable(getattr(item, name)) for name in source_method_names))
+        with self.assertRaisesRegex(RuntimeError, "TradeContext reader"):
+            item.IsOfferedInTrade()
+
     def test_bag_predicates_and_search_preserve_empty_slots(self) -> None:
         """Bag helpers retain native slot indexes, including empty slots."""
 
@@ -184,12 +283,46 @@ class ItemRecordOfflineTests(unittest.TestCase):
         bag.bind_reader(memory, 0x00200000)
 
         self.assertTrue(bag.is_inventory_bag)
+        self.assertTrue(bag.IsInventoryBag())
+        self.assertEqual(bag.bag_id(), 1)
         self.assertEqual(bag.find1(0), 0)
         self.assertEqual(bag.find1(9002), 2)
+        self.assertEqual(bag.find1(123456), BagStruct.npos)
+        self.assertEqual(bag.find1(9001, -1), BagStruct.npos)
         self.assertEqual(
             [item is None for item in bag.items_with_slots()], [True, False, False]
         )
-        self.assertEqual([item.model_id for item in bag.items()], [9001, 9002])
+        self.assertEqual([item.model_id for item in bag.read_items()], [9001, 9002])
+
+    def test_bag_dye_search_matches_native_packed_dye_rule(self) -> None:
+        """find2 selects find_dye only for the native dye model identifier."""
+
+        memory = _Memory()
+        dye_item = ItemStruct()
+        dye_item.model_id = 146
+        dye_item.dye.dye_tint = 3
+        dye_item.dye.dye1 = 1
+        dye_item.dye.dye2 = 2
+        dye_item.dye.dye3 = 3
+        dye_item.dye.dye4 = 4
+        other_item = ItemStruct()
+        other_item.model_id = 9001
+        memory.add(
+            0x00300000,
+            (0x00400000).to_bytes(4, "little")
+            + (0x00400054).to_bytes(4, "little"),
+        )
+        memory.add(0x00400000, bytes(dye_item) + bytes(other_item))
+        bag = BagStruct().bind_reader(memory, 0x00200000)
+        bag.items = GWArray(0x00300000, 2, 2, 0)
+
+        self.assertEqual(bag.find_dye(146, dye_item.dye), 0)
+        self.assertEqual(bag.find2(dye_item), 0)
+        self.assertEqual(bag.find2(other_item), 1)
+
+        mismatched_dye = DyeInfoStruct()
+        mismatched_dye.dye_tint = 4
+        self.assertEqual(bag.find_dye(146, mismatched_dye), BagStruct.npos)
 
 
 if __name__ == "__main__":

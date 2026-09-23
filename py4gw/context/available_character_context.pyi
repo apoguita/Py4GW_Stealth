@@ -1,3 +1,4 @@
+from ..target_struct import TargetStruct
 from ctypes import Structure
 from typing import Any, Optional
 
@@ -5,7 +6,7 @@ from ..scanner import PatternCatalog, RemoteScanner
 from .gw_array import GWArray, RemoteMemoryReader
 
 
-class AvailableCharacterInfoStruct(Structure):
+class AvailableCharacterInfoStruct(TargetStruct):
     h0000: Any
     uuid_ptr: Any
     player_name_enc: Any
@@ -48,7 +49,7 @@ class AvailableCharacterInfoStruct(Structure):
 AvailableCharacterStruct = AvailableCharacterInfoStruct
 
 
-class AvailableCharacterArrayStruct(Structure):
+class AvailableCharacterArrayStruct(TargetStruct):
     available_characters_array: GWArray
 
     def bind_reader(self, reader: RemoteMemoryReader) -> AvailableCharacterArrayStruct: ...

@@ -8,6 +8,8 @@ array concepts while making that boundary explicit.
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_uint32
 from typing import Any, Protocol
@@ -19,7 +21,7 @@ class RemoteMemoryReader(Protocol):
     def read(self, address: int, size: int) -> bytes: ...
 
 
-class GWBaseArray(Structure):
+class GWBaseArray(TargetStruct):
     """The 32-bit ``GW::BaseArray`` layout used by the target process."""
 
     _pack_ = 1
@@ -30,7 +32,7 @@ class GWBaseArray(Structure):
     ]
 
 
-class GWArray(Structure):
+class GWArray(TargetStruct):
     """The 32-bit ``GW::Array`` layout used by the target process."""
 
     _pack_ = 1

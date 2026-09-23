@@ -31,7 +31,15 @@ class ChatBufferOfflineTests(unittest.TestCase):
 
         self.assertEqual(ctypes.sizeof(ChatMessageStruct), 0x10)
         self.assertEqual(ctypes.sizeof(ChatBufferStruct), 0x80C)
-        self.assertEqual(ChatBufferStruct.message_pointers.offset, 0x0C)
+        self.assertEqual(
+            [field[0] for field in ChatMessageStruct._fields_],
+            ["channel", "unk1", "timestamp", "message"],
+        )
+        self.assertEqual(
+            [field[0] for field in ChatBufferStruct._fields_],
+            ["next", "unk1", "unk2", "messages"],
+        )
+        self.assertEqual(ChatBufferStruct.messages.offset, 0x0C)
 
     def test_decodes_bounded_message_payload(self) -> None:
         """A remote message header and raw UTF-16 payload read correctly."""
@@ -39,8 +47,8 @@ class ChatBufferOfflineTests(unittest.TestCase):
         address = 0x20000
         message = ChatMessageStruct()
         message.channel = 7
-        message.timestamp_low = 123
-        message.timestamp_high = 456
+        message.timestamp.dwLowDateTime = 123
+        message.timestamp.dwHighDateTime = 456
         raw_header = bytes(message)
         payload = "Hello external reader\x00".encode("utf-16-le")
         reader = _FakeReader({address: raw_header + payload + b"\x00" * 1024})
@@ -85,12 +93,12 @@ class ChatBufferOfflineTests(unittest.TestCase):
         message = ChatMessageStruct()
         raw_header = bytes(message)
         root = ChatBufferStruct()
-        root.message_pointers[0] = address
-        root.message_pointers[1] = address
+        root.messages[0] = address
+        root.messages[1] = address
         reader = _FakeReader({address: raw_header + b"\x00" * 1024})
         root.bind_reader(reader, max_message_count=1)
 
-        self.assertEqual(len(root.messages), 1)
+        self.assertEqual(len(root.message_records), 1)
 
 
 if __name__ == "__main__":

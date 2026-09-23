@@ -1,3 +1,4 @@
+from ..target_struct import TargetStruct
 from ctypes import Structure
 from typing import Optional
 
@@ -5,7 +6,7 @@ from ..scanner import PatternCatalog, RemoteScanner
 from .gw_array import RemoteMemoryReader
 
 
-class ServerRegionStruct(Structure):
+class ServerRegionStruct(TargetStruct):
     region_id: int
 
 

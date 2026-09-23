@@ -8,6 +8,8 @@ the layout can be decoded from bytes read from another process.
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_float, c_int32, c_uint8, c_uint16, c_uint32
 from typing import TYPE_CHECKING, Any, Protocol, cast
@@ -23,7 +25,7 @@ class _memory_reader(RemoteMemoryReader, Protocol):
     """The byte-reading operation needed by the external context reader."""
 
 
-class ObserverMatchFlags(Structure):
+class ObserverMatchFlags(TargetStruct):
     """The maintained Reforged observer-match flag layout."""
 
     _pack_ = 1
@@ -45,7 +47,7 @@ class ObserverMatchFlags(Structure):
     ]
 
 
-class ObserverMatch(Structure):
+class ObserverMatch(TargetStruct):
     """The maintained Reforged observer-match layout."""
 
     _pack_ = 1
@@ -111,7 +113,7 @@ class ObserverMatch(Structure):
         return _format_encoded_text(encoded) if encoded is not None else None
 
 
-class ProgressBar(Structure):
+class ProgressBar(TargetStruct):
     """The maintained Reforged progress-bar layout."""
 
     _pack_ = 1
@@ -148,7 +150,7 @@ def _format_encoded_text(value: str) -> str:
     return "".join(output)
 
 
-class CharContextStruct(Structure):
+class CharContextStruct(TargetStruct):
     """The complete fixed-width port of Reforged ``CharContextStruct``.
 
     Pointer fields are stored as ``uint32`` target addresses. They are not

@@ -7,6 +7,8 @@ The Reforged Python name is ``AccAgentContext`` while the native root is
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_float, c_uint8, c_uint32
 from typing import Any, Protocol, TypeVar, cast
@@ -22,11 +24,13 @@ class _memory_reader(RemoteMemoryReader, Protocol):
 _value_type = TypeVar("_value_type")
 
 
-def _read_encoded_wide(reader: _memory_reader, address: int, limit: int = 256) -> str:
+def _read_encoded_wide(
+    reader: _memory_reader, address: int, limit: int = 256
+) -> str | None:
     """Read one bounded target UTF-16 string through an x86 pointer."""
 
     if address < 0x10000:
-        return ""
+        return None
     raw = bytearray()
     for index in range(limit):
         pair = reader.read(address + index * 2, 2)
@@ -53,14 +57,14 @@ def _format_encoded_text(value: str) -> str:
     return "".join(output)
 
 
-class Vec3fStruct(Structure):
+class Vec3fStruct(TargetStruct):
     """The native three-float vector used by ``AgentMovement``."""
 
     _pack_ = 1
     _fields_ = [("x", c_float), ("y", c_float), ("z", c_float)]
 
 
-class AgentSummaryInfoSubStruct(Structure):
+class AgentSummaryInfoSubStruct(TargetStruct):
     """The native 0x1C gadget-summary extension record."""
 
     _pack_ = 1
@@ -100,7 +104,7 @@ class AgentSummaryInfoSubStruct(Structure):
         return _format_encoded_text(encoded) if encoded else None
 
 
-class AgentSummaryInfoStruct(Structure):
+class AgentSummaryInfoStruct(TargetStruct):
     """The native 0x0C agent-summary record."""
 
     _pack_ = 1
@@ -137,7 +141,7 @@ class AgentSummaryInfoStruct(Structure):
         )
 
 
-class AgentMovementStruct(Structure):
+class AgentMovementStruct(TargetStruct):
     """The native 0x80 movement record."""
 
     _pack_ = 1
@@ -163,7 +167,17 @@ class AgentMovementStruct(Structure):
         return int(self.agent_def)
 
 
-class AccAgentContextStruct(Structure):
+class AgentInfoStruct(TargetStruct):
+    """The native-only 0x38 agent-information record from ``agent.h``."""
+
+    _pack_ = 1
+    _fields_ = [
+        ("h0000", c_uint32 * 13),
+        ("name_enc", c_uint32),
+    ]
+
+
+class AccAgentContextStruct(TargetStruct):
     """The complete maintained native ``AgentContext`` layout."""
 
     _pack_ = 1
@@ -197,6 +211,60 @@ class AccAgentContextStruct(Structure):
         ("instance_timer", c_uint32),
     ]
 
+    @property
+    def h0000(self) -> GWArray:
+        """Return the native array-field spelling."""
+
+        return self.h0000_array
+
+    @property
+    def h0084(self) -> GWArray:
+        """Return the native array-field spelling."""
+
+        return self.h0084_array
+
+    @property
+    def agent_summary_info(self) -> GWArray:
+        """Return the native array-field spelling."""
+
+        return self.agent_summary_info_array
+
+    @property
+    def h00A8(self) -> GWArray:
+        """Return the native array-field spelling."""
+
+        return self.h00A8_array
+
+    @property
+    def h00B8(self) -> GWArray:
+        """Return the native array-field spelling."""
+
+        return self.h00B8_array
+
+    @property
+    def agent_movement(self) -> GWArray:
+        """Return the native array-field spelling."""
+
+        return self.agent_movement_array
+
+    @property
+    def h00F8(self) -> GWArray:
+        """Return the native array-field spelling."""
+
+        return self.h00F8_array
+
+    @property
+    def agent_array1(self) -> GWArray:
+        """Return the native array-field spelling."""
+
+        return self.h014C_array
+
+    @property
+    def agent_async_movement(self) -> GWArray:
+        """Return the native array-field spelling."""
+
+        return self.h015C_array
+
     _remote_reader: _memory_reader | None = None
     _remote_address: int | None = None
 
@@ -222,38 +290,41 @@ class AccAgentContextStruct(Structure):
 
     def _values(
         self, array: GWArray, element_type: type[_value_type]
-    ) -> list[_value_type] | None:
-        """Read a source-style array, preserving an empty-array result."""
+    ) -> list[_value_type]:
+        """Read a source-style array as a list, including an empty list."""
 
         if not array.m_buffer or not array.m_size:
-            return None
+            return []
         if array.m_size > array.m_capacity:
-            return None
+            return []
         return list(GWArrayValueView(self._require_reader(), array, element_type))
 
-    def _pointer_values(self, array: GWArray) -> list[int] | None:
+    def _pointer_values(self, array: GWArray) -> list[int]:
         values = self._values(array, c_uint32)
-        return [int(cast(Any, value)) for value in values] if values is not None else None
+        return [int(cast(Any, value)) for value in values]
 
     @property
-    def h0000_ptrs(self) -> list[int] | None:
+    def h0000_ptrs(self) -> list[int]:
         return self._pointer_values(self.h0000_array)
 
     @property
-    def h0084_ptrs(self) -> list[int] | None:
+    def h0084_ptrs(self) -> list[int]:
         return self._pointer_values(self.h0084_array)
 
     @property
-    def agent_summary_info_list(self) -> list[AgentSummaryInfoStruct] | None:
+    def agent_summary_info_list(self) -> list[AgentSummaryInfoStruct]:
         values = self._values(self.agent_summary_info_array, AgentSummaryInfoStruct)
-        return cast(list[AgentSummaryInfoStruct], values) if values is not None else None
+        return [
+            cast(AgentSummaryInfoStruct, value).bind_reader(self._require_reader())
+            for value in values
+        ]
 
     @property
-    def h00A8_ptrs(self) -> list[int] | None:
+    def h00A8_ptrs(self) -> list[int]:
         return self._pointer_values(self.h00A8_array)
 
     @property
-    def h00B8_ptrs(self) -> list[int] | None:
+    def h00B8_ptrs(self) -> list[int]:
         return self._pointer_values(self.h00B8_array)
 
     @property
@@ -284,20 +355,18 @@ class AccAgentContextStruct(Structure):
         """Return indexes whose movement pointers are currently non-null."""
 
         pointers = self._pointer_values(self.agent_movement_array)
-        if pointers is None:
-            return []
-        return [index for index, pointer in enumerate(pointers) if pointer >= 0x10000]
+        return [index for index, pointer in enumerate(pointers) if pointer]
 
     @property
-    def h00F8_ptrs(self) -> list[int] | None:
+    def h00F8_ptrs(self) -> list[int]:
         return self._pointer_values(self.h00F8_array)
 
     @property
-    def h014C_ptrs(self) -> list[int] | None:
+    def h014C_ptrs(self) -> list[int]:
         return self._pointer_values(self.h014C_array)
 
     @property
-    def h015C_ptrs(self) -> list[int] | None:
+    def h015C_ptrs(self) -> list[int]:
         return self._pointer_values(self.h015C_array)
 
 
@@ -305,6 +374,7 @@ assert ctypes.sizeof(Vec3fStruct) == 0x0C
 assert ctypes.sizeof(AgentSummaryInfoSubStruct) == 0x1C
 assert ctypes.sizeof(AgentSummaryInfoStruct) == 0x0C
 assert ctypes.sizeof(AgentMovementStruct) == 0x80
+assert ctypes.sizeof(AgentInfoStruct) == 0x38
 assert ctypes.sizeof(AccAgentContextStruct) == 0x1B0
 assert AccAgentContextStruct.agent_summary_info_array.offset == 0x98
 assert AccAgentContextStruct.agent_movement_array.offset == 0xE8
@@ -316,11 +386,62 @@ assert AccAgentContextStruct.instance_timer.offset == 0x1AC
 class AccAgentContext:
     """Resolve and read the current native agent context."""
 
+    _ptr: int = 0
+    _cached_ctx: AccAgentContextStruct | None = None
+    _callback_name = "AccAgentContext.UpdatePtr"
+
     def __init__(self, reader: _memory_reader, game_context: GameContext) -> None:
         """Create a reader using the connected client's cached GameContext."""
 
         self._reader = reader
         self._game_context = game_context
+
+    @staticmethod
+    def get_ptr() -> int:
+        """Return the last externally refreshed AgentContext address."""
+
+        return AccAgentContext._ptr
+
+    @staticmethod
+    def _update_ptr() -> None:
+        """Refresh the source-compatible facade from the selected client."""
+
+        from ..client import current_client
+
+        client = current_client()
+        if client is None:
+            AccAgentContext._ptr = 0
+            AccAgentContext._cached_ctx = None
+            return
+        try:
+            context = client.acc_agent_context
+            address = context.resolve_address()
+            AccAgentContext._ptr = address or 0
+            AccAgentContext._cached_ctx = cast(Any, context.read())
+        except (OSError, RuntimeError):
+            AccAgentContext._ptr = 0
+            AccAgentContext._cached_ctx = None
+
+    @staticmethod
+    def enable() -> None:
+        """Declare source callback registration; it requires the injected runtime."""
+
+        raise NotImplementedError(
+            "AccAgentContext.enable requires the in-process callback runtime."
+        )
+
+    @staticmethod
+    def disable() -> None:
+        """Clear the external facade cache."""
+
+        AccAgentContext._ptr = 0
+        AccAgentContext._cached_ctx = None
+
+    @staticmethod
+    def get_context() -> AccAgentContextStruct | None:
+        """Return the last snapshot refreshed through ``_update_ptr``."""
+
+        return AccAgentContext._cached_ctx
 
     def resolve_address(self) -> int | None:
         """Return the current agent-context address, if available."""
@@ -350,6 +471,8 @@ Vec3f = Vec3fStruct
 AgentSummaryInfoSub = AgentSummaryInfoSubStruct
 AgentSummaryInfo = AgentSummaryInfoStruct
 AgentMovement = AgentMovementStruct
+AgentInfo = AgentInfoStruct
+AgentInfoArray = GWArray
 
 
 def get() -> AccAgentContextStruct | None:
@@ -358,4 +481,4 @@ def get() -> AccAgentContextStruct | None:
     from ..client import current_client
 
     client = current_client()
-    return client.read_acc_agent_context() if client is not None else None
+    return cast(Any, client.read_acc_agent_context() if client is not None else None)

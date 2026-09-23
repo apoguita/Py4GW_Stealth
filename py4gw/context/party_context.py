@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_uint8, c_uint16, c_uint32
 from enum import IntEnum
@@ -44,7 +46,7 @@ def _format_encoded_text(value: str) -> str:
     return "".join(output)
 
 
-class PlayerPartyMemberStruct(Structure):
+class PlayerPartyMemberStruct(TargetStruct):
     """The native 0x0C player-party member record."""
 
     _pack_ = 1
@@ -83,7 +85,7 @@ class PlayerPartyMemberStruct(Structure):
         return self.is_ticked
 
 
-class HeroPartyMemberStruct(Structure):
+class HeroPartyMemberStruct(TargetStruct):
     """The native 0x18 hero-party member record."""
 
     _pack_ = 1
@@ -97,7 +99,7 @@ class HeroPartyMemberStruct(Structure):
     ]
 
 
-class HenchmanPartyMemberStruct(Structure):
+class HenchmanPartyMemberStruct(TargetStruct):
     """The native 0x34 henchman-party member record."""
 
     _pack_ = 1
@@ -109,7 +111,7 @@ class HenchmanPartyMemberStruct(Structure):
     ]
 
 
-class PartyInfoStruct(Structure):
+class PartyInfoStruct(TargetStruct):
     """The native 0x84 party-information record."""
 
     _pack_ = 1
@@ -202,7 +204,7 @@ class PartyInfoStruct(Structure):
         return result
 
 
-class PartySearchStruct(Structure):
+class PartySearchStruct(TargetStruct):
     """The native 0x94 party-search record."""
 
     _pack_ = 1
@@ -262,7 +264,7 @@ class PartySearchType(IntEnum):
     GUILD = PartySearchType_Guild
 
 
-class PartyContextStruct(Structure):
+class PartyContextStruct(TargetStruct):
     """The complete fixed-width native ``PartyContext`` layout."""
 
     _pack_ = 1

@@ -1,3 +1,4 @@
+from ..target_struct import TargetStruct
 from ctypes import Structure
 from typing import Any, Optional
 
@@ -7,7 +8,7 @@ from .gw_array import GWArray, RemoteMemoryReader
 from .gw_list import GWLinkStruct, GWListStruct
 
 
-class PlayerPartyMemberStruct(Structure):
+class PlayerPartyMemberStruct(TargetStruct):
     login_number: int
     called_target_id: int
     state: int
@@ -29,7 +30,7 @@ class PlayerPartyMemberStruct(Structure):
 PlayerPartyMember = PlayerPartyMemberStruct
 
 
-class HeroPartyMemberStruct(Structure):
+class HeroPartyMemberStruct(TargetStruct):
     agent_id: int
     owner_player_id: int
     hero_id: int
@@ -41,7 +42,7 @@ class HeroPartyMemberStruct(Structure):
 HeroPartyMember = HeroPartyMemberStruct
 
 
-class HenchmanPartyMemberStruct(Structure):
+class HenchmanPartyMemberStruct(TargetStruct):
     agent_id: int
     h0004: Any
     profession: int
@@ -51,7 +52,7 @@ class HenchmanPartyMemberStruct(Structure):
 HenchmanPartyMember = HenchmanPartyMemberStruct
 
 
-class PartyInfoStruct(Structure):
+class PartyInfoStruct(TargetStruct):
     party_id: int
     players_array: GWArray
     henchmen_array: GWArray
@@ -82,7 +83,7 @@ class PartyInfoStruct(Structure):
     def invite_links(self) -> list[PartyInfoStruct]: ...
 
 
-class PartySearchStruct(Structure):
+class PartySearchStruct(TargetStruct):
     party_search_id: int
     party_search_type: int
     hardmode: int
@@ -123,7 +124,7 @@ class PartySearchType:
     GUILD: int
 
 
-class PartyContextStruct(Structure):
+class PartyContextStruct(TargetStruct):
     h0000: int
     h0004_array: GWArray
     flag: int

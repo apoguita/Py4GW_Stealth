@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import c_uint32
 from typing import Generic, Protocol, TypeVar, cast
@@ -13,7 +15,7 @@ class RemoteMemoryReader(Protocol):
     def read(self, address: int, size: int) -> bytes: ...
 
 
-class GWLinkStruct(ctypes.Structure):
+class GWLinkStruct(TargetStruct):
     """The fixed-width x86 ``GW::GwLink`` node pointers."""
 
     _pack_ = 1
@@ -23,7 +25,7 @@ class GWLinkStruct(ctypes.Structure):
     ]
 
 
-class GWListStruct(ctypes.Structure):
+class GWListStruct(TargetStruct):
     """The fixed-width x86 ``GW::GwList`` header and sentinel link."""
 
     _pack_ = 1

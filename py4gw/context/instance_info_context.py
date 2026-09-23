@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_uint32
 from typing import Any, Protocol, TypeVar, cast
@@ -17,7 +19,7 @@ class _memory_reader(RemoteMemoryReader, Protocol):
 _structure_type = TypeVar("_structure_type", bound=Structure)
 
 
-class MapDimensionsStruct(Structure):
+class MapDimensionsStruct(TargetStruct):
     """The fixed-width native ``MapDimensions`` record."""
 
     _pack_ = 1
@@ -31,7 +33,7 @@ class MapDimensionsStruct(Structure):
     ]
 
 
-class AreaInfoStruct(Structure):
+class AreaInfoStruct(TargetStruct):
     """The fixed-width native ``AreaInfo`` record and its useful flags."""
 
     _pack_ = 1
@@ -136,7 +138,7 @@ class AreaInfoStruct(Structure):
         return bool(int(self.flags) & 0x8000000)
 
 
-class InstanceInfoStruct(Structure):
+class InstanceInfoStruct(TargetStruct):
     """The fixed-width x86 port of Reforged ``InstanceInfoStruct``."""
 
     _pack_ = 1

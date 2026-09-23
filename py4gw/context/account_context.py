@@ -7,6 +7,8 @@ not materialize account-wide unlock arrays as part of a normal snapshot.
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_uint8, c_uint32
 from typing import Protocol, TypeVar, cast
@@ -22,30 +24,30 @@ class _memory_reader(RemoteMemoryReader, Protocol):
 _value_type = TypeVar("_value_type")
 
 
-class AccountUnlockedCountStruct(Structure):
+class AccountUnlockedCountStruct(TargetStruct):
     """The native 0x0C account-unlocked-count record."""
 
     _pack_ = 1
     _fields_ = [
         ("id", c_uint32),
-        ("unknown_1", c_uint32),
-        ("unknown_2", c_uint32),
+        ("unk1", c_uint32),
+        ("unk2", c_uint32),
     ]
 
     @property
-    def unk1(self) -> int:
-        """Return the native spelling of the first unknown word."""
+    def unknown_1(self) -> int:
+        """Compatibility spelling for the native ``unk1`` field."""
 
-        return int(self.unknown_1)
+        return int(self.unk1)
 
     @property
-    def unk2(self) -> int:
-        """Return the native spelling of the second unknown word."""
+    def unknown_2(self) -> int:
+        """Compatibility spelling for the native ``unk2`` field."""
 
-        return int(self.unknown_2)
+        return int(self.unk2)
 
 
-class AccountUnlockedItemInfoStruct(Structure):
+class AccountUnlockedItemInfoStruct(TargetStruct):
     """The native 0x0C unlocked-PvP-item record."""
 
     _pack_ = 1
@@ -56,7 +58,7 @@ class AccountUnlockedItemInfoStruct(Structure):
     ]
 
 
-class AccountContextStruct(Structure):
+class AccountContextStruct(TargetStruct):
     """The fixed-width x86 0x138-byte native account root."""
 
     _pack_ = 1

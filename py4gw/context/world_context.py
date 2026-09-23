@@ -9,34 +9,135 @@ world snapshot is requested.
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 import math
 from ctypes import Structure, c_float, c_uint8, c_uint16, c_uint32
-from typing import Protocol, cast
+from typing import Any, Protocol, TypeVar, cast
 
 from .game_context import GameContext, GameContextStruct
-from .gw_array import GWArray, GWArrayValueView, RemoteMemoryReader
+from .gw_array import GWArray, RemoteMemoryReader
 
 
 class _memory_reader(RemoteMemoryReader, Protocol):
     """The byte-reading operation needed by the world root."""
 
 
-class Vec3fStruct(Structure):
+_record_type = TypeVar("_record_type", bound=Structure)
+_MAX_WORLD_ARRAY_READ_BYTES = 16 * 1024 * 1024
+_MAX_WORLD_STRING_CHARS = 32_768
+_WORLD_STRING_CHUNK_CHARS = 64
+
+
+def _read_world_array_bytes(
+    reader: _memory_reader,
+    array: GWArray,
+    element_type: type[Any],
+) -> bytes | None:
+    """Read one complete, validated target array as a bounded byte block."""
+
+    address = int(array.m_buffer)
+    count = int(array.m_size)
+    capacity = int(array.m_capacity)
+    if address < 0x10000 or count == 0 or count > capacity:
+        return None
+
+    element_size = ctypes.sizeof(element_type)
+    byte_count = count * element_size
+    if byte_count > _MAX_WORLD_ARRAY_READ_BYTES:
+        raise ValueError(
+            "WorldContext array exceeds the per-array read limit: "
+            f"count={count}, element_size={element_size}, bytes={byte_count}"
+        )
+    if address + byte_count > 0x1_0000_0000:
+        raise ValueError(
+            "WorldContext array extends beyond the 32-bit target address space: "
+            f"address=0x{address:08X}, bytes={byte_count}"
+        )
+
+    raw = reader.read(address, byte_count)
+    if len(raw) != byte_count:
+        raise OSError(
+            "WorldContext array read returned an unexpected byte count: "
+            f"address=0x{address:08X}, requested={byte_count}, received={len(raw)}"
+        )
+    return raw
+
+
+class Vec3f(TargetStruct):
     """Three target-process single-precision coordinates."""
 
-    _pack_ = 1
     _fields_ = [("x", c_float), ("y", c_float), ("z", c_float)]
 
+    def __init__(self, x: float = 0.0, y: float = 0.0, z: float = 0.0) -> None:
+        super().__init__()
+        self.x = x
+        self.y = y
+        self.z = z
 
-class Vec2fStruct(Structure):
+    def to_tuple(self) -> tuple[float, float, float]:
+        """Return the coordinates as a three-value tuple."""
+
+        return float(self.x), float(self.y), float(self.z)
+
+    def to_list(self) -> list[float]:
+        """Return the coordinates as a three-value list."""
+
+        return [float(self.x), float(self.y), float(self.z)]
+
+
+Vec3fStruct = Vec3f
+
+
+class Vec2f(TargetStruct):
     """Two target-process single-precision coordinates."""
 
-    _pack_ = 1
     _fields_ = [("x", c_float), ("y", c_float)]
 
+    def __init__(self, x: float = 0.0, y: float = 0.0) -> None:
+        super().__init__()
+        self.x = x
+        self.y = y
 
-class AccountInfoStruct(Structure):
+    def to_tuple(self) -> tuple[float, float]:
+        """Return the coordinates as a two-value tuple."""
+
+        return float(self.x), float(self.y)
+
+    def to_list(self) -> list[float]:
+        """Return the coordinates as a two-value list."""
+
+        return [float(self.x), float(self.y)]
+
+    def __add__(self, other: object) -> Vec2f:
+        if isinstance(other, Vec2f):
+            return Vec2f(float(self.x) + float(other.x), float(self.y) + float(other.y))
+        return NotImplemented
+
+    def __sub__(self, other: object) -> Vec2f:
+        if isinstance(other, Vec2f):
+            return Vec2f(float(self.x) - float(other.x), float(self.y) - float(other.y))
+        return NotImplemented
+
+    def __mul__(self, scalar: float) -> Vec2f:
+        return Vec2f(float(self.x) * scalar, float(self.y) * scalar)
+
+    def __truediv__(self, scalar: float) -> Vec2f:
+        if scalar == 0:
+            raise ValueError("Cannot divide by zero")
+        return Vec2f(float(self.x) / scalar, float(self.y) / scalar)
+
+    def __repr__(self) -> str:
+        return f"Vec2f(x={self.x}, y={self.y})"
+
+    def __eq__(self, value: object) -> bool:
+        return super().__eq__(value)
+
+
+Vec2fStruct = Vec2f
+
+class AccountInfoStruct(TargetStruct):
     """The native account-summary record owned by ``WorldContext``."""
 
     _pack_ = 1
@@ -69,7 +170,7 @@ class AccountInfoStruct(Structure):
         return _read_target_text(self._remote_reader, int(self.account_name_ptr))
 
 
-class MapAgentStruct(Structure):
+class MapAgentStruct(TargetStruct):
     """The native 0x34 map-agent status record."""
 
     _pack_ = 1
@@ -130,7 +231,7 @@ class MapAgentStruct(Structure):
         return bool(int(self.effects) & 0x8000)
 
 
-class PartyAllyStruct(Structure):
+class PartyAllyStruct(TargetStruct):
     """The native 0x0C party-ally record."""
 
     _pack_ = 1
@@ -141,7 +242,7 @@ class PartyAllyStruct(Structure):
     ]
 
 
-class AttributeStruct(Structure):
+class AttributeStruct(TargetStruct):
     """The native 0x14 party-attribute record."""
 
     _pack_ = 1
@@ -178,7 +279,7 @@ class AttributeStruct(Structure):
 
         return self.name
 
-class PartyAttributeStruct(Structure):
+class PartyAttributeStruct(TargetStruct):
     """The native 0x43C attribute block for one party agent."""
 
     _pack_ = 1
@@ -200,7 +301,7 @@ class PartyAttributeStruct(Structure):
         return [attribute for attribute in self.attributes if attribute.is_valid]
 
 
-class EffectStruct(Structure):
+class EffectStruct(TargetStruct):
     """The native 0x18 active-effect record."""
 
     _pack_ = 1
@@ -220,7 +321,7 @@ class EffectStruct(Structure):
         return bool(int(self.agent_id))
 
 
-class BuffStruct(Structure):
+class BuffStruct(TargetStruct):
     """The native 0x10 maintained-buff record."""
 
     _pack_ = 1
@@ -232,7 +333,7 @@ class BuffStruct(Structure):
     ]
 
 
-class AgentEffectsStruct(Structure):
+class AgentEffectsStruct(TargetStruct):
     """The native 0x24 effects block owned by one party agent."""
 
     _pack_ = 1
@@ -256,59 +357,88 @@ class AgentEffectsStruct(Structure):
         self,
         array: GWArray,
         element_type: type[Structure],
-        max_items: int,
     ) -> list[Structure]:
         if self._remote_reader is None:
             raise RuntimeError("AgentEffects snapshot is not bound to a reader.")
-        view = GWArrayValueView(self._remote_reader, array, element_type)
-        if not view.valid():
+        raw = _read_world_array_bytes(self._remote_reader, array, element_type)
+        if raw is None:
             return []
+        element_size = ctypes.sizeof(element_type)
         return [
-            value
-            for index in range(min(view.size(), max_items))
-            if (value := view.get(index)) is not None
+            element_type.from_buffer_copy(raw, offset)
+            for offset in range(0, len(raw), element_size)
         ]
 
     @property
     def buffs(self) -> list[BuffStruct]:
-        """Read at most 64 maintained buffs for this agent."""
+        """Read all maintained buffs for this agent."""
 
         return [
             value
-            for value in self._values(self.buff_array, BuffStruct, 64)
+            for value in self._values(self.buff_array, BuffStruct)
             if isinstance(value, BuffStruct)
         ]
 
     @property
     def effects(self) -> list[EffectStruct]:
-        """Read at most 128 active effects for this agent."""
+        """Read all active effects for this agent."""
 
         return [
             value
-            for value in self._values(self.effect_array, EffectStruct, 128)
+            for value in self._values(self.effect_array, EffectStruct)
             if isinstance(value, EffectStruct)
         ]
 
 
-def _read_target_text(
-    reader: _memory_reader | None, address: int, max_chars: int = 256
-) -> str:
-    """Read one bounded UTF-16 string through the external reader."""
+def _read_target_text(reader: _memory_reader | None, address: int) -> str | None:
+    """Read a complete NUL-terminated UTF-16 string within the safety limit."""
 
     if reader is None or address < 0x10000:
-        return ""
+        return None
     raw = bytearray()
-    for index in range(max_chars):
-        pair = reader.read(address + index * 2, 2)
-        if pair == b"\x00\x00":
-            break
-        raw.extend(pair)
-    return bytes(raw).decode("utf-16-le", errors="replace")
+    for start in range(0, _MAX_WORLD_STRING_CHARS, _WORLD_STRING_CHUNK_CHARS):
+        chunk_chars = min(
+            _WORLD_STRING_CHUNK_CHARS, _MAX_WORLD_STRING_CHARS - start
+        )
+        chunk_address = address + start * 2
+        try:
+            chunk = reader.read(chunk_address, chunk_chars * 2)
+        except OSError:
+            chunk = b""
+
+        if len(chunk) == chunk_chars * 2:
+            for offset in range(0, len(chunk), 2):
+                if chunk[offset : offset + 2] == b"\x00\x00":
+                    raw.extend(chunk[:offset])
+                    return bytes(raw).decode("utf-16-le", errors="replace")
+            raw.extend(chunk)
+            continue
+
+        # If a chunk crosses into unreadable memory, retry only the current
+        # chunk one UTF-16 code unit at a time and stop as soon as its NUL is
+        # reached. This avoids reading beyond a valid terminator.
+        for index in range(chunk_chars):
+            pair = reader.read(chunk_address + index * 2, 2)
+            if pair == b"\x00\x00":
+                return bytes(raw).decode("utf-16-le", errors="replace")
+            if len(pair) != 2:
+                raise OSError(
+                    "WorldContext string read returned an unexpected byte count: "
+                    f"address=0x{chunk_address + index * 2:08X}, received={len(pair)}"
+                )
+            raw.extend(pair)
+
+    raise ValueError(
+        "WorldContext UTF-16 string is not terminated within "
+        f"{_MAX_WORLD_STRING_CHARS} characters at 0x{address:08X}"
+    )
 
 
-def _format_encoded_text(value: str) -> str:
+def _format_encoded_text(value: str | None) -> str | None:
     """Return the source project's printable representation of encoded text."""
 
+    if value is None:
+        return None
     output: list[str] = []
     for character in value:
         code_point = ord(character)
@@ -341,7 +471,7 @@ _ATTRIBUTE_NAMES = {
 }
 
 
-class NPCStruct(Structure):
+class NPC_ModelStruct(TargetStruct):
     """The native 0x30 NPC model record."""
 
     _pack_ = 1
@@ -354,7 +484,8 @@ class NPCStruct(Structure):
         ("primary", c_uint32),
         ("h0018", c_uint32),
         ("default_level", c_uint8),
-        ("padding", c_uint8 * 3),
+        ("padding1", c_uint8),
+        ("padding2", c_uint16),
         ("name_enc_ptr", c_uint32),
         ("model_files_ptr", c_uint32),
         ("files_count", c_uint32),
@@ -365,7 +496,7 @@ class NPCStruct(Structure):
 
     def bind_reader(
         self, reader: _memory_reader, address: int | None = None
-    ) -> NPCStruct:
+    ) -> NPC_ModelStruct:
         """Attach the reader used by the indirect name/model fields."""
 
         self._remote_reader = reader
@@ -417,35 +548,42 @@ class NPCStruct(Structure):
     def name_encoded_str(self) -> str | None:
         """Return the encoded NPC name."""
 
-        value = self.name
-        return value or None
+        return _read_target_text(self._remote_reader, int(self.name_enc_ptr))
 
     @property
     def name_str(self) -> str | None:
         """Return the display-safe NPC name."""
 
-        value = _format_encoded_text(self.name)
-        return value or None
+        return _format_encoded_text(
+            _read_target_text(self._remote_reader, int(self.name_enc_ptr))
+        )
 
     @property
     def name(self) -> str:
         """Read the bounded NPC name through its target pointer."""
 
-        return _read_target_text(self._remote_reader, int(self.name_enc_ptr))
+        return _read_target_text(self._remote_reader, int(self.name_enc_ptr)) or ""
 
     @property
     def model_file_ids(self) -> list[int]:
-        """Read at most 128 model-file identifiers."""
+        """Read every model-file identifier declared by the source record."""
 
         if self._remote_reader is None or not self.model_files_ptr:
             return []
-        count = min(int(self.files_count), int(self.files_capacity), 128)
-        return [
-            int.from_bytes(
-                self._remote_reader.read(int(self.model_files_ptr) + index * 4, 4),
-                "little",
+        count = int(self.files_count)
+        capacity = int(self.files_capacity)
+        if count > capacity:
+            raise ValueError(
+                "NPC model-file count exceeds its capacity: "
+                f"count={count}, capacity={capacity}"
             )
-            for index in range(count)
+        array = GWArray(int(self.model_files_ptr), capacity, count, 0)
+        raw = _read_world_array_bytes(self._remote_reader, array, c_uint32)
+        if raw is None:
+            return []
+        return [
+            int(c_uint32.from_buffer_copy(raw, offset).value)
+            for offset in range(0, len(raw), ctypes.sizeof(c_uint32))
         ]
 
     @property
@@ -455,7 +593,7 @@ class NPCStruct(Structure):
         return self.model_file_ids
 
 
-class PlayerStruct(Structure):
+class PlayerStruct(TargetStruct):
     """The native 0x50 player record."""
 
     _pack_ = 1
@@ -515,35 +653,31 @@ class PlayerStruct(Structure):
     def name_encoded(self) -> str:
         """Read the target name pointer without applying game text mapping."""
 
-        return _read_target_text(self._remote_reader, int(self.name_ptr))
+        return _read_target_text(self._remote_reader, int(self.name_ptr)) or ""
 
     @property
     def name_enc_encoded_str(self) -> str | None:
         """Read the encoded name-pointer field used by Reforged."""
 
-        value = _read_target_text(self._remote_reader, int(self.name_enc_ptr))
-        return value or None
+        return _read_target_text(self._remote_reader, int(self.name_enc_ptr))
 
     @property
     def name_enc_str(self) -> str | None:
-        """Return the display-safe name-pointer field."""
+        """Return the source display name read from ``name_ptr``."""
 
-        value = self.name_enc_encoded_str
-        return _format_encoded_text(value) if value else None
+        return _format_encoded_text(self.name_encoded_str)
 
     @property
     def name_encoded_str(self) -> str | None:
         """Return the encoded player name under the source property name."""
 
-        value = self.name_encoded
-        return value or None
+        return _read_target_text(self._remote_reader, int(self.name_ptr))
 
     @property
     def name_str(self) -> str | None:
         """Return the display-safe player name."""
 
-        value = self.name_encoded_str
-        return _format_encoded_text(value) if value else None
+        return _format_encoded_text(self.name_encoded_str)
 
     @property
     def name(self) -> str:
@@ -553,21 +687,16 @@ class PlayerStruct(Structure):
 
     @property
     def auxiliary_pointers(self) -> list[int]:
-        """Read at most 128 auxiliary pointer values."""
+        """Read every source auxiliary pointer value."""
 
-        if self._remote_reader is None or not self.h0040_array.m_buffer:
+        if self._remote_reader is None:
             return []
-        if self.h0040_array.m_size > self.h0040_array.m_capacity:
+        raw = _read_world_array_bytes(self._remote_reader, self.h0040_array, c_uint32)
+        if raw is None:
             return []
-        count = min(int(self.h0040_array.m_size), 128)
         return [
-            int.from_bytes(
-                self._remote_reader.read(
-                    int(self.h0040_array.m_buffer) + index * 4, 4
-                ),
-                "little",
-            )
-            for index in range(count)
+            int(c_uint32.from_buffer_copy(raw, offset).value)
+            for offset in range(0, len(raw), ctypes.sizeof(c_uint32))
         ]
 
     @property
@@ -576,10 +705,11 @@ class PlayerStruct(Structure):
 
         if self._remote_reader is None or not self.h0040_array.m_buffer:
             return None
-        return self.auxiliary_pointers
+        values = self.auxiliary_pointers
+        return values or None
 
 
-class HeroFlagStruct(Structure):
+class HeroFlagStruct(TargetStruct):
     """The native 0x24 hero flag record."""
 
     _pack_ = 1
@@ -588,14 +718,14 @@ class HeroFlagStruct(Structure):
         ("agent_id", c_uint32),
         ("level", c_uint32),
         ("hero_behavior", c_uint32),
-        ("flag_ptr", Vec2fStruct),
+        ("flag_ptr", Vec2f),
         ("h0018", c_uint32),
         ("locked_target_id", c_uint32),
         ("h0020", c_uint32),
     ]
 
     @property
-    def flag(self) -> Vec2fStruct | None:
+    def flag(self) -> Vec2f | None:
         """Return finite hero-flag target coordinates."""
 
         if not math.isfinite(float(self.flag_ptr.x)) or not math.isfinite(float(self.flag_ptr.y)):
@@ -603,7 +733,7 @@ class HeroFlagStruct(Structure):
         return self.flag_ptr
 
 
-class HeroInfoStruct(Structure):
+class HeroInfoStruct(TargetStruct):
     """The native 0x78 hero information record."""
 
     _pack_ = 1
@@ -615,38 +745,38 @@ class HeroInfoStruct(Structure):
         ("secondary", c_uint32),
         ("hero_file_id", c_uint32),
         ("model_file_id", c_uint32),
-        ("unknown", c_uint8 * 52),
-        ("name_enc", c_uint16 * 20),
+        ("h001C", c_uint8 * 52),
+        ("name_encoded_str", c_uint16 * 20),
     ]
 
     @property
     def name(self) -> str:
         """Decode the fixed-width UTF-16 hero name."""
 
-        raw = bytes(self.name_enc)
+        raw = bytes(self.name_encoded_str)
         return raw.decode("utf-16-le", errors="replace").split("\x00", 1)[0]
 
     @property
-    def name_encoded_str(self) -> str:
-        """Return the source-compatible encoded-name spelling."""
+    def name_enc(self) -> ctypes.Array[c_uint16]:
+        """Compatibility alias for the source ``name_encoded_str`` field."""
 
-        return self.name
+        return self.name_encoded_str
 
     @property
     def name_str(self) -> str:
         """Return the display-safe hero name."""
 
-        return _format_encoded_text(self.name)
+        return _format_encoded_text(self.name) or ""
 
 
-class ControlledMinionsStruct(Structure):
+class ControlledMinionsStruct(TargetStruct):
     """The native controlled-minion count record."""
 
     _pack_ = 1
     _fields_ = [("agent_id", c_uint32), ("minion_count", c_uint32)]
 
 
-class PartyMemberMoraleInfoStruct(Structure):
+class PartyMemberMoraleInfoStruct(TargetStruct):
     """The maintained player morale record."""
 
     _pack_ = 1
@@ -658,7 +788,7 @@ class PartyMemberMoraleInfoStruct(Structure):
     ]
 
 
-class PartyMoraleLinkStruct(Structure):
+class PartyMoraleLinkStruct(TargetStruct):
     """The party-morale link containing a target morale record pointer."""
 
     _pack_ = 1
@@ -693,7 +823,7 @@ class PartyMoraleLinkStruct(Structure):
         return PartyMemberMoraleInfoStruct.from_buffer_copy(raw_value)
 
 
-class PlayerControlledCharacterStruct(Structure):
+class PlayerControlledCharacterStruct(TargetStruct):
     """The maintained 0x134 player-controlled-character record."""
 
     _pack_ = 1
@@ -778,7 +908,7 @@ class PlayerControlledCharacterStruct(Structure):
     ]
 
 
-class ProfessionStateStruct(Structure):
+class ProfessionStateStruct(TargetStruct):
     """The native party profession-unlock record."""
 
     _pack_ = 1
@@ -793,9 +923,7 @@ class ProfessionStateStruct(Structure):
     def is_profession_unlocked(self, profession: int) -> bool:
         """Return whether one profession bit is set."""
 
-        return 0 <= profession < 32 and bool(
-            int(self.unlocked_professions) & (1 << profession)
-        )
+        return bool(int(self.unlocked_professions) & (1 << profession))
 
     def IsProfessionUnlocked(self, profession: int) -> bool:
         """Return the Reforged compatibility spelling."""
@@ -803,7 +931,7 @@ class ProfessionStateStruct(Structure):
         return self.is_profession_unlocked(profession)
 
 
-class PetInfoStruct(Structure):
+class PetInfoStruct(TargetStruct):
     """The native 0x1C pet record."""
 
     _pack_ = 1
@@ -831,24 +959,24 @@ class PetInfoStruct(Structure):
     def name(self) -> str:
         """Read the bounded pet name through its target pointer."""
 
-        return _read_target_text(self._remote_reader, int(self.pet_name_ptr))
+        return _read_target_text(self._remote_reader, int(self.pet_name_ptr)) or ""
 
     @property
     def pet_name_encoded_str(self) -> str | None:
         """Return the encoded pet name."""
 
-        value = self.name
-        return value or None
+        return _read_target_text(self._remote_reader, int(self.pet_name_ptr))
 
     @property
     def pet_name_str(self) -> str | None:
         """Return the display-safe pet name."""
 
-        value = _format_encoded_text(self.name)
-        return value or None
+        return _format_encoded_text(
+            _read_target_text(self._remote_reader, int(self.pet_name_ptr))
+        )
 
 
-class AgentNameInfoStruct(Structure):
+class AgentNameInfoStruct(TargetStruct):
     """The native agent-name pointer record."""
 
     _pack_ = 1
@@ -871,25 +999,23 @@ class AgentNameInfoStruct(Structure):
     def name_encoded_str(self) -> str | None:
         """Read the encoded agent name."""
 
-        value = _read_target_text(self._remote_reader, int(self.name_enc_ptr))
-        return value or None
+        return _read_target_text(self._remote_reader, int(self.name_enc_ptr))
 
     @property
     def name_str(self) -> str | None:
         """Return the display-safe agent name."""
 
-        value = self.name_encoded_str
-        return _format_encoded_text(value) if value else None
+        return _format_encoded_text(self.name_encoded_str)
 
 
-class MissionMapIconStruct(Structure):
+class MissionMapIconStruct(TargetStruct):
     """The native 0x28 mission-map icon record."""
 
     _pack_ = 1
     _fields_ = [
         ("index", c_uint32),
-        ("x", c_float),
-        ("y", c_float),
+        ("X", c_float),
+        ("Y", c_float),
         ("h000C", c_uint32),
         ("h0010", c_uint32),
         ("option", c_uint32),
@@ -900,13 +1026,25 @@ class MissionMapIconStruct(Structure):
     ]
 
     @property
-    def position(self) -> tuple[float, float]:
-        """Return the icon's two-dimensional map position."""
+    def position(self) -> Vec2f:
+        """Return the icon position as the source ``Vec2f`` value."""
 
-        return (float(self.x), float(self.y))
+        return Vec2f(float(self.X), float(self.Y))
+
+    @property
+    def x(self) -> float:
+        """Readable lowercase alias for source field ``X``."""
+
+        return float(self.X)
+
+    @property
+    def y(self) -> float:
+        """Readable lowercase alias for source field ``Y``."""
+
+        return float(self.Y)
 
 
-class SkillbarSkillStruct(Structure):
+class SkillbarSkillStruct(TargetStruct):
     """The native 0x14 skillbar-slot record."""
 
     _pack_ = 1
@@ -919,7 +1057,7 @@ class SkillbarSkillStruct(Structure):
     ]
 
 
-class SkillbarCastStruct(Structure):
+class SkillbarCastStruct(TargetStruct):
     """The native 0x08 queued-skill record."""
 
     _pack_ = 1
@@ -930,7 +1068,7 @@ class SkillbarCastStruct(Structure):
     ]
 
 
-class SkillbarStruct(Structure):
+class SkillbarStruct(TargetStruct):
     """The native 0xBC skillbar record."""
 
     _pack_ = 1
@@ -983,29 +1121,46 @@ class SkillbarStruct(Structure):
 
         if self._remote_reader is None:
             raise RuntimeError("Skillbar snapshot is not bound to a memory reader.")
-        view = GWArrayValueView(self._remote_reader, self.cast_array, SkillbarCastStruct)
+        raw = _read_world_array_bytes(
+            self._remote_reader, self.cast_array, SkillbarCastStruct
+        )
+        if raw is None:
+            return []
+        element_size = ctypes.sizeof(SkillbarCastStruct)
         return [
-            value
-            for index in range(min(view.size(), 64))
-            if (value := view.get(index)) is not None
+            SkillbarCastStruct.from_buffer_copy(raw, offset)
+            for offset in range(0, len(raw), element_size)
         ]
 
 
-class DupeSkillStruct(Structure):
+class DupeSkillStruct(TargetStruct):
     """The native 0x08 duplicate-skill record."""
 
     _pack_ = 1
     _fields_ = [("skill_id", c_uint32), ("count", c_uint32)]
 
 
-class GamePosStruct(Structure):
+class GamePos(TargetStruct):
     """The native 0x0C quest marker position."""
 
-    _pack_ = 1
     _fields_ = [("x", c_float), ("y", c_float), ("zplane", c_uint32)]
 
+    def __init__(self, x: float = 0.0, y: float = 0.0, zplane: int = 0) -> None:
+        super().__init__()
+        self.x = x
+        self.y = y
+        self.zplane = zplane
 
-class QuestStruct(Structure):
+    def to_tuple(self) -> tuple[float, float, int]:
+        """Return the coordinates as an x/y/z-plane tuple."""
+
+        return float(self.x), float(self.y), int(self.zplane)
+
+
+GamePosStruct = GamePos
+
+
+class QuestStruct(TargetStruct):
     """The native 0x34 quest-log record."""
 
     _pack_ = 1
@@ -1016,7 +1171,7 @@ class QuestStruct(Structure):
         ("name_ptr", c_uint32),
         ("npc_ptr", c_uint32),
         ("map_from", c_uint32),
-        ("marker_ptr", GamePosStruct),
+        ("marker_ptr", GamePos),
         ("h0024", c_uint32),
         ("map_to", c_uint32),
         ("description_ptr", c_uint32),
@@ -1057,88 +1212,80 @@ class QuestStruct(Structure):
 
         return bool(int(self.log_state) & 0x40)
 
-    def _text(self, pointer: int) -> str:
+    def _text(self, pointer: int) -> str | None:
         return _read_target_text(self._remote_reader, int(pointer))
 
     @property
     def location(self) -> str:
         """Read the bounded quest location/category string."""
 
-        return self._text(self.location_ptr)
+        return self._text(self.location_ptr) or ""
 
     @property
     def location_encoded_str(self) -> str | None:
-        value = self.location
-        return value or None
+        return self._text(self.location_ptr)
 
     @property
     def location_str(self) -> str | None:
-        value = self.location_encoded_str
-        return _format_encoded_text(value) if value else None
+        return _format_encoded_text(self.location_encoded_str)
 
     @property
     def name(self) -> str:
         """Read the bounded quest name string."""
 
-        return self._text(self.name_ptr)
+        return self._text(self.name_ptr) or ""
 
     @property
     def name_encoded_str(self) -> str | None:
-        value = self.name
-        return value or None
+        return self._text(self.name_ptr)
 
     @property
     def name_str(self) -> str | None:
-        value = self.name_encoded_str
-        return _format_encoded_text(value) if value else None
+        return _format_encoded_text(self.name_encoded_str)
 
     @property
     def npc(self) -> str:
         """Read the bounded quest NPC string."""
 
-        return self._text(self.npc_ptr)
+        return self._text(self.npc_ptr) or ""
 
     @property
     def npc_encoded_str(self) -> str | None:
-        value = self.npc
-        return value or None
+        return self._text(self.npc_ptr)
 
     @property
     def npc_str(self) -> str | None:
-        value = self.npc_encoded_str
-        return _format_encoded_text(value) if value else None
+        return _format_encoded_text(self.npc_encoded_str)
 
     @property
     def description_encoded_str(self) -> str | None:
-        value = self._text(self.description_ptr)
-        return value or None
+        return self._text(self.description_ptr)
 
     @property
     def description_str(self) -> str | None:
-        value = self.description_encoded_str
-        return _format_encoded_text(value) if value else None
+        return _format_encoded_text(self.description_encoded_str)
 
     @property
     def objectives_encoded_str(self) -> str | None:
-        value = self._text(self.objectives_ptr)
-        return value or None
+        return self._text(self.objectives_ptr)
 
     @property
     def objectives_str(self) -> str | None:
-        value = self.objectives_encoded_str
-        return _format_encoded_text(value) if value else None
+        return _format_encoded_text(self.objectives_encoded_str)
 
     @property
-    def marker(self) -> GamePosStruct | None:
+    def marker(self) -> GamePos | None:
         values = (
             float(self.marker_ptr.x),
             float(self.marker_ptr.y),
             float(self.marker_ptr.zplane),
         )
-        return self.marker_ptr if all(math.isfinite(value) for value in values) else None
+        if not all(math.isfinite(value) for value in values):
+            return None
+        return GamePos(float(self.marker_ptr.x), float(self.marker_ptr.y), int(self.marker_ptr.zplane))
 
 
-class MissionObjectiveStruct(Structure):
+class MissionObjectiveStruct(TargetStruct):
     """The native 0x0C mission-objective record."""
 
     _pack_ = 1
@@ -1162,20 +1309,18 @@ class MissionObjectiveStruct(Structure):
     def text(self) -> str:
         """Read the bounded encoded objective text."""
 
-        return _read_target_text(self._remote_reader, int(self.enc_str_ptr))
+        return _read_target_text(self._remote_reader, int(self.enc_str_ptr)) or ""
 
     @property
     def enc_str_encoded_str(self) -> str | None:
-        value = self.text
-        return value or None
+        return _read_target_text(self._remote_reader, int(self.enc_str_ptr))
 
     @property
     def enc_str(self) -> str | None:
-        value = self.enc_str_encoded_str
-        return _format_encoded_text(value) if value else None
+        return _format_encoded_text(self.enc_str_encoded_str)
 
 
-class TitleStruct(Structure):
+class TitleStruct(TargetStruct):
     """The native 0x2C title-progress record."""
 
     _pack_ = 1
@@ -1219,37 +1364,33 @@ class TitleStruct(Structure):
     def points_description(self) -> str:
         """Read the bounded points description."""
 
-        return _read_target_text(self._remote_reader, int(self.points_desc_ptr))
+        return _read_target_text(self._remote_reader, int(self.points_desc_ptr)) or ""
 
     @property
     def points_desc_encoded_str(self) -> str | None:
-        value = self.points_description
-        return value or None
+        return _read_target_text(self._remote_reader, int(self.points_desc_ptr))
 
     @property
     def points_desc_str(self) -> str | None:
-        value = self.points_desc_encoded_str
-        return _format_encoded_text(value) if value else None
+        return _format_encoded_text(self.points_desc_encoded_str)
 
     @property
     def h0028_encoded_str(self) -> str | None:
-        value = _read_target_text(self._remote_reader, int(self.h0028_ptr))
-        return value or None
+        return _read_target_text(self._remote_reader, int(self.h0028_ptr))
 
     @property
     def h0028_str(self) -> str | None:
-        value = self.h0028_encoded_str
-        return _format_encoded_text(value) if value else None
+        return _format_encoded_text(self.h0028_encoded_str)
 
 
-class TitleTierStruct(Structure):
+class TitleTierStruct(TargetStruct):
     """The native 0x0C title-tier record."""
 
     _pack_ = 1
     _fields_ = [
         ("props", c_uint32),
         ("tier_number", c_uint32),
-        ("tier_name_ptr", c_uint32),
+        ("tier_name_enc_ptr", c_uint32),
     ]
 
     _remote_reader: _memory_reader | None = None
@@ -1272,23 +1413,27 @@ class TitleTierStruct(Structure):
     def name(self) -> str:
         """Read the bounded tier name."""
 
-        return _read_target_text(self._remote_reader, int(self.tier_name_ptr))
+        return _read_target_text(self._remote_reader, int(self.tier_name_enc_ptr)) or ""
+
+    @property
+    def tier_name_ptr(self) -> int:
+        """Compatibility alias for the source ``tier_name_enc_ptr`` field."""
+
+        return int(self.tier_name_enc_ptr)
 
     @property
     def tier_name_encoded_str(self) -> str | None:
-        value = self.name
-        return value or None
+        return _read_target_text(self._remote_reader, int(self.tier_name_enc_ptr))
 
     @property
     def tier_name_str(self) -> str | None:
-        value = self.tier_name_encoded_str
-        return _format_encoded_text(value) if value else None
+        return _format_encoded_text(self.tier_name_encoded_str)
 
     @property
     def is_percentage_based(self) -> bool:
         return bool(int(self.props) & 0x1)
 
-class WorldContextStruct(Structure):
+class WorldContextStruct(TargetStruct):
     """The maintained fixed-width x86 ``WorldContext`` root layout.
 
     Every pointer is represented as a four-byte target address.  The array
@@ -1303,12 +1448,12 @@ class WorldContextStruct(Structure):
         ("dialog_buff_array", GWArray),
         ("merch_items_array", GWArray),
         ("merch_items2_array", GWArray),
-        ("accum_map_init_unk0", c_uint32),
-        ("accum_map_init_unk1", c_uint32),
-        ("accum_map_init_offset", c_uint32),
-        ("accum_map_init_length", c_uint32),
+        ("accumMapInitUnk0", c_uint32),
+        ("accumMapInitUnk1", c_uint32),
+        ("accumMapInitOffset", c_uint32),
+        ("accumMapInitLength", c_uint32),
         ("h0054", c_uint32),
-        ("accum_map_init_unk2", c_uint32),
+        ("accumMapInitUnk2", c_uint32),
         ("h005C", c_uint32 * 8),
         ("map_agents_array", GWArray),
         ("party_allies_array", GWArray),
@@ -1340,16 +1485,16 @@ class WorldContextStruct(Structure):
         ("unlocked_map_array", GWArray),
         ("h061C", c_uint32 * 2),
         ("player_morale_ptr", c_uint32),
-        ("h0628", c_uint32),
+        ("h028C", c_uint32),
         ("party_morale_array", GWArray),
         ("h063C", c_uint32 * 16),
         ("player_number", c_uint32),
-        ("player_controlled_character_ptr", c_uint32),
+        ("playerControlledChar_ptr", c_uint32),
         ("is_hard_mode_unlocked", c_uint32),
         ("h0688", c_uint32 * 2),
         ("salvage_session_id", c_uint32),
         ("h0694", c_uint32 * 5),
-        ("player_team_token", c_uint32),
+        ("playerTeamToken", c_uint32),
         ("pets_array", GWArray),
         ("party_profession_states_array", GWArray),
         ("h06CC_array", GWArray),
@@ -1426,32 +1571,38 @@ class WorldContextStruct(Structure):
         return self._remote_address
 
     @property
-    def accumMapInitUnk0(self) -> int:
-        return int(self.accum_map_init_unk0)
+    def accum_map_init_unk0(self) -> int:
+        return int(self.accumMapInitUnk0)
 
     @property
-    def accumMapInitUnk1(self) -> int:
-        return int(self.accum_map_init_unk1)
+    def accum_map_init_unk1(self) -> int:
+        return int(self.accumMapInitUnk1)
 
     @property
-    def accumMapInitOffset(self) -> int:
-        return int(self.accum_map_init_offset)
+    def accum_map_init_offset(self) -> int:
+        return int(self.accumMapInitOffset)
 
     @property
-    def accumMapInitLength(self) -> int:
-        return int(self.accum_map_init_length)
+    def accum_map_init_length(self) -> int:
+        return int(self.accumMapInitLength)
 
     @property
-    def accumMapInitUnk2(self) -> int:
-        return int(self.accum_map_init_unk2)
+    def accum_map_init_unk2(self) -> int:
+        return int(self.accumMapInitUnk2)
 
     @property
-    def playerControlledChar_ptr(self) -> int:
-        return int(self.player_controlled_character_ptr)
+    def h0628(self) -> int:
+        """Native-layout spelling for source field ``h028C``."""
+
+        return int(self.h028C)
 
     @property
-    def playerTeamToken(self) -> int:
-        return int(self.player_team_token)
+    def player_controlled_character_ptr(self) -> int:
+        return int(self.playerControlledChar_ptr)
+
+    @property
+    def player_team_token(self) -> int:
+        return int(self.playerTeamToken)
 
     @property
     def all_flag_value(self) -> tuple[float, float, float] | None:
@@ -1465,15 +1616,13 @@ class WorldContextStruct(Structure):
         return values if all(math.isfinite(value) for value in values) else None
 
     @property
-    def all_flag(self) -> Vec3fStruct | None:
-        """Return the source-compatible party-flag value."""
+    def all_flag(self) -> Vec3f | None:
+        """Return the party flag as the source ``Vec3f`` value."""
 
         values = self.all_flag_value
         if values is None:
             return None
-        value = Vec3fStruct()
-        value.x, value.y, value.z = values
-        return value
+        return Vec3f(*values)
 
     def _read_struct(
         self, address: int, structure_type: type[Structure]
@@ -1500,63 +1649,52 @@ class WorldContextStruct(Structure):
         return value if isinstance(value, AccountInfoStruct) else None
 
     @property
-    def map_agents(self) -> list[MapAgentStruct]:
-        """Read bounded map-agent status records."""
+    def map_agents(self) -> list[MapAgentStruct] | None:
+        """Read every map-agent status record in the source array."""
 
-        return [
-            value
-            for value in self._records("map_agents_array", MapAgentStruct, 512)
-            if isinstance(value, MapAgentStruct)
-        ]
+        return self._records("map_agents_array", MapAgentStruct)
 
     @property
-    def party_allies(self) -> list[PartyAllyStruct]:
-        """Read bounded party-ally records."""
+    def party_allies(self) -> list[PartyAllyStruct] | None:
+        """Read every party-ally record in the source array."""
 
-        return [
-            value
-            for value in self._records("party_allies_array", PartyAllyStruct, 128)
-            if isinstance(value, PartyAllyStruct)
-        ]
+        return self._records("party_allies_array", PartyAllyStruct)
 
     @property
-    def merch_items(self) -> list[int]:
+    def merch_items(self) -> list[int] | None:
         """Read the current merchant item identifiers."""
 
-        return self._array_values("merch_items_array", c_uint32, 512)
+        return self._array_values("merch_items_array", c_uint32)
 
     @property
-    def merch_items2(self) -> list[int]:
+    def merch_items2(self) -> list[int] | None:
         """Read the second merchant item identifier array."""
 
-        return self._array_values("merch_items2_array", c_uint32, 512)
+        return self._array_values("merch_items2_array", c_uint32)
 
     def _array_values(
         self,
         name: str,
         element_type: type[ctypes._SimpleCData],
-        max_items: int = 512,
-    ) -> list[int]:
-        """Read at most ``max_items`` scalar values from a root array."""
+    ) -> list[int] | None:
+        """Read every scalar value in a validated source array."""
 
         if self._remote_reader is None:
             raise RuntimeError("WorldContext snapshot is not bound to a reader.")
         array = getattr(self, name)
-        view = GWArrayValueView(self._remote_reader, array, element_type)
-        if not view.valid():
-            return []
-        count = min(view.size(), max_items)
+        raw = _read_world_array_bytes(self._remote_reader, array, element_type)
+        if raw is None:
+            return None
+        element_size = ctypes.sizeof(element_type)
         return [
-            int(value)
-            for index in range(count)
-            if (value := view.get(index)) is not None
+            int(element_type.from_buffer_copy(raw, offset).value)
+            for offset in range(0, len(raw), element_size)
         ]
 
-    def _pointer_values(self, name: str, max_items: int = 512) -> list[int] | None:
+    def _pointer_values(self, name: str) -> list[int] | None:
         """Read a source ``Array<void*>`` as target-width integer addresses."""
 
-        values = self._array_values(name, c_uint32, max_items)
-        return values or None
+        return self._array_values(name, c_uint32)
 
     @property
     def h04B8_ptrs(self) -> list[int] | None:
@@ -1571,8 +1709,9 @@ class WorldContextStruct(Structure):
         return self._pointer_values("h04DC_array")
 
     @property
-    def h0518_ptrs(self) -> list[int] | None:
-        return self._pointer_values("h0518_array")
+    def h0518_ptrs(self) -> list[int | None] | None:
+        values = self._pointer_values("h0518_array")
+        return [value or None for value in values] if values else None
 
     @property
     def h06CC_ptrs(self) -> list[int] | None:
@@ -1593,34 +1732,34 @@ class WorldContextStruct(Structure):
     def _records(
         self,
         name: str,
-        element_type: type[Structure],
-        max_items: int,
-    ) -> list[Structure]:
-        """Read at most ``max_items`` fixed-size records from a root array."""
+        element_type: type[_record_type],
+    ) -> list[_record_type] | None:
+        """Read every record in a validated source array."""
 
         if self._remote_reader is None:
             raise RuntimeError("WorldContext snapshot is not bound to a reader.")
         array = getattr(self, name)
-        view = GWArrayValueView(self._remote_reader, array, element_type)
-        if not view.valid():
-            return []
-        return [
-            value
-            for index in range(min(view.size(), max_items))
-            if (value := view.get(index)) is not None
-        ]
+        raw = _read_world_array_bytes(self._remote_reader, array, element_type)
+        if raw is None:
+            return None
+        element_size = ctypes.sizeof(element_type)
+        records: list[_record_type] = []
+        for offset in range(0, len(raw), element_size):
+            value = element_type.from_buffer_copy(raw, offset)
+            bind_reader = getattr(value, "bind_reader", None)
+            if callable(bind_reader):
+                value = cast(
+                    _record_type,
+                    bind_reader(self._remote_reader, int(array.m_buffer) + offset),
+                )
+            records.append(value)
+        return records
 
     @property
-    def party_attributes(self) -> list[PartyAttributeStruct]:
-        """Read at most 128 party attribute blocks."""
+    def party_attributes(self) -> list[PartyAttributeStruct] | None:
+        """Read every party attribute block in the source array."""
 
-        return [
-            value
-            for value in self._records(
-                "party_attributes_array", PartyAttributeStruct, 128
-            )
-            if isinstance(value, PartyAttributeStruct)
-        ]
+        return self._records("party_attributes_array", PartyAttributeStruct)
 
     @staticmethod
     def _is_valid_attribute(attribute: AttributeStruct) -> bool:
@@ -1629,7 +1768,7 @@ class WorldContextStruct(Structure):
     def get_attributes_by_agent_id(self, agent_id: int) -> list[AttributeStruct]:
         """Return populated attributes for one party agent."""
 
-        for block in self.party_attributes:
+        for block in self.party_attributes or []:
             if int(block.agent_id) == agent_id:
                 return [
                     attribute
@@ -1642,7 +1781,7 @@ class WorldContextStruct(Structure):
         """Return populated attributes grouped by party agent identifier."""
 
         result: dict[int, list[AttributeStruct]] = {}
-        for block in self.party_attributes:
+        for block in self.party_attributes or []:
             attributes = [
                 attribute
                 for index, attribute in enumerate(block.attributes)
@@ -1653,112 +1792,70 @@ class WorldContextStruct(Structure):
         return result
 
     @property
-    def party_effects(self) -> list[AgentEffectsStruct]:
-        """Read at most 128 party effect blocks."""
+    def party_effects(self) -> list[AgentEffectsStruct] | None:
+        """Read every party effect block in the source array."""
 
-        return [
-            value
-            for value in self._records(
-                "party_effects_array", AgentEffectsStruct, 128
-            )
-            if isinstance(value, AgentEffectsStruct)
-        ]
+        return self._records("party_effects_array", AgentEffectsStruct)
 
     @property
-    def henchmen_agent_ids(self) -> list[int]:
+    def henchmen_agent_ids(self) -> list[int] | None:
         """Read the source party henchman agent-id array."""
 
-        return self._array_values("henchmen_agent_ids_array", c_uint32, 128)
+        return self._array_values("henchmen_agent_ids_array", c_uint32)
 
     @property
-    def npc_models(self) -> list[NPCStruct]:
-        """Read at most 512 NPC model records."""
+    def npc_models(self) -> list[NPCStruct] | None:
+        """Read every NPC model record in the source array."""
 
-        return [
-            value
-            for value in self._records("npc_models_array", NPCStruct, 512)
-            if isinstance(value, NPCStruct)
-        ]
+        return self._records("npc_models_array", NPCStruct)
 
     @property
-    def players(self) -> list[PlayerStruct]:
-        """Read at most 512 player records."""
+    def players(self) -> list[PlayerStruct] | None:
+        """Read every player record in the source array."""
 
-        return [
-            value
-            for value in self._records("players_array", PlayerStruct, 512)
-            if isinstance(value, PlayerStruct)
-        ]
+        return self._records("players_array", PlayerStruct)
 
     @property
-    def hero_flags(self) -> list[HeroFlagStruct]:
-        """Read at most 64 hero flag records."""
+    def hero_flags(self) -> list[HeroFlagStruct] | None:
+        """Read every hero flag record in the source array."""
 
-        return [
-            value
-            for value in self._records("hero_flags_array", HeroFlagStruct, 64)
-            if isinstance(value, HeroFlagStruct)
-        ]
+        return self._records("hero_flags_array", HeroFlagStruct)
 
     @property
-    def hero_info(self) -> list[HeroInfoStruct]:
-        """Read at most 64 hero information records."""
+    def hero_info(self) -> list[HeroInfoStruct] | None:
+        """Read every hero record in the source array."""
 
-        return [
-            value
-            for value in self._records("hero_info_array", HeroInfoStruct, 64)
-            if isinstance(value, HeroInfoStruct)
-        ]
+        return self._records("hero_info_array", HeroInfoStruct)
 
     @property
-    def controlled_minions(self) -> list[ControlledMinionsStruct]:
-        """Read bounded controlled-minion records."""
+    def controlled_minions(self) -> list[ControlledMinionsStruct] | None:
+        """Read every controlled-minion record in the source array."""
 
-        return [
-            value
-            for value in self._records(
-                "controlled_minion_count_array", ControlledMinionsStruct, 128
-            )
-            if isinstance(value, ControlledMinionsStruct)
-        ]
+        return self._records("controlled_minion_count_array", ControlledMinionsStruct)
 
     @property
-    def pets(self) -> list[PetInfoStruct]:
-        """Read at most 64 pet records."""
+    def pets(self) -> list[PetInfoStruct] | None:
+        """Read every pet record in the source array."""
 
-        return [
-            value
-            for value in self._records("pets_array", PetInfoStruct, 64)
-            if isinstance(value, PetInfoStruct)
-        ]
+        return self._records("pets_array", PetInfoStruct)
 
     @property
-    def skillbars(self) -> list[SkillbarStruct]:
-        """Read at most 64 party skillbar records."""
+    def skillbars(self) -> list[SkillbarStruct] | None:
+        """Read every party skillbar record in the source array."""
 
-        return [
-            value
-            for value in self._records("party_skillbar_array", SkillbarStruct, 64)
-            if isinstance(value, SkillbarStruct)
-        ]
+        return self._records("party_skillbar_array", SkillbarStruct)
 
     @property
-    def party_skillbars(self) -> list[SkillbarStruct]:
+    def party_skillbars(self) -> list[SkillbarStruct] | None:
         """Return the source-compatible party-skillbar list."""
 
         return self.skillbars
 
     @property
-    def party_profession_states(self) -> list[ProfessionStateStruct]:
-        """Read bounded party profession-state records."""
+    def party_profession_states(self) -> list[ProfessionStateStruct] | None:
+        """Read every party profession-state record in the source array."""
 
-        return [
-            value
-            for value in self._records(
-                "party_profession_states_array", ProfessionStateStruct, 128
-            )
-            if isinstance(value, ProfessionStateStruct)
-        ]
+        return self._records("party_profession_states_array", ProfessionStateStruct)
 
     @property
     def player_morale(self) -> PartyMemberMoraleInfoStruct | None:
@@ -1768,14 +1865,10 @@ class WorldContextStruct(Structure):
         return value if isinstance(value, PartyMemberMoraleInfoStruct) else None
 
     @property
-    def party_morale(self) -> list[PartyMoraleLinkStruct]:
-        """Read bounded party morale links."""
+    def party_morale(self) -> list[PartyMoraleLinkStruct] | None:
+        """Read every party morale link in the source array."""
 
-        return [
-            value
-            for value in self._records("party_morale_array", PartyMoraleLinkStruct, 128)
-            if isinstance(value, PartyMoraleLinkStruct)
-        ]
+        return self._records("party_morale_array", PartyMoraleLinkStruct)
 
     @property
     def player_controlled_character(self) -> PlayerControlledCharacterStruct | None:
@@ -1788,140 +1881,118 @@ class WorldContextStruct(Structure):
         return value if isinstance(value, PlayerControlledCharacterStruct) else None
 
     @property
-    def learnable_character_skills(self) -> list[int]:
-        """Read at most 512 learnable skill identifiers."""
+    def learnable_character_skills(self) -> list[int] | None:
+        """Read every learnable skill identifier in the source array."""
 
-        return self._array_values("learnable_character_skills_array", c_uint32, 512)
-
-    @property
-    def unlocked_character_skills(self) -> list[int]:
-        """Read at most 512 unlocked-skill bitfield values."""
-
-        return self._array_values("unlocked_character_skills_array", c_uint32, 512)
+        return self._array_values("learnable_character_skills_array", c_uint32)
 
     @property
-    def duplicated_character_skills(self) -> list[DupeSkillStruct]:
-        """Read at most 512 duplicate-skill records."""
+    def unlocked_character_skills(self) -> list[int] | None:
+        """Read every unlocked-skill value in the source array."""
 
-        return [
-            value
-            for value in self._records(
-                "duplicated_character_skills_array", DupeSkillStruct, 512
-            )
-            if isinstance(value, DupeSkillStruct)
-        ]
+        return self._array_values("unlocked_character_skills_array", c_uint32)
 
     @property
-    def cartographed_areas(self) -> list[int]:
-        """Read bounded cartographed-area identifiers."""
+    def duplicated_character_skills(self) -> list[DupeSkillStruct] | None:
+        """Read every duplicate-skill record in the source array."""
 
-        return self._array_values("cartographed_areas_array", c_uint32, 4096)
-
-    @property
-    def missions_completed(self) -> list[int]:
-        """Read bounded completed-mission identifiers."""
-
-        return self._array_values("missions_completed_array", c_uint32, 4096)
+        return self._records("duplicated_character_skills_array", DupeSkillStruct)
 
     @property
-    def missions_bonus(self) -> list[int]:
-        """Read bounded completed-bonus identifiers."""
+    def cartographed_areas(self) -> list[int | None] | None:
+        """Read every cartographed-area identifier in the source array."""
 
-        return self._array_values("missions_bonus_array", c_uint32, 4096)
-
-    @property
-    def missions_completed_hm(self) -> list[int]:
-        """Read bounded hard-mode completed-mission identifiers."""
-
-        return self._array_values("missions_completed_hm_array", c_uint32, 4096)
+        values = self._array_values("cartographed_areas_array", c_uint32)
+        return [value or None for value in values] if values else None
 
     @property
-    def missions_bonus_hm(self) -> list[int]:
-        """Read bounded hard-mode completed-bonus identifiers."""
+    def missions_completed(self) -> list[int] | None:
+        """Read every completed-mission identifier in the source array."""
 
-        return self._array_values("missions_bonus_hm_array", c_uint32, 4096)
-
-    @property
-    def unlocked_maps(self) -> list[int]:
-        """Read bounded unlocked-map identifiers."""
-
-        return self._array_values("unlocked_map_array", c_uint32, 4096)
+        return self._array_values("missions_completed_array", c_uint32)
 
     @property
-    def quests(self) -> list[QuestStruct]:
-        """Read at most 256 quest-log records."""
+    def missions_bonus(self) -> list[int] | None:
+        """Read every completed-bonus identifier in the source array."""
 
-        return [
-            value
-            for value in self._records("quest_log_array", QuestStruct, 256)
-            if isinstance(value, QuestStruct)
-        ]
+        return self._array_values("missions_bonus_array", c_uint32)
 
     @property
-    def mission_objectives(self) -> list[MissionObjectiveStruct]:
-        """Read at most 256 mission-objective records."""
+    def missions_completed_hm(self) -> list[int] | None:
+        """Read every hard-mode completed-mission identifier in the source array."""
 
-        return [
-            value
-            for value in self._records(
-                "mission_objectives_array", MissionObjectiveStruct, 256
-            )
-            if isinstance(value, MissionObjectiveStruct)
-        ]
+        return self._array_values("missions_completed_hm_array", c_uint32)
 
     @property
-    def titles(self) -> list[TitleStruct]:
-        """Read at most 256 title-progress records."""
+    def missions_bonus_hm(self) -> list[int] | None:
+        """Read every hard-mode completed-bonus identifier in the source array."""
 
-        return [
-            value
-            for value in self._records("titles_array", TitleStruct, 256)
-            if isinstance(value, TitleStruct)
-        ]
+        return self._array_values("missions_bonus_hm_array", c_uint32)
 
     @property
-    def title_tiers(self) -> list[TitleTierStruct]:
-        """Read at most 256 title-tier records."""
+    def unlocked_maps(self) -> list[int] | None:
+        """Read every unlocked-map identifier in the source array."""
 
-        return [
-            value
-            for value in self._records("title_tiers_array", TitleTierStruct, 256)
-            if isinstance(value, TitleTierStruct)
-        ]
+        return self._array_values("unlocked_map_array", c_uint32)
 
     @property
-    def agent_name_info(self) -> list[AgentNameInfoStruct]:
-        """Read bounded agent-name pointer records."""
+    def quests(self) -> list[QuestStruct] | None:
+        """Read every quest-log record in the source array."""
 
-        return [
-            value
-            for value in self._records("agent_name_info_array", AgentNameInfoStruct, 512)
-            if isinstance(value, AgentNameInfoStruct)
-        ]
+        return self._records("quest_log_array", QuestStruct)
 
     @property
-    def mission_map_icons(self) -> list[MissionMapIconStruct]:
-        """Read bounded mission-map icon records."""
+    def quest_log(self) -> list[QuestStruct] | None:
+        """Expose the quest list under Reforged's source property name."""
 
-        return [
-            value
-            for value in self._records(
-                "mission_map_icons_array", MissionMapIconStruct, 512
-            )
-            if isinstance(value, MissionMapIconStruct)
-        ]
+        return self.quests
 
     @property
-    def vanquished_areas(self) -> list[int]:
-        """Read bounded vanquished-area identifiers."""
+    def mission_objectives(self) -> list[MissionObjectiveStruct] | None:
+        """Read every mission-objective record in the source array."""
 
-        return self._array_values("vanquished_areas_array", c_uint32, 4096)
+        return self._records("mission_objectives_array", MissionObjectiveStruct)
+
+    @property
+    def titles(self) -> list[TitleStruct] | None:
+        """Read every title-progress record in the source array."""
+
+        return self._records("titles_array", TitleStruct)
+
+    @property
+    def title_tiers(self) -> list[TitleTierStruct] | None:
+        """Read every title-tier record in the source array."""
+
+        return self._records("title_tiers_array", TitleTierStruct)
+
+    @property
+    def agent_name_info(self) -> list[AgentNameInfoStruct] | None:
+        """Read every agent-name pointer record in the source array."""
+
+        return self._records("agent_name_info_array", AgentNameInfoStruct)
+
+    @property
+    def mission_map_icons(self) -> list[MissionMapIconStruct] | None:
+        """Read every mission-map icon record in the source array."""
+
+        return self._records("mission_map_icons_array", MissionMapIconStruct)
+
+    @property
+    def vanquished_areas(self) -> list[int] | None:
+        """Return the source accessor's current result.
+
+        Reforged's ``WorldContext.py`` currently returns ``None`` before its
+        array-reading code, so preserve that behavior even though the native
+        root declares ``vanquished_areas_array``.
+        """
+
+        return None
 
     def get_player_by_id(self, player_id: int) -> PlayerStruct | None:
-        """Find one player record by its native agent identifier."""
+        """Return the player whose source ``player_number`` matches the ID."""
 
-        for player in self.players:
-            if int(player.agent_id) == player_id:
+        for player in self.players or []:
+            if int(player.player_number) == player_id:
                 return player
         return None
 
@@ -1934,33 +2005,37 @@ class WorldContextStruct(Structure):
     def message_buffer(self) -> str:
         """Read the bounded UTF-16 message buffer as one display string."""
 
-        values = self._array_values("message_buff_array", c_uint16)
+        values = self._array_values("message_buff_array", c_uint16) or []
         return bytes().join(int(value).to_bytes(2, "little") for value in values).decode(
             "utf-16-le", errors="replace"
         ).split("\x00", 1)[0]
 
     @property
-    def message_buff(self) -> str | None:
-        """Return the source spelling of the message buffer."""
+    def message_buff(self) -> list[str] | None:
+        """Return the source character-list form of the message buffer."""
 
-        value = self.message_buffer
-        return value or None
+        values = self._array_values("message_buff_array", c_uint16)
+        if not values:
+            return None
+        return [chr(value) for value in values]
 
     @property
     def dialog_buffer(self) -> str:
         """Read the bounded UTF-16 dialog buffer as one display string."""
 
-        values = self._array_values("dialog_buff_array", c_uint16)
+        values = self._array_values("dialog_buff_array", c_uint16) or []
         return bytes().join(int(value).to_bytes(2, "little") for value in values).decode(
             "utf-16-le", errors="replace"
         ).split("\x00", 1)[0]
 
     @property
-    def dialog_buff(self) -> str | None:
-        """Return the source spelling of the dialog buffer."""
+    def dialog_buff(self) -> list[str] | None:
+        """Return the source character-list form of the dialog buffer."""
 
-        value = self.dialog_buffer
-        return value or None
+        values = self._array_values("dialog_buff_array", c_uint16)
+        if not values:
+            return None
+        return [chr(value) for value in values]
 
     @property
     def array_sizes(self) -> dict[str, int]:
@@ -1985,7 +2060,7 @@ assert ctypes.sizeof(PartyAttributeStruct) == 0x43C
 assert ctypes.sizeof(EffectStruct) == 0x18
 assert ctypes.sizeof(BuffStruct) == 0x10
 assert ctypes.sizeof(AgentEffectsStruct) == 0x24
-assert ctypes.sizeof(NPCStruct) == 0x30
+assert ctypes.sizeof(NPC_ModelStruct) == 0x30
 assert ctypes.sizeof(PlayerStruct) == 0x50
 assert ctypes.sizeof(HeroFlagStruct) == 0x24
 assert ctypes.sizeof(HeroInfoStruct) == 0x78
@@ -2011,12 +2086,16 @@ assert WorldContextStruct.party_effects_array.offset == 0x508
 assert WorldContextStruct.players_array.offset == 0x80C
 assert WorldContextStruct.foes_killed.offset == 0x84C
 
-# Source spelling retained for callers migrating from Reforged.
-NPC_ModelStruct = NPCStruct
+# Previous Stealth spelling retained as an alias for the source class.
+NPCStruct = NPC_ModelStruct
 
 
 class WorldContext:
     """Resolve and read the current ``WorldContext`` through ``GameContext``."""
+
+    _ptr: int = 0
+    _cached_ctx: WorldContextStruct | None = None
+    _callback_name = "WorldContext.UpdatePtr"
 
     def __init__(self, reader: _memory_reader, game_context: GameContext) -> None:
         """Create a reader using the selected client's cached game context."""
@@ -2044,6 +2123,53 @@ class WorldContext:
         return WorldContextStruct.from_buffer_copy(raw_context).bind_reader(
             self._reader, address
         )
+
+    @staticmethod
+    def get_ptr() -> int:
+        """Return the most recently refreshed source-compatible address."""
+
+        return WorldContext._ptr
+
+    @staticmethod
+    def _update_ptr() -> None:
+        """Refresh the external facade from the selected client."""
+
+        from ..client import current_client
+
+        client = current_client()
+        if client is None:
+            WorldContext._ptr = 0
+            WorldContext._cached_ctx = None
+            return
+        try:
+            context = client.world_context
+            address = context.resolve_address()
+            WorldContext._ptr = address or 0
+            WorldContext._cached_ctx = cast(Any, context.read())
+        except (OSError, RuntimeError):
+            WorldContext._ptr = 0
+            WorldContext._cached_ctx = None
+
+    @staticmethod
+    def enable() -> None:
+        """Declare source callback registration, which requires in-client code."""
+
+        raise NotImplementedError(
+            "WorldContext.enable requires the in-process callback runtime."
+        )
+
+    @staticmethod
+    def disable() -> None:
+        """Clear the external facade snapshot and address."""
+
+        WorldContext._ptr = 0
+        WorldContext._cached_ctx = None
+
+    @staticmethod
+    def get_context() -> WorldContextStruct | None:
+        """Return the most recently refreshed external snapshot."""
+
+        return WorldContext._cached_ctx
 
 
 def get() -> WorldContextStruct | None:

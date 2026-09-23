@@ -2077,7 +2077,7 @@ class MainWindow:
             return
 
         try:
-            friends = snapshot.friends
+            friends = snapshot.friend_records
         except OSError as error:
             self._friend_list_table.rows = []
             self._friend_list_table.update()
@@ -2102,7 +2102,7 @@ class MainWindow:
                     "offset": "array",
                     "field": f"friend[{index}]",
                     "value": (
-                        f"type={friend.type.name}, status={friend.friend_status.name}, "
+                        f"type={friend.friend_type.name}, status={friend.friend_status.name}, "
                         f"alias={friend.alias_str or '(none)'}, "
                         f"character={friend.character_name_str or '(none)'}, "
                         f"friend_id={friend.friend_id}, zone_id={friend.zone_id}"
@@ -2147,7 +2147,7 @@ class MainWindow:
             return
 
         try:
-            messages = snapshot.messages
+            messages = snapshot.message_records
             is_typing = self._connection.is_typing() if self._connection else False
         except OSError as error:
             self._chat_buffer_table.rows = []
@@ -2391,63 +2391,63 @@ class MainWindow:
         except (OSError, RuntimeError):
             dialog_buffer = "(unreadable)"
         try:
-            party_attributes = snapshot.party_attributes
+            party_attributes = snapshot.party_attributes or []
         except (OSError, RuntimeError):
             party_attributes = []
         try:
-            party_effects = snapshot.party_effects
+            party_effects = snapshot.party_effects or []
         except (OSError, RuntimeError):
             party_effects = []
         try:
-            players = snapshot.players
+            players = snapshot.players or []
         except (OSError, RuntimeError):
             players = []
         try:
-            npc_models = snapshot.npc_models
+            npc_models = snapshot.npc_models or []
         except (OSError, RuntimeError):
             npc_models = []
         try:
-            hero_flags = snapshot.hero_flags
+            hero_flags = snapshot.hero_flags or []
         except (OSError, RuntimeError):
             hero_flags = []
         try:
-            hero_info = snapshot.hero_info
+            hero_info = snapshot.hero_info or []
         except (OSError, RuntimeError):
             hero_info = []
         try:
-            pets = snapshot.pets
+            pets = snapshot.pets or []
         except (OSError, RuntimeError):
             pets = []
         try:
-            skillbars = snapshot.skillbars
+            skillbars = snapshot.skillbars or []
         except (OSError, RuntimeError):
             skillbars = []
         try:
-            learnable_skills = snapshot.learnable_character_skills
+            learnable_skills = snapshot.learnable_character_skills or []
         except (OSError, RuntimeError):
             learnable_skills = []
         try:
-            unlocked_skills = snapshot.unlocked_character_skills
+            unlocked_skills = snapshot.unlocked_character_skills or []
         except (OSError, RuntimeError):
             unlocked_skills = []
         try:
-            duplicated_skills = snapshot.duplicated_character_skills
+            duplicated_skills = snapshot.duplicated_character_skills or []
         except (OSError, RuntimeError):
             duplicated_skills = []
         try:
-            quests = snapshot.quests
+            quests = snapshot.quests or []
         except (OSError, RuntimeError):
             quests = []
         try:
-            mission_objectives = snapshot.mission_objectives
+            mission_objectives = snapshot.mission_objectives or []
         except (OSError, RuntimeError):
             mission_objectives = []
         try:
-            titles = snapshot.titles
+            titles = snapshot.titles or []
         except (OSError, RuntimeError):
             titles = []
         try:
-            title_tiers = snapshot.title_tiers
+            title_tiers = snapshot.title_tiers or []
         except (OSError, RuntimeError):
             title_tiers = []
 
@@ -2745,8 +2745,8 @@ class MainWindow:
         try:
             player_offer = snapshot.player_offer
             partner_offer = snapshot.partner_offer
-            player_items = player_offer.items
-            partner_items = partner_offer.items
+            player_items = player_offer.offered_items
+            partner_items = partner_offer.offered_items
         except (OSError, RuntimeError) as error:
             self._trade_context_table.rows = []
             self._trade_context_table.update()
@@ -2841,10 +2841,10 @@ class MainWindow:
         item_error: str | None = None
         try:
             for bag in snapshot.bags():
-                for item in bag.items():
+                for item in bag.read_items():
                     item_rows.append(
                         {
-                            "bag": bag.bag_id,
+                            "bag": bag.bag_id_value,
                             "slot": int(item.slot),
                             "item_id": int(item.item_id),
                             "quantity": int(item.quantity),

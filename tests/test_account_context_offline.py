@@ -5,7 +5,12 @@ from __future__ import annotations
 import ctypes
 import unittest
 
-from py4gw import AccountContextStruct, AccountUnlockedCountStruct, GWArray
+from py4gw import (
+    AccountContextStruct,
+    AccountUnlockedCountStruct,
+    AccountUnlockedItemInfoStruct,
+    GWArray,
+)
 
 
 class _Memory:
@@ -32,12 +37,40 @@ class AccountContextOfflineTests(unittest.TestCase):
         """The root and nested records match the native x86 layout."""
 
         self.assertEqual(ctypes.sizeof(AccountContextStruct), 0x138)
+        self.assertEqual(ctypes.sizeof(AccountUnlockedCountStruct), 0x0C)
+        self.assertEqual(ctypes.sizeof(AccountUnlockedItemInfoStruct), 0x0C)
         self.assertEqual(AccountContextStruct.unlocked_pvp_heros.offset, 0xB4)
         self.assertEqual(AccountContextStruct.h00C4.offset, 0xC4)
         self.assertEqual(AccountContextStruct.unlocked_pvp_item_info.offset, 0xD4)
         self.assertEqual(AccountContextStruct.unlocked_pvp_items.offset, 0xE4)
         self.assertEqual(AccountContextStruct.unlocked_account_skills.offset, 0x124)
         self.assertEqual(AccountContextStruct.account_flags.offset, 0x134)
+
+    def test_native_field_names_and_order(self) -> None:
+        """Account records preserve the names and order from account.h."""
+
+        self.assertEqual(
+            [field[0] for field in AccountUnlockedCountStruct._fields_],
+            ["id", "unk1", "unk2"],
+        )
+        self.assertEqual(
+            [field[0] for field in AccountUnlockedItemInfoStruct._fields_],
+            ["name_id", "mod_struct_index", "mod_struct_size"],
+        )
+        self.assertEqual(
+            [field[0] for field in AccountContextStruct._fields_],
+            [
+                "account_unlocked_counts",
+                "h0010",
+                "unlocked_pvp_heros",
+                "h00C4",
+                "unlocked_pvp_item_info",
+                "unlocked_pvp_items",
+                "h0104",
+                "unlocked_account_skills",
+                "account_flags",
+            ],
+        )
 
     def test_array_sizes_do_not_traverse_remote_data(self) -> None:
         """Header counts are available without reading any child array."""
@@ -56,7 +89,7 @@ class AccountContextOfflineTests(unittest.TestCase):
         skill_address = 0x00210000
         count = AccountUnlockedCountStruct()
         count.id = 0x83
-        count.unknown_1 = 3
+        count.unk1 = 3
         memory.add(count_address, bytes(count))
         memory.add(skill_address, (1 << 7).to_bytes(4, "little"))
 

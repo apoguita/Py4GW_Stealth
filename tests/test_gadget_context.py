@@ -8,7 +8,7 @@ from py4gw import GadgetContext, GameContext, PatternCatalog, ProcessMemoryReade
 
 
 class LiveGadgetContextTests(unittest.TestCase):
-    """Verify the direct GameContext gadget pointer and bounded records."""
+    """Verify the direct GameContext pointer and the complete gadget array."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -39,7 +39,7 @@ class LiveGadgetContextTests(unittest.TestCase):
             cls.reader.close()
 
     def test_reads_gadget_root(self) -> None:
-        """Read the root and a bounded gadget-info sample."""
+        """Read every advertised GadgetInfo record from the live client."""
 
         address = self.context.resolve_address()
         if address is None:
@@ -48,12 +48,12 @@ class LiveGadgetContextTests(unittest.TestCase):
         self.assertIsNotNone(snapshot)
         if snapshot is None:
             return
-        records = snapshot.gadget_infos(limit=32)
-        self.assertLessEqual(len(records), 32)
+        records = snapshot.gadget_infos()
+        self.assertEqual(len(records), snapshot.array_size)
         print(
             "Live GadgetContext: "
             f"0x{address:08X}, advertised={snapshot.array_size}, "
-            f"sample={len(records)}"
+            f"read={len(records)}"
         )
 
 

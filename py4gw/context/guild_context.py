@@ -7,6 +7,8 @@ followed through the bound :class:`ProcessMemoryReader`.
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, Union, c_uint8, c_uint16, c_uint32
 from typing import Any, Protocol, TypeVar, cast
@@ -91,7 +93,7 @@ class GHKeyStruct(Union):
         return any(int(value) != 0 for value in self.k)
 
 
-class CapeDesignStruct(Structure):
+class CapeDesignStruct(TargetStruct):
     """The native 0x1C cape-design value."""
 
     _pack_ = 1
@@ -106,7 +108,7 @@ class CapeDesignStruct(Structure):
     ]
 
 
-class TownAllianceStruct(Structure):
+class TownAllianceStruct(TargetStruct):
     """The native 0x78 faction-town alliance record."""
 
     _pack_ = 1
@@ -158,7 +160,7 @@ class TownAllianceStruct(Structure):
         return _format_encoded_text(self.tag_encoded_str)
 
 
-class GuildHistoryEventStruct(Structure):
+class GuildHistoryEventStruct(TargetStruct):
     """The native 0x208 guild-history event."""
 
     _pack_ = 1
@@ -187,7 +189,7 @@ class GuildHistoryEventStruct(Structure):
         return _format_encoded_text(self.name_encoded_str)
 
 
-class GuildStruct(Structure):
+class GuildStruct(TargetStruct):
     """The native 0xAC guild record."""
 
     _pack_ = 1
@@ -243,7 +245,7 @@ class GuildStruct(Structure):
         return _format_encoded_text(self.tag_encoded_str)
 
 
-class GuildPlayerStruct(Structure):
+class GuildPlayerStruct(TargetStruct):
     """The native 0x174 guild-roster member record."""
 
     _pack_ = 1
@@ -359,7 +361,7 @@ class GuildPlayerStruct(Structure):
         return _format_encoded_text(self.promoter_name_encoded_str)
 
 
-class GuildContextStruct(Structure):
+class GuildContextStruct(TargetStruct):
     """The complete fixed-width native ``GuildContext`` layout."""
 
     _pack_ = 1

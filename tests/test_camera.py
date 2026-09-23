@@ -76,6 +76,27 @@ class LiveCameraTests(unittest.TestCase):
             f"distance={snapshot.distance:.3f}"
         )
 
+    def test_source_facade_getters_and_disabled_actions(self) -> None:
+        """Source facade getters read remotely; action wrappers never write."""
+
+        snapshot = self.camera.camera_instance()
+        self.assertEqual(self.camera.GetLookAtAgentID(), snapshot.look_at_agent_id)
+        self.assertEqual(self.camera.GetYaw(), snapshot.yaw)
+        self.assertEqual(self.camera.GetPitch(), snapshot.pitch)
+        self.assertEqual(self.camera.GetDistance2(), snapshot.distance2)
+        self.assertEqual(self.camera.GetPosition(), snapshot.camera_position)
+        self.assertEqual(
+            self.camera.GetCameraPositionToGo(),
+            snapshot.camera_position_to_go_value,
+        )
+        self.assertEqual(self.camera.GetCameraUnlock(), snapshot.IsCameraUnlocked())
+        with self.assertRaises(NotImplementedError):
+            self.camera.SetYaw(0.25)
+        with self.assertRaises(NotImplementedError):
+            self.camera.SetCameraUnlock(True)
+        with self.assertRaises(NotImplementedError):
+            self.camera.ForwardMovement(1.0, True)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -7,34 +7,42 @@ project's short description or installation guide.
 Status: current active research project; read-only process discovery and the
 reusable scanner slice implemented
 Scope: establish what an external Guild Wars controller can read, write, execute, and observe before expanding capabilities.
-Authority: inspected current Py4GW Reforged and Py4GW Reforged Native sources; inspected the GwAu3 source checkout; and verified process discovery, section scanning, and the CharContext, GameContext, PreGameContext, Cinematic, GameplayContext, ServerRegion, InstanceInfo, TextParser, AvailableCharacterArray, PartyContext, GuildContext, AccAgentContext, Camera, FriendList, ChatBuffer, WorldContext root, and MapContext root/spawn read paths against one live client build. Other context behavior remains unverified.
+Authority: inspected current Py4GW Reforged and Py4GW Reforged Native sources; inspected the GwAu3 source checkout; and verified multiple external read slices against a live client. The exact per-context source comparison and remaining gaps are in [`CONTEXT_PARITY_AUDIT.md`](CONTEXT_PARITY_AUDIT.md). Do not treat these live slices as full parity.
 
 ## Intent
 
-Py4GW Stealth is intended to recreate selected useful capabilities of Py4GW
-Reforged for Guild Wars from an external Python process, without loading a DLL
-into `Gw.exe` or placing executable code or patches in it. In that sense,
-Stealth is the non-injected, external counterpart to the current Reforged
-runtime.
+Py4GW Stealth is an independent external-host project intended to recreate
+selected useful Guild Wars data capabilities. It must be self-sufficient: the
+Reforged DLL, embedded Python runtime, and Reforged-owned shared-memory block
+are source references, not runtime dependencies. The current implementation
+is read-only, but the final project is not required to remain pure external.
 
 The project is capability-by-capability research. It does not assume that
 every in-process Reforged feature can be reproduced externally, and it does
 not promise a complete replacement before each capability has been tested.
 
-The immediate purpose is to understand the capability boundary between:
+The immediate purpose is to reproduce the source-backed pointer paths without
+depending on Reforged's runtime. **Architecture decision (2026-09-23):** the
+external Stealth controller will install Stealth-owned payload/patch code in
+`Gw.exe` where Native requires callbacks or game-thread execution. No
+conventional injected DLL or Reforged runtime is part of this design. This is
+payload injection, not pure-external operation; “no DLL” does not mean the
+target is unmodified or that the payload is undetectable. The first target is
+the WorldMap callback pointer. The implementation is still read-only today;
+the selected payload is not yet built or tested. See
+[`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md) and
+[`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md).
 
-1. a pure external process that does not place executable code or patches in `Gw.exe`;
-2. an external controller that uses a small remote payload rather than an injected DLL; and
-3. the current Py4GW Reforged model, where a DLL embeds Python and owns an in-process runtime.
+The Native project remains the source authority for pointer ownership and
+acquisition. Its direct signatures and callback-published pointers are
+different cases; Stealth will reproduce the relevant Native callback path
+rather than consume Reforged's shared-memory publication. The read-only
+context-parity roadmap continues as a separate track and does not gate the
+selected WorldMap callback implementation.
 
-The longer-term intent includes capabilities that may need code to run on the
-Guild Wars game thread, not only context reads. A pure external reader cannot
-provide that. The current direction is to avoid DLL injection and evaluate a
-smaller in-process payload/hook bridge, similar to the mechanism observed in
-GwAu3. This remains future scope. It is still injection technically, even
-without loading a DLL.
-
-This document deliberately does not select an architecture, promise a botting surface, or prescribe an implementation. Those decisions depend on research into individual Guild Wars data and command paths.
+This document does not promise a botting surface. The payload architecture and
+first callback target are selected; the callback's implementation, review,
+and live verification remain unfinished.
 
 The current implementation is intentionally narrower than the long-term
 research question: it is a project-owned `Win32` boundary, a reusable
@@ -52,6 +60,10 @@ externally validated.
 ## Terminology
 
 `External host` means the primary logic runs outside `Gw.exe`. It does not, by itself, mean that the game process is unmodified.
+
+`Self-sufficient` means Stealth owns its required pointer-acquisition and data
+transport paths; it does not require the Reforged DLL or shared-memory block.
+It does not imply pure external operation.
 
 `Pure external` means the tool does not allocate executable remote memory, write code into `Gw.exe`, or patch its code. Process-memory reads and writes may still occur.
 
@@ -258,13 +270,15 @@ text-decoding rule must not be hidden inside the reusable scanner.
 
 Important distinction: an external process can ask Windows to start code in another process, but that does not prove that a particular Guild Wars function is safe on that thread. Thread affinity, calling convention, object lifetime, and game state must be established per function.
 
-## Open Research Questions
+## Remaining Research Questions
 
 1. Which useful Guild Wars state can be read externally with stable, validated pointer chains?
 2. Which game-owned command, UI-message, or packet paths can be driven by external writes alone, without a new payload?
 3. For each desired internal function, what are its x86 ABI, argument lifetime, required state, and thread-affinity constraints?
-4. Can a strict pure-external prototype provide enough value before considering any remote payload?
-5. If a remote payload is ever considered, what is the smallest auditable scope and how can installation, version mismatch, shutdown, and recovery be made observable?
+4. Which Native-backed operations, beyond the selected WorldMap callback
+   capture, require game-thread execution?
+5. How should installation, version mismatch, shutdown, and recovery for the
+   selected payload be verified and made observable?
 
 ## Current Project Boundary
 
@@ -292,19 +306,21 @@ surface that can:
 4. load the copied `offsets/` definitions and execute reusable resolver chains.
 
 The implemented part is generic Windows process handling, a bounded memory
-reader, PE section discovery, a reusable pattern scanner, an offsets
-resolver, and the migrated Guild Wars structure readers. The current migration
-order is: `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
-`GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
-`AvailableCharacterArray`, `PartyContext`, `GuildContext`, `AccAgentContext`,
-`Camera`, `FriendList`, `ChatBuffer`, and the `WorldContext` root. It does not yet contain the
-remaining context readers, command paths, or behavior interpretation. The root
-UI exposes process discovery and these read-only context surfaces without
-adding a second process layer.
+reader, PE section discovery, a reusable pattern scanner, an offsets resolver,
+and selected Guild Wars structure readers. Their exact parity and pointer
+availability are recorded in `CONTEXT_PARITY_AUDIT.md`. Callback-owned
+contexts have supplied-address readers, but Stealth still needs its own
+callback/hook route to obtain those addresses. Command paths and behavior
+interpretation are not implemented. The root UI exposes current read-only
+surfaces without adding a second process layer.
 
-Payload injection, DLL injection, remote execution, hooks, and writes remain
-outside the current scope. Memory scanning is read-only and is now part of the
-implemented foundation.
+The current implementation remains read-only. The payload architecture and
+WorldMap callback target are selected, but no payload, hook, patch, remote
+execution, or write has been implemented yet. Memory scanning is read-only
+and is part of the implemented foundation. See
+[`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md) and
+[`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md) for the implementation
+and user-present live-test plan.
 
 ### Design order for this deliverable
 
@@ -402,9 +418,10 @@ required surface against documented Windows behavior. If a later change
 deliberately borrows actual MemLib source, preserve its MIT license notice and
 record exact file-level provenance in the project documentation.
 
-The current local work is pure external, read-only process discovery and
-read-only module scanning. Remote allocation, memory writes, remote threads,
-DLL loading, executable payloads, and hooks are outside the current scope.
+The current local implementation is pure external and read-only. The selected
+next target-side work is the WorldMap callback payload; implementation and
+live verification remain incomplete. See
+[`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md).
 
 ## Native scanner migration plan
 
@@ -694,11 +711,11 @@ source field offsets, fixed sizes, flag/text properties, record aliases, and
 the declared facade cache. Callback registration remains externally unavailable
 because it requires the injected runtime.
 
-`WorldMapContext` is intentionally not claimed as migrated yet. The native
-implementation receives its pointer from an injected UI callback and publishes
-it through Reforged shared memory. The copied offsets contain no direct
-external resolver for that context, so adding a guessed pattern would violate
-the external-reader design.
+At the time of this observation, `WorldMapContext` had not yet been ported.
+Its source-matched structure and supplied-address reader have since been added
+and offline-checked. The native implementation receives its root pointer from
+an injected UI callback and publishes it through Reforged shared memory, so no
+live read is claimed and no guessed pattern is added.
 
 ## Live Observation: Gw.exe Discovery
 
@@ -870,14 +887,24 @@ Status: verified against the same running client build with
 The Reforged Python module calls this surface `AccAgentContext`; the native
 project defines the same root as `GW::Context::AgentContext`. It is reached
 directly through `GameContext.agent` at `+0x08`. The external reader follows
-that pointer and reads the maintained 0x1B0-byte root, including the summary
-array and movement-pointer array. Nested pointers are read through the
-external memory reader and are never treated as local Python pointers.
+that pointer and reads the maintained 0x1B0-byte root, including summary,
+pointer, and movement arrays. Nested pointers are read through the external
+memory reader and are never treated as local Python pointers. The Reforged
+array properties return empty lists for ordinary empty arrays, while the
+movement property returns `None` when its header is empty; Stealth preserves
+those results. Native field spellings are exposed as aliases beside the
+Reforged `*_array` fields.
 
-The live test resolved `AgentContext` at `0x0257E208` and observed 2,296
-summary entries, 45 movement entries, 45 valid movement IDs, and instance
-timer `1709016840`. These values are one observation and are not assumed
-stable across client builds or account state.
+The native header also declares `AgentInfo` and `AgentInfoArray`. The structure
+is represented in Stealth, but it is not a field in `AgentContext` and the
+inspected native context methods expose no getter for its array. Its runtime
+pointer source is therefore unresolved; no relationship to a nearby field has
+been inferred.
+
+The live test resolved `AgentContext` at `0x07453460` and observed 2,002
+summary entries, 2,002 movement entries, 104 non-null movement IDs, and
+instance timer `1805937958`. These values are one observation and are not
+assumed stable across client builds or account state.
 
 ## Live Observation: Camera
 
@@ -958,10 +985,10 @@ Status: verified against the same running client build with
 The native world pointer is already present in the maintained `GameContext`
 layout at `GameContext + 0x2C`; no second signature scan is needed. Stealth
 reads the complete fixed `0x854`-byte root and exposes its scalar progression
-fields, party-flag coordinates, and bounded `GWArray` headers. Child arrays are
-not materialized by the root read in one operation; their source-backed player,
-NPC, quest, hero, skill, and title readers are available as bounded child
-properties on the external context.
+fields, party-flag coordinates, and `GWArray` headers. Child arrays are read in
+full from their advertised size after validating the buffer, capacity, x86
+address extent, and a 16 MiB per-array byte ceiling. Requests above that ceiling
+fail explicitly rather than returning a truncated prefix.
 
 The live test resolved `WorldContext` at `0x02572A78` and observed player
 number `37`, level `20`, experience `12511518`, and `101` player records in
@@ -971,19 +998,27 @@ effect and no buffs. These values are one observation and are not assumed
 stable across client builds or account state.
 
 Party attributes use the native `0x43C` inline record with 54 attributes.
-Party effects use the native `0x24` record and follow its buff/effect arrays
-only when requested, capped at 64 buffs and 128 effects per block. The root
-read itself does not materialize those child arrays.
+Party effects use the native `0x24` record and follow its complete buff/effect
+arrays only when requested. The root read itself does not materialize those
+child arrays.
 
 Player records use the native `0x50` layout and NPC model records use the
-native `0x30` layout. Their array traversal is capped at 512 records. Names
-and NPC model-file lists are indirect reads and are only followed through
-bounded properties, not during the root read.
+native `0x30` layout. Names and NPC model-file lists are indirect reads and are
+only followed when requested, not during the root read. On 2026-09-22, live
+array sizes and materialized counts matched for every implemented source
+array accessor checked: 2,009 map agents, 9,271 NPC models, 101 players,
+2,009 agent-name records, and 369 title tiers, among the other arrays. The
+native root declares `vanquished_areas_array`, but Reforged Python's
+`vanquished_areas` property currently returns `None` unconditionally; Stealth
+preserves this source behavior rather than reading that array through the
+property. Indirect UTF-16 strings are read
+through their terminator up to the external reader's 32,768-character ceiling;
+an over-limit or unterminated value fails instead of returning a clipped string.
 
 Hero flags use the native `0x24` record, hero information uses `0x78`, and
-pet records use `0x1C`. Their arrays are capped at 64 records. The live
-observation contained 23 hero-information records and no active hero flags or
-pet records.
+pet records use `0x1C`. Their complete advertised arrays are returned. The
+live observation contained 23 hero-information records and no active hero
+flags or pet records.
 
 ## Live Observation: MapContext root
 
@@ -994,36 +1029,57 @@ Status: verified against the same running client build with
 at `GameContext + 0x14`; it does not require a second root signature scan.
 Stealth reads the fixed `0x138` Reforged root and follows the three native
 spawn arrays only through bounded lazy reads. The live test resolved
-`MapContext` at `0x4A1AF688`, observed map ID `449`, map type `0`, spawn counts
-of `7`, `22`, and `16`, and a non-null path pointer at `0x2F2930F0`. The
-pathing-root check then read `PathContext` at `0x2F2930F0`, its static-data
-root at `0x4B6EE588`, and a bounded set of 32 `PathingMap` root records.
+`MapContext` at `0x267A47C8`, observed map ID `449`, map type `0`, spawn counts
+of `7`, `22`, and `16`, and a non-null path pointer at `0x273553C8`. The live
+read then found `PathContext` at `0x273553C8`, its static-data root at
+`0x271BBBC0`, and all 39 `PathingMap` records.
 
 The native header names the first five words as `map_boundaries`, while the
 Reforged Python structure uses the same bytes for `map_type`, `start_pos`, and
 `end_pos`. Both views are exposed so this source difference is explicit.
-Pathing child traversal (trapezoids, nodes, and portals), map props, terrain,
-and zones are not migrated yet; the current reader reports their direct
-pointers and counts without interpreting those pointer-rich trees. The first
-pathing step is intentionally context-only: no Python-owned pathing snapshots
-or map-ID cache. See
+Pathing child arrays and the reachable props records are read externally;
+terrain and zones remain raw pointers. Source pathing snapshots, facade
+helpers, and PID-scoped map-ID caches are implemented. Automatic in-client
+callback registration remains unavailable. See
 [`PATHING_MIGRATION_PLAN.md`](PATHING_MIGRATION_PLAN.md).
 
+On 2026-09-22, the live read found 1,270 trapezoids, 1,270 sink nodes, 4,271 X
+nodes, 1,980 Y nodes, 164 portals, and 27 blocking props. `PropsContext`
+contained 16 groups with 23 `PropByType` records, 1 model, and 516 map props.
+Trapezoid, X/Y-node, and portal links were readable. The raw live check found
+all 1,270 SinkNode field values pointing to aligned records in their owning
+map's trapezoid arrays. This observation conflicts with the pointer-to-pointer,
+null-terminated list in Reforged runtime `.py` and native C++; the Reforged
+`.pyi` types those fields as single pointers instead. Stealth ports the runtime
+Python/native pointer-list behavior and tests it offline. A live check also
+confirmed that interpreting the observed field as the source pointer-to-pointer
+produces a small trapezoid ID, which the bounded reader rejects as an implausible
+address; source-shaped behavior is therefore incompatible with this client
+build. Subsequent source-usage review found the Reforged snapshot explicitly
+leaves `sink_nodes` empty and found no active consumer of the SinkNode helper
+properties in the searched source tree. Treat this as an unused helper/live
+layout discrepancy, not as a blocker for active MapContext data reading. The source
+snapshot pass materialized 1,270 trapezoids and 164 portals and resolved all
+164 portal pair indices; the travel-portal helper returned 7 entries.
+
 Skillbar slots use the native `0x14` slot and `0xBC` skillbar layouts. The
-root's learnable, unlocked, and duplicate-skill arrays are bounded at 512
-entries. The live observation contained one skillbar, 108 unlocked values,
-one duplicate-skill record, and no learnable values.
+root's learnable, unlocked, and duplicate-skill arrays are returned in full.
+The live observation contained one skillbar, 108 unlocked values, one
+duplicate-skill record, and no learnable values.
 
 Quest and mission-objective records use the native `0x34` and `0x0C` layouts.
 Title and title-tier records use the native `0x2C` and `0x0C` layouts. Their
-arrays are bounded at 256 entries and indirect text is read only through
-bounded properties. The live observation contained 23 quests, 47 titles, and
-256 title tiers; no mission objectives were present.
+arrays are returned in full and indirect text is read only when requested.
+The live observation contained 23 quests, 47 titles, and 369 title tiers; no
+mission objectives were present.
 
 `TradeContext` uses the direct `GameContext.trade_context` pointer and the
 native `0x38` root, `0x14` side, and `0x08` item layouts. The live client had
-an allocated trade root with zero offered items on both sides. Stealth only
-reads state; it does not initiate, offer, accept, or cancel trades.
+an allocated trade root with zero offered items on both sides. Its four native
+state constants and three flag helpers are represented. Offer reads now cover
+the complete advertised `GWArray` instead of silently stopping at 64; requests
+above 16 MiB fail explicitly. Stealth only reads state; it does not initiate,
+offer, accept, or cancel trades.
 
 `ItemContext` uses the direct `GameContext.item_context` pointer and the
 native fixed `0x10C` root. The live client exposed 22 bag entries and a raw
@@ -1157,6 +1213,41 @@ refreshes at 1.80 ms. Nested reads remained small and bounded: visible effects
 averaged 0.005 ms, equipment 0.011 ms, and tags 0.006 ms for the selected
 record. The one-time resolver scan was 128.0 ms in that run.
 
+### Latest AgentContext/AgentArray parity check
+
+On 2026-09-22, `tests/test_agent_array.py` passed against PID 29520
+(`F:\GW\GW1\Gw.exe`, file version 1.0.0.1). The latest sample reported an
+array size of 1,945 with capacity 2,048; 104 references passed the current-agent
+gate, with zero stale, unreadable, or truncated entries. The type projection
+classified 101 living agents and 3 gadgets. A complete living refresh captured
+101 records with zero stale or unreadable records. The measured refresh took
+6.651 ms, including 0.781 ms for the pointer table, 0.433 ms for the movement
+table, and 3.481 ms for classification. The source-shaped context cache build
+took 6.644 ms; resolver initialization took 136.156 ms once. These values
+describe one client state, not a stable count or performance guarantee.
+
+This live read does not certify full source/API parity. The record structs,
+value dataclasses, and snapshot conversions have since been ported and checked
+against Reforged Python and native C++ layouts. Offline tests assert the native
+record sizes and key offsets. Two source differences are kept explicit:
+Reforged Python's packed `ItemDataStruct` is 0x13 bytes with a 32-bit `type`,
+while native `ItemData` is 0x10 bytes with a 1-byte type. This expands the
+Python equipment union/record to 0xAB/0xF3, compared with the native
+0x90/0xD8. Separate `Reforged*` structure views preserve those Python layouts;
+live reads use native layouts. Reforged Python's packed living record is
+0x1C2 bytes while native `AgentLiving` is 0x1C4. The `.pyi` snapshot return
+annotations disagree with some runtime implementations; behavior follows the
+`.py` source. Full AgentArray parity
+remains incomplete: `AgentArrayStruct` cache helpers now check the matching
+external context readers and materialize accepted records through remote reads.
+Reforged's `SystemShaMemMgr` lookup fallback is not ported; the process-wide
+callback facade remains unavailable, and the wider `Agent.py` helper surface
+is unaudited. The external
+facade uses per-client ownership; `enable()` reports that the injected callback
+runtime is unavailable. The native `AgentContext` root itself is the same
+`GameContext.agent` root documented under AccAgentContext; the array pointer is
+a separate global resolver. See the certification record for remaining gaps.
+
 ## Account and gadget roots
 
 The native `GameContext` contains direct pointers for both `AccountContext`
@@ -1165,11 +1256,13 @@ parent pointers; no new signature or callback source is needed.
 
 `AccountContext` is read as its fixed `0x138`-byte x86 root and reports the
 six maintained `GWArray` headers without traversing account-wide unlock data.
-`GadgetContext` is read as its fixed `0x10`-byte root and exposes a lazy
-`GadgetInfo` value-array reader capped by the caller. On the verified client,
-the account root was `0x0257EBC8` with six array headers, and the gadget root
-was `0x0256FFB0` with 9,500 advertised entries. The live check materialized
-only a 32-record gadget sample.
+`GadgetContext` is read as its fixed `0x10`-byte root. Its default
+`GadgetInfo` reader materializes the entire advertised value array in one
+contiguous external read. A smaller sample can be requested explicitly; an
+unbounded full read above the 16 MiB safety ceiling fails instead of silently
+returning a prefix. The latest live check (2026-09-22) resolved gadget root
+`0x00AC41D8` and read all 9,500 advertised entries. That address and count are
+observations for the running client, not constants.
 
 This completes the remaining small direct-pointer root readers identified in
 the current inventory at their implemented read boundary. It does not claim
@@ -1177,6 +1270,357 @@ source parity for every nested helper: the field and API gaps are recorded in
 `docs/CONTEXT_PARITY_AUDIT.md`. Item child records now have a live-verified
 bag-based access path; render, salvage, and callback-owned map contexts still
 lack an external object-pointer source.
+
+## Live JSON resolver sweep — 2026-09-22
+
+**Target:** PID `29520`, `F:\GW\GW1\Gw.exe`; one Guild Wars process was
+detected. Windows file metadata reports file/product version `1.0.0.1`, which
+does not provide a useful client-build identifier, so this result is tied to
+the observed executable path and should not be generalized to other builds.
+
+**Input and expected result:** Stealth's complete `offsets/` catalog; execute
+each loaded named resolver once using the read-only process reader and PE
+scanner. Each resolver should return a successful nonzero result.
+
+**Observed:** all 29 JSON files in the Native offsets directory were present
+in Stealth with identical contents; Stealth has one additional local file,
+`agent_recolor.json`. The catalog loaded 219 patterns and 233 resolver chains.
+All 233 returned successful results against this running client; none failed.
+The sweep took about 9.0 seconds. The full suite also passed: 280 tests in
+about 2.7 seconds, including the existing live context and pointer tests.
+Both map UI callback-function resolvers returned addresses, but this does not
+capture or validate the callback-published `MissionMapContext` or
+`WorldMapContext` pointers.
+
+**Safety and cleanup:** these checks only enumerated the process, read module
+bytes and target memory, and resolved addresses; they did not invoke resolved
+functions or write to the client. The process-memory reader was closed. This
+verifies signature-chain resolution on one observed client, not the semantic
+correctness of all 233 results or compatibility with every client build.
+
+### WorldMap callback preflight — 2026-09-23
+
+**Target:** the only running `Gw.exe` candidate at the time, PID `29520`,
+`F:\GW\GW1\Gw.exe`. The user stated that this is the only client running;
+re-enumerate and revalidate the PID and build immediately before any later
+live test, since either may change after a restart. The executable's SHA-256 was
+`44FBD68767A8D02B5DD4FB1A8A09B684A86B24716731327EE64905DD698FE124`;
+file/product metadata reports `1.0.0.1`, not a useful game-build identifier.
+
+**Read-only result:** `map.world_map_ui_callback_func` resolved to
+`0x0110B5A0` inside `.text`; the signature match was at `0x0110B5C4`. The
+first 16 bytes at the resolved address were
+`55 8B EC 83 EC 54 8B 45 08 56 8B 48 08 8B 40 04`.
+
+This confirms that the current JSON resolver succeeds and the address can be
+read in this one process. No map interaction occurred, no callback was
+observed executing, no instruction-boundary/hook-safety analysis was done,
+and no bytes were written. PID and address must be rechecked after any restart.
+
+### UI frame-array route to the map contexts — 2026-09-23
+
+**Source finding; no live client was used for this entry.** The
+`Py4GW_Reforged_Native` source was re-inventoried for this decision. Exactly
+four pointers in the project are obtained only through a hook or callback:
+
+| Pointer | Capture | Source |
+| --- | --- | --- |
+| `g_world_map_context` | `OnWorldMap_UICallback` | `src/GW/map/map.cpp:82-90` |
+| `g_mission_map_context` | `OnMissionMap_UICallback` | `src/GW/map/map.cpp:95-103` |
+| `g_salvage_context` | `OnSalvagePopup_UICallback` | `src/GW/item/item.cpp:211-225` |
+| `g_dx_context` | `OnEndScene` / `OnReset` | `src/GW/render/render.cpp:75-111` |
+
+Every other context pointer in the project comes from a pattern or pointer
+chain that an external reader can replicate. The two map pointers are stored
+only in the injected DLL's own globals (`src/GW/context/context.cpp:41-42`) and
+are written only by those callbacks, so no game global holds them.
+`ui.world_map_state_addr` is a visibility flag, not the pointer.
+
+**Read-only route found.** `Gw.exe` does keep the owning UI frame, and the
+frame keeps its registered context pointer. `include/GW/ui/ui.h:448` places
+`frame_callbacks` at `Frame+0xA8`; entries are 12 bytes
+(`{callback, uictl_context, h0008}`, `ui.h:321-325`);
+`src/GW/ui/ui_methods.cpp:758-773` returns the last non-null `uictl_context` as
+the frame's context. The map callbacks dereference `message->wParam`
+(`map.cpp:85`), which is a `void**`, so the published context is one
+dereference from the frame's own callback entry. `WorldMapContextStruct.frame_id`
+is at `+0x0` and `MissionMapContextStruct.frame_id` at `+0x14`, giving an
+independent cross-check, and the frame array itself is addressed by the
+resolver Stealth already ships (`ui.frame_array_addr`, `offsets/ui.json:373`).
+
+**Implementation result (offline only).** `py4gw/ui/` now holds the UI frame
+primitives, the `FrameTree` walk, and the frame-id cross-check. Three contexts
+acquire their root through it: `WorldMapContext` (frame-id offset `0x0`),
+`MissionMapContext` (`0x14`), and `SalvageSessionInfo` (`0x4`, newly ported from
+`include/GW/context/item.h:240-251`). `tests/test_ui_frame_offline.py` passes 42
+synthetic-memory tests, including the four cross-check outcomes, each route end
+to end, and three routes coexisting in one frame array. The whole offline suite
+(29 files) passes, and `pyright` reports no new errors.
+
+**Live read-only observations, PID 29520 (`F:\GW\GW1\Gw.exe`), 2026-09-23.**
+The window was not open for any of the three surfaces, so this run measured
+resolution and array structure, not the callback handoff:
+
+- `ui.frame_array_addr` resolved to `0x017B896C`. The header there read as a
+  valid `GWArray` with **5082 slots and capacity 5120**. This is the strongest
+  single result: it confirms the resolver works on this build and that the
+  global is an inline array header, which had been an interpretation.
+- 521 of the 5082 slots hold a valid frame pointer; the remainder are null or
+  the deleted sentinel.
+- All three callbacks resolved inside `.text`: `WorldMapContext` `0x0110B5A0`
+  (matching the earlier preflight), `MissionMapContext` `0x011084D0`,
+  `SalvageSessionInfo` `0x014A4980`.
+- `ui.world_map_state_addr` read `0x0000D511`, whose `0x80000` bit is clear,
+  consistent with the world map being closed.
+- No frame registered any of the three callbacks, which is the expected
+  reading while the surfaces are closed.
+- Measured walk cost on this client: about 45 ms per full callback search over
+  521 frames before batching; the batched read path reduces the per-sample
+  read count substantially.
+
+**Live frame survey, PID 29520, 2026-09-23 (`tests/probe_live_frame_contexts.py`).**
+This reads every live frame's callback entries with no window open. 548 frames
+were valid and **547 registered at least one callback**, across 773 entries and
+110 distinct callback addresses, all inside `.text`. Two measurements matter:
+
+- `uictl_context` was **never** equal to its `h0008` neighbour (0 of the 540
+  entries where both were non-null) and **never** equal to the frame's user
+  param field. Both had been open alternatives for the slot `message->wParam`
+  points at; live data eliminates them.
+- Of 177 catalog `*_func` resolvers, **14 produced an address actually
+  registered on a live frame** — for example `ui.ctl_button_proc_callback_func`
+  resolves to `0x011D4600`, registered on 30 frames, and
+  `ui.text_label_frame_callback_func` resolves to `0x011D5D60`, registered on
+  16. This confirms live that a resolved UI-callback address is the same
+  address the client stores in `Frame.frame_callbacks`, which is the premise
+  the route rests on.
+- Most `uictl_context` values point to objects whose first dword is a pointer
+  into `.rdata`, consistent with vtable-bearing client objects.
+
+**`MissionMapContext` VERIFIED live, PID 29520, 2026-09-23.** Read-only, with
+the mission map open; nothing was written.
+
+- `map.mission_map_ui_callback_func` resolved to `0x011084D0` in `.text`.
+- Frame **1591** (address `0x634931E8`, `frame_state=0x00004904`, visible and
+  created, parent frame 2511) registers that exact callback as `callback[0]`
+  with `uictl_context = 0x26404750`.
+- The frame-id cross-check passed: the context reports `frame_id = 1591`, equal
+  to the frame's own array index.
+- The structure read back self-consistently. Root `size = (387.0, 372.0)`, and
+  the raw bytes at the context start are `00 80 c1 43 00 00 ba 43`, which are
+  `387.0f` and `372.0f`. Root `frame_id` is `37 06 00 00` = `1591` at `+0x14`.
+  Root `player_mission_map_pos = (2181.24, 3226.39)` matches the raw floats
+  `d5 53 08 45` / `38 a6 49 45` at that offset.
+- `h003c = 0x2726A308` points to a `MissionMapSubContext2` whose
+  `mission_map_size = (387.0, 372.0)` equals the root's `size`, and whose
+  `player_mission_map_pos`, `mission_map_pan_offset`, and
+  `mission_map_pan_offset2` all equal the root's `player_mission_map_pos`.
+  `h0020` is a valid `GWArray` with size 2, capacity 2.
+- The frame also registers a second callback `0x0143C8B0` whose
+  `uictl_context` is **null**. The `GetFrameContext` selection order correctly
+  skipped it and returned index 0's context — the first live confirmation that
+  the ported selection order matches the native behaviour.
+
+This resolves the inferred hop for the mission map: the frame that registers
+the callback publishes exactly the address that reads back as a valid,
+internally consistent `MissionMapContext`.
+
+**`MissionMapContext` CLEARED transition, same session.** The operator closed
+the mission map and the client was re-sampled:
+
+| Observation | Open | Closed |
+| --- | --- | --- |
+| Slot `[1591]` | `0x634931E8` | `0x5DDBACF0` (different frame; slot reused) |
+| Live frames registering `0x011084D0` | frame 1591 | none |
+| Live frames publishing `0x26404750` | frame 1591 | none |
+| Old frame at `0x634931E8` | valid `Frame` | freed and reused |
+| Old context at `0x26404750` | valid `MissionMapContext` | freed and reused; bytes now decode as UTF-16 text |
+| Old child at `0x2726A308` | valid `MissionMapContext2` | freed and reused |
+| Valid frames in the array | 548 | 582 |
+
+The route reported "no frame registers this callback" rather than returning the
+previous address. Because the walk re-derives the answer from the live frame
+array on every read, it cannot hand out a cached or stale pointer — a
+structural advantage over a hook that has to observe the destroy message to
+clear its own stored copy.
+
+The mission map route is therefore **verified open and closed**.
+
+**`WorldMapContext` VERIFIED live, PID 29520, 2026-09-23.** With the full-screen
+world map open. `ui.world_map_state_addr` read `0x0008D511` with bit `0x80000`
+set, independently confirming the map was showing.
+
+- Frame **3698** at `0x2630DF10` (`frame_state=0x00000944`, created and visible,
+  parent 2511, 17 children) registers `callback[0] = 0x0110C340` with
+  `uictl_context = 0x4526A578`.
+- The frame-id cross-check passed: the context reports `frame_id = 3698`.
+- Read-back: `zoom = 1.0000`, `top_left = (1462.24, 2640.10)`,
+  `bottom_right = (2900.24, 3812.67)`; raw leading bytes `72 0e 00 00` = 3698.
+- Cross-validation: the context's `(2181.24, 3226.39)` pair equals the
+  `player_mission_map_pos` read from the separate `MissionMapContext` earlier in
+  the session.
+
+**Discovery: the registered callback is a jump thunk.** The first attempt
+failed because no frame registered the resolved `0x0110B5A0`. The world-map
+frame registers `0x0110C340`, whose bytes are `e9 5b f2 ff ff`, a five-byte
+`jmp` whose `rel32` resolves to exactly `0x0110B5A0`. The client stores a thunk;
+the maintained signature finds the handler. Reforged Native is unaffected
+because `HookBase::CreateHook` follows a near call or jump before installing its
+detour. Stealth's `FrameTree.frames_using_callback` now matches either the
+direct address or the address reached through
+`RemoteScanner.function_from_near_call`. `MissionMapContext` matched directly
+(frame 1591 registered `0x011084D0` itself), which is why it worked first.
+
+**`WorldMapContext` CLEARED transition, same session.** The operator closed the
+world map:
+
+| Observation | Open | Closed |
+| --- | --- | --- |
+| `ui.world_map_state_addr` | `0x0008D511` (bit `0x80000` set) | `0x0000D511` (bit clear) |
+| Slot `[3698]` | `0x2630DF10` | `0x00000000` (nulled; frame destroyed) |
+| Live frames registering the thunk or handler | frame 3698 | none |
+| Live frames publishing `0x4526A578` | frame 3698 | none |
+| Old frame at `0x2630DF10` | valid `Frame` | freed and reused |
+| Old context at `0x4526A578` | valid `WorldMapContext` | freed and reused; bytes now decode as the UTF-16 registry path `\REGISTRY\US...` |
+| Thunk at `0x0110C340` | `e9 5b f2 ff ff` | unchanged (static code) |
+| Valid frames in the array | 582 | 575 |
+
+Both map routes are therefore **verified open and closed**. The two close
+transitions differ in mechanism — the mission-map slot was reused by another
+frame, the world-map slot was nulled — and both are handled.
+
+**`SalvageSessionInfo` is NOT reachable read-only, PID 29520, 2026-09-23.**
+With the operator's lesser-kit salvage window open, four measurements settled
+it:
+
+- `item.salvage_popup_uicallback_func` resolved to `0x014A4980` in `.text`
+  (real prologue; `mov esi,[ebp+8]; mov eax,[esi+4]; cmp eax,7` — an
+  `InteractionMessage` dispatch), with the `InvSalvage.cpp` / `m_toolId`
+  assertion `-0x105` inside the same function.
+- The open window was frame 1718, `child_offset_id = 111`
+  (`ScreenFrame.C6.LesserSalvageWindow`), visible. It registers `0x0145EBA0`
+  (thunk to `0x0145E8F0`) and `0x0145F100` (thunk to `0x0145ECC0`) — neither is
+  the resolved handler.
+- The resolved handler is registered as a frame callback on **zero** frames.
+- The resolved handler occurs **nowhere** in the `0x1C8` bytes of any of 1141
+  scanned frame records.
+
+The cause is a distinction the Native source cannot show on its own. Hooking a
+function only requires that it is *called*; reading a pointer out of a frame
+requires the address to be *stored* in a frame. Native hooks by function
+address and never depends on that. Live data shows the split: `MissionMapContext`
+is registered directly, `WorldMapContext` through a `jmp` thunk, and
+`SalvageSessionInfo`'s handler is never stored in a frame at all.
+
+Salvage is also not a single window: Reforged's registry maps
+`LesserSalvageWindow` (111), `ExpertSalvageUnidentifiedItem` (112),
+`SalvageMaterialsDialog` (113), and the top-level `SalvageWindow` (children 1
+and 2 as CancelButton and Button, which match `SalvageSessionCancel` and
+`SalvageMaterials`). `SalvageSessionInfo` is the options window only, and
+Reforged drives the other flows by frame navigation rather than by any context.
+
+**Consequence:** this is the first context for which target-side code is
+required. The selected mechanism is a Stealth-owned detour on `0x014A4980`
+mirroring `OnSalvagePopup_UICallback`. It has **not** been implemented; the
+install/rollback contract has to be written and reviewed, and installing it is
+a target-modifying operation needing explicit scope.
+
+**What salvage exposes without a hook.** Follow-up source analysis narrowed the
+hook's value considerably:
+
+- `GetSalvageSessionId()` is `WorldContext->salvage_session_id`
+  (`include/GW/context/world.h:226`, `+h0690`) — a plain context field.
+  Stealth already declares it (`world_context.py:1493`), and it read **29** on
+  PID 29520 while the lesser-kit window was open (frame 1718,
+  `child_offset_id = 111`). So "which salvage session is active" is answerable
+  read-only today. Whether the field zeroes when the window closes is not yet
+  measured.
+- Every salvage operation is a resolvable, callable game function:
+  `salvage_start_func` `0x01407F00` (`void __cdecl(kit_id, session_id,
+  item_id)`, `item_methods.cpp:299`), and zero-argument
+  `salvage_session_complete_func` `0x0140CAD0`,
+  `salvage_session_cancel_func` `0x0140CB00`, `salvage_materials_func`
+  `0x0140CB30`. The three zero-argument functions are 32-byte near-identical
+  wrappers that differ only in the UI message id they dispatch: `0x78`
+  complete, `0x79` cancel, `0x7A` materials.
+- `SalvageStart` shows the real flow (`item_methods.cpp:292-301`): send
+  `kPreStartSalvage` with `{item_id, kit_id}`, then call the function with the
+  WorldContext-derived session id.
+- Native resolves `salvage_materials_func` and `salvage_session_cancel_func`
+  but **never calls them**; it implements materials and cancel by mutating the
+  context and clicking child frames 2 and 1. Only
+  `salvage_session_complete_func` is called.
+
+So the hook buys exactly one thing: the full options record
+(`item_id`, `salvagable_1/2/3`, `chosen_salvagable`, `kit_id`). Session
+identity and the actions themselves do not need it. A simpler hook target, if
+one is wanted for inputs rather than options, is `salvage_start_func`
+`0x01407F00` — a normal three-argument `__cdecl` function with no
+`InteractionMessage` dereference and no frame semantics.
+
+**GwAu3 salvage analysis — 2026-09-23.** Read-only source review of
+`external/GwAu3`. It does **not** avoid target-side code and does **not**
+reveal a read-only salvage pointer, which independently confirms the
+conclusion above from a second project:
+
+- It `VirtualAllocEx`es assembled machine code into `Gw.exe`, patches the
+  engine loop with `E9` detours, and runs the game's own `Salvage` function on
+  the game thread through a `MainProc` hook plus a shared command queue
+  (`GwAu3_Core_Assembler.au3:2387-2404`, `:1949-2029`;
+  `GwAu3_Core_Memory.au3:119-121`).
+- It has **no** `SalvageSessionInfo`, no salvage-window detection, and no
+  frame lookup. It reads salvage state only as the session id dword at
+  `[[[BasePointer]+0x18]+0x2C]+0x690` — the same `WorldContext +0x690` field.
+- `SalvageGlobal` (pattern `8B4A04538945F8B4208`) is a static global used
+  **only as a write target** (itemID `+0`, kitItemID `+4`) before the call, and
+  is never read back for state.
+- Option selection is done by **client-to-server packets**, not struct writes
+  or UI clicks: `0x7A` materials, `0x7B` upgrade with slot `0`/`1`/`2` for
+  prefix/suffix/inscription. Headers are `0x77` open, `0x78` cancel, `0x79`
+  done, `0x7A` materials, `0x7B` upgrade.
+- It has no completion or failure detection: fixed `Sleep(ping + ms)` waits
+  only, and `Item_SalvageItem` returns `True` unconditionally.
+
+`0x7A` agrees with Stealth's own reading of the three 32-byte wrapper
+functions in `Gw.exe`: each builds a 4-byte buffer containing the header and
+sends it, so `salvage_materials_func` (`0x0140CB30`) is a **packet sender**,
+not a session mutator. That cross-validates the interpretation from two
+independent sources.
+
+**Two contradictions that must be resolved live before any salvage is
+performed:**
+
+| Question | Reforged Native | GwAu3 |
+| --- | --- | --- |
+| `Salvage()` argument order | `(kit_id, session_id, item_id)` | pushes `itemID, kitItemID, sessionID` → `(sessionID, kitID, itemID)` under cdecl |
+| Header `0x78` | session **complete** | **CANCEL** |
+| Header `0x79` | session **cancel** | DONE |
+| Header `0x7A` | materials | materials — **agrees** |
+
+A wrong argument order would salvage the wrong item, and a wrong
+cancel/complete mapping would do the opposite of what the caller intended.
+Neither can be settled from source; both need a live, user-present test.
+
+**Recorded salvage-session wrappers in `Gw.exe` (PID 29520).** All resolve
+live in `.text` and are 32 bytes apart with identical prologues differing only
+in the dispatched header:
+
+| Resolver | Address | Header |
+| --- | --- | --- |
+| `item.salvage_session_complete_func` | `0x0140CAD0` | `0x78` |
+| `item.salvage_session_cancel_func` | `0x0140CB00` | `0x79` |
+| `item.salvage_materials_func` | `0x0140CB30` | `0x7A` |
+
+`item.salvage_start_func` (`0x01407F00`) is the three-argument `Salvage`
+entry point; `item.salvage_popup_uicallback_func` (`0x014A4980`) is the popup
+message handler that is never registered as a frame callback.
+
+**Not established.** Whether `salvage_session_id` returns to zero when the
+salvage window closes. The operator's window remained open across repeated
+samples (`salvage_session_id` read `29` each time with frame 1718 visible), so
+the field is confirmed readable but its idle value is unmeasured. Neither
+reference project depends on that: both read it immediately before starting a
+salvage.
 
 ## Sources Consulted
 

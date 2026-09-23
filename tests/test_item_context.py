@@ -73,11 +73,13 @@ class LiveItemContextTests(unittest.TestCase):
         self.assertGreaterEqual(snapshot.array_sizes["bags_array"], 0)
         self.assertGreaterEqual(snapshot.array_sizes["item_array"], 0)
         bags = snapshot.bags()
-        item_count = sum(len(bag.items()) for bag in bags)
+        item_count = sum(len(bag.read_items()) for bag in bags)
         first_item = next(
-            (item for bag in bags for item in bag.items() if item.item_id), None
+            (item for bag in bags for item in bag.read_items() if item.item_id), None
         )
         if first_item is not None:
+            self.assertIsInstance(first_item.GetIsStackable(), bool)
+            self.assertIsInstance(first_item.IsOfferedInTrade(), bool)
             print(
                 "First item: "
                 f"id={first_item.item_id}, model={first_item.model_id}, "
@@ -98,6 +100,9 @@ class LiveItemContextTests(unittest.TestCase):
         self.assertFalse(self.context.auxiliary_resolution_errors)
         self.assertIsNotNone(self.context.storage_open_address)
         self.assertIsNotNone(self.context.is_storage_open)
+        formula_count = self.context.GetItemFormulaCount()
+        self.assertGreater(formula_count, 0)
+        self.assertEqual(len(self.context.read_item_formulas()), formula_count)
         formulas = self.context.read_item_formulas(limit=8)
         upgrades = self.context.read_pvp_item_upgrades(limit=8)
         pvp_items = self.context.read_pvp_items(limit=8)
@@ -123,7 +128,12 @@ class LiveItemContextTests(unittest.TestCase):
         if snapshot is None:
             self.skipTest("The client has no active ItemContext.")
         first_item = next(
-            (item for bag in snapshot.bags() for item in bag.items() if item.item_id),
+            (
+                item
+                for bag in snapshot.bags()
+                for item in bag.read_items()
+                if item.item_id
+            ),
             None,
         )
         if first_item is None or first_item.modifier_count == 0:

@@ -1,3 +1,4 @@
+from ..target_struct import TargetStruct
 from ctypes import Structure
 from typing import Any, Optional, Protocol
 
@@ -5,7 +6,7 @@ from ..scanner import PatternCatalog, RemoteScanner
 from .gw_array import GWBaseArray, RemoteMemoryReader
 
 
-class LoginCharacter(Structure):
+class LoginCharacter(TargetStruct):
     appearance_packed: int
     pvp_flag: int
     guild_guid_0: int
@@ -41,7 +42,7 @@ class LoginCharacter(Structure):
     def character_name(self) -> str | None: ...
 
 
-class PreGameContextStruct(Structure):
+class PreGameContextStruct(TargetStruct):
     frame_id: int
     scene_type: int
     scene_controller_iface: int

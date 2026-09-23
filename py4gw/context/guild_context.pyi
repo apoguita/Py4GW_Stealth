@@ -1,3 +1,4 @@
+from ..target_struct import TargetStruct
 from ctypes import Structure, Union
 from typing import Any, Optional
 
@@ -22,7 +23,7 @@ class GHKeyStruct(Union):
 GHKey = GHKeyStruct
 
 
-class CapeDesignStruct(Structure):
+class CapeDesignStruct(TargetStruct):
     cape_bg_color: int
     cape_detail_color: int
     cape_emblem_color: int
@@ -35,7 +36,7 @@ class CapeDesignStruct(Structure):
 CapeDesign = CapeDesignStruct
 
 
-class TownAllianceStruct(Structure):
+class TownAllianceStruct(TargetStruct):
     rank: int
     allegiance: int
     faction: int
@@ -66,7 +67,7 @@ class TownAllianceStruct(Structure):
 TownAlliance = TownAllianceStruct
 
 
-class GuildHistoryEventStruct(Structure):
+class GuildHistoryEventStruct(TargetStruct):
     time1: int
     time2: int
     name_enc: Any
@@ -84,7 +85,7 @@ class GuildHistoryEventStruct(Structure):
 GuildHistoryEvent = GuildHistoryEventStruct
 
 
-class GuildStruct(Structure):
+class GuildStruct(TargetStruct):
     key: GHKeyStruct
     h0010: Any
     index: int
@@ -120,7 +121,7 @@ class GuildStruct(Structure):
 Guild = GuildStruct
 
 
-class GuildPlayerStruct(Structure):
+class GuildPlayerStruct(TargetStruct):
     vtable: int
     name_ptr: int
     invited_name_enc: Any
@@ -180,7 +181,7 @@ class GuildPlayerStruct(Structure):
 GuildPlayer = GuildPlayerStruct
 
 
-class GuildContextStruct(Structure):
+class GuildContextStruct(TargetStruct):
     h0000: int
     h0004: int
     h0008: int

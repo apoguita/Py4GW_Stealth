@@ -59,9 +59,9 @@ class LiveAccAgentContextTests(unittest.TestCase):
         self.assertEqual(ctypes.sizeof(AgentSummaryInfoStruct), 0x0C)
         self.assertEqual(ctypes.sizeof(AgentMovementStruct), 0x80)
         self.assertEqual(ctypes.sizeof(AccAgentContextStruct), 0x1B0)
-        self.assertEqual(AccAgentContextStruct.agent_summary_info_array.offset, 0x98)
-        self.assertEqual(AccAgentContextStruct.agent_movement_array.offset, 0xE8)
-        self.assertEqual(AccAgentContextStruct.instance_timer.offset, 0x1AC)
+        self.assertEqual(getattr(AccAgentContextStruct, "agent_summary_info_array").offset, 0x98)
+        self.assertEqual(getattr(AccAgentContextStruct, "agent_movement_array").offset, 0xE8)
+        self.assertEqual(getattr(AccAgentContextStruct, "instance_timer").offset, 0x1AC)
 
     def test_resolves_live_agent_context(self) -> None:
         """Follow the direct GameContext.agent pointer."""

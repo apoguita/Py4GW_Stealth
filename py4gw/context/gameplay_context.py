@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_float, c_uint32
 from typing import Any, Protocol, cast
@@ -14,7 +16,7 @@ class _memory_reader(RemoteMemoryReader, Protocol):
     """The byte-reading operation needed by the external context reader."""
 
 
-class GameplayContextStruct(Structure):
+class GameplayContextStruct(TargetStruct):
     """The fixed-width x86 port of Reforged ``GameplayContextStruct``."""
 
     _pack_ = 1

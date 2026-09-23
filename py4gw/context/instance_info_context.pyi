@@ -1,3 +1,4 @@
+from ..target_struct import TargetStruct
 from ctypes import Structure
 from typing import Optional
 
@@ -5,7 +6,7 @@ from ..scanner import PatternCatalog, RemoteScanner
 from .gw_array import RemoteMemoryReader
 
 
-class MapDimensionsStruct(Structure):
+class MapDimensionsStruct(TargetStruct):
     unk: int
     start_x: int
     start_y: int
@@ -14,7 +15,7 @@ class MapDimensionsStruct(Structure):
     unk1: int
 
 
-class AreaInfoStruct(Structure):
+class AreaInfoStruct(TargetStruct):
     campaign: int
     continent: int
     region: int
@@ -81,7 +82,7 @@ class AreaInfoStruct(Structure):
     def has_mission_maps_to(self) -> bool: ...
 
 
-class InstanceInfoStruct(Structure):
+class InstanceInfoStruct(TargetStruct):
     terrain_info1_ptr: int
     instance_type: int
     current_map_info_ptr: int

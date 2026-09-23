@@ -1,3 +1,4 @@
+from ..target_struct import TargetStruct
 from ctypes import Structure
 from typing import Any, Optional
 
@@ -6,7 +7,7 @@ from .gw_array import RemoteMemoryReader
 from .game_context import GameContext
 
 
-class CinematicStruct(Structure):
+class CinematicStruct(TargetStruct):
     h0000: int
     h0004: int
 

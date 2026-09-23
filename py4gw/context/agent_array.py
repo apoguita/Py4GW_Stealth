@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from ..target_struct import Describable, TargetStruct
+
 import ctypes
 import time
 from dataclasses import dataclass
 from enum import Enum, IntEnum, IntFlag
 from ctypes import Structure, c_float, c_uint8, c_uint16, c_uint32
 from contextlib import nullcontext
-from typing import Protocol, TypeVar, cast
+from typing import Any, Callable, Iterator, Protocol, TypeVar, cast
 
 from ..performance import PerfCounter
 from ..scanner import PatternCatalog, RemoteScanner
@@ -38,6 +40,109 @@ class AgentType(IntFlag):
     ITEM = 0x400
 
 
+@dataclass(slots=True, repr=False)
+class DyeInfo(Describable):
+    """Python value record corresponding to Reforged's ``DyeInfo``."""
+
+    dye_tint: int
+    dye1: int
+    dye2: int
+    dye3: int
+    dye4: int
+
+
+@dataclass(slots=True)
+class ItemData:
+    """Python value record corresponding to Reforged's ``ItemData``."""
+
+    model_file_id: int
+    type: int
+    dye: DyeInfo
+    value: int
+    interaction: int
+
+
+@dataclass(slots=True)
+class EquipmentItemsUnion:
+    """Snapshot of all nine equipment item slots and named overlays."""
+
+    items: tuple[
+        ItemData,
+        ItemData,
+        ItemData,
+        ItemData,
+        ItemData,
+        ItemData,
+        ItemData,
+        ItemData,
+        ItemData,
+    ]
+    weapon: ItemData
+    offhand: ItemData
+    chest: ItemData
+    legs: ItemData
+    head: ItemData
+    feet: ItemData
+    hands: ItemData
+    costume_body: ItemData
+    costume_head: ItemData
+
+
+@dataclass(slots=True)
+class EquipmentItemIDsUnion:
+    """Snapshot of all nine equipment item IDs and named overlays."""
+
+    item_ids: tuple[int, int, int, int, int, int, int, int, int]
+    item_id_weapon: int
+    item_id_offhand: int
+    item_id_chest: int
+    item_id_legs: int
+    item_id_head: int
+    item_id_feet: int
+    item_id_hands: int
+    item_id_costume_body: int
+    item_id_costume_head: int
+
+
+@dataclass(slots=True)
+class Equipment:
+    """Detached Python snapshot of the native equipment record."""
+
+    vtable: int
+    h0004: int
+    h0008: int
+    h000C: int
+    h0018: int
+    left_hand_map: int
+    right_hand_map: int
+    head_map: int
+    shield_map: int
+    items_union: EquipmentItemsUnion
+    ids_union: EquipmentItemIDsUnion
+    left_hand: ItemData | None
+    right_hand: ItemData | None
+    shield: ItemData | None
+
+
+@dataclass(slots=True, repr=False)
+class TagInfo(Describable):
+    """Detached Python snapshot of the native tag record."""
+
+    guild_id: int
+    primary: int
+    secondary: int
+    level: int
+
+
+@dataclass(slots=True)
+class VisibleEffect:
+    """Detached Python snapshot of one visible effect entry."""
+
+    unk: int
+    id: int
+    has_ended: int
+
+
 class AgentAllegiance(IntEnum):
     """The native living-agent allegiance values."""
 
@@ -53,21 +158,196 @@ class StaleAgentReferenceError(RuntimeError):
     """Raised when a reference changed before its complete record was read."""
 
 
-class Vec2fStruct(Structure):
+class Vec2fStruct(TargetStruct):
     """The native two-float agent velocity value."""
 
     _pack_ = 1
     _fields_ = [("x", c_float), ("y", c_float)]
 
 
-class GamePositionStruct(Structure):
+class GamePositionStruct(TargetStruct):
     """The native agent position value."""
 
     _pack_ = 1
     _fields_ = [("x", c_float), ("y", c_float), ("zplane", c_uint32)]
 
 
-class AgentStruct(Structure):
+@dataclass(slots=True)
+class AgentNative:
+    """Detached common-agent record used by Reforged's ``snapshot`` method."""
+
+    h0004: int
+    h0008: int
+    h000C: list[int]
+    timer: int
+    timer2: int
+    agent_id: int
+    z: float
+    width1: float
+    height1: float
+    width2: float
+    height2: float
+    width3: float
+    height3: float
+    rotation_angle: float
+    rotation_cos: float
+    rotation_sin: float
+    name_properties: int
+    ground: int
+    h0060: int
+    terrain_normal: Vec3fStruct
+    h0070: list[int]
+    pos: GamePositionStruct
+    h0080: list[int]
+    name_tag_x: float
+    name_tag_y: float
+    name_tag_z: float
+    visual_effects: int
+    h0092: int
+    h0094: list[int]
+    type: int
+    velocity: Vec2fStruct
+    h00A8: int
+    rotation_cos2: float
+    rotation_sin2: float
+    h00B4: list[int]
+    vtable: int
+    is_item_type: bool
+    is_gadget_type: bool
+    is_living_type: bool
+    _item_agent: AgentItem | None
+    _gadget_agent: AgentGadget | None
+    _living_agent: AgentLiving | None
+
+    def GetAsAgentItem(self) -> AgentItem | None:
+        """Return the item snapshot captured with this common record."""
+
+        return self._item_agent
+
+    def GetAsAgentGadget(self) -> AgentGadget | None:
+        """Return the gadget snapshot captured with this common record."""
+
+        return self._gadget_agent
+
+    def GetAsAgentLiving(self) -> AgentLiving | None:
+        """Return the living snapshot captured with this common record."""
+
+        return self._living_agent
+
+
+@dataclass(slots=True)
+class AgentLiving:
+    """Detached living-agent fields and derived values from Reforged."""
+
+    owner: int
+    h00C8: int
+    h00CC: int
+    h00D0: int
+    h00D4: list[int]
+    animation_type: float
+    h00E4: list[int]
+    weapon_attack_speed: float
+    attack_speed_modifier: float
+    player_number: int
+    agent_model_type: int
+    transmog_npc_id: int
+    h0100: int
+    h0104: int
+    h010C: int
+    primary: int
+    secondary: int
+    level: int
+    team_id: int
+    h0112: list[int]
+    h0114: int
+    energy_regen: float
+    h011C: int
+    energy: float
+    max_energy: int
+    h0128: int
+    hp_pips: float
+    h0130: int
+    hp: float
+    max_hp: int
+    effects: int
+    h0140: int
+    hex: int
+    h0145: list[int]
+    model_state: int
+    type_map: int
+    h0160: list[int]
+    in_spirit_range: int
+    h0180: int
+    login_number: int
+    animation_speed: float
+    animation_code: int
+    animation_id: int
+    h0194: list[int]
+    dagger_status: int
+    allegiance: int
+    weapon_type: int
+    skill: int
+    h01BA: int
+    weapon_item_type: int
+    offhand_item_type: int
+    weapon_item_id: int
+    offhand_item_id: int
+    equipment: Equipment | None
+    tags: TagInfo | None
+    visible_effects: list[VisibleEffect]
+    is_bleeding: bool
+    is_conditioned: bool
+    is_used_corpse: bool
+    is_crippled: bool
+    is_dead: bool
+    is_deep_wounded: bool
+    is_poisoned: bool
+    is_enchanted: bool
+    is_degen_hexed: bool
+    is_hexed: bool
+    is_weapon_spelled: bool
+    is_in_combat_stance: bool
+    has_quest: bool
+    is_dead_by_type_map: bool
+    is_exploitable: bool
+    is_female: bool
+    has_boss_glow: bool
+    is_hiding_cape: bool
+    can_be_viewed_in_party_window: bool
+    is_spawned: bool
+    is_being_observed: bool
+    is_knocked_down: bool
+    is_moving: bool
+    is_attacking: bool
+    is_casting: bool
+    is_idle: bool
+    is_alive: bool
+    is_player: bool
+    is_npc: bool
+
+
+@dataclass(slots=True)
+class AgentItem:
+    """Detached item-agent fields from Reforged."""
+
+    owner: int
+    item_id: int
+    h00CC: int
+    extra_type: int
+
+
+@dataclass(slots=True)
+class AgentGadget:
+    """Detached gadget-agent fields from Reforged."""
+
+    h00C4: int
+    h00C8: int
+    extra_type: int
+    gadget_id: int
+    h00D4: tuple[int, int, int, int]
+
+
+class AgentStruct(TargetStruct):
     """The complete common native ``Agent`` record (0xC4 bytes)."""
 
     _pack_ = 1
@@ -154,6 +434,61 @@ class AgentStruct(Structure):
 
         return bool(int(self.type) & AgentType.LIVING)
 
+    def snapshot(self) -> AgentNative:
+        """Copy this common record and its matching typed record to values."""
+
+        item = self.GetAsAgentItem()
+        gadget = self.GetAsAgentGadget()
+        living = self.GetAsAgentLiving()
+        return AgentNative(
+            h0004=int(self.h0004),
+            h0008=int(self.h0008),
+            h000C=[int(value) for value in self.h000C],
+            timer=int(self.timer),
+            timer2=int(self.timer2),
+            agent_id=int(self.agent_id),
+            z=float(self.z),
+            width1=float(self.width1),
+            height1=float(self.height1),
+            width2=float(self.width2),
+            height2=float(self.height2),
+            width3=float(self.width3),
+            height3=float(self.height3),
+            rotation_angle=float(self.rotation_angle),
+            rotation_cos=float(self.rotation_cos),
+            rotation_sin=float(self.rotation_sin),
+            name_properties=int(self.name_properties),
+            ground=int(self.ground),
+            h0060=int(self.h0060),
+            terrain_normal=Vec3fStruct(
+                float(self.terrain_normal.x),
+                float(self.terrain_normal.y),
+                float(self.terrain_normal.z),
+            ),
+            h0070=[int(value) for value in self.h0070],
+            pos=self.pos,
+            h0080=[int(value) for value in self.h0080],
+            name_tag_x=float(self.name_tag_x),
+            name_tag_y=float(self.name_tag_y),
+            name_tag_z=float(self.name_tag_z),
+            visual_effects=int(self.visual_effects),
+            h0092=int(self.h0092),
+            h0094=[int(value) for value in self.h0094],
+            type=int(self.type),
+            velocity=Vec2fStruct(float(self.velocity.x), float(self.velocity.y)),
+            h00A8=int(self.h00A8),
+            rotation_cos2=float(self.rotation_cos2),
+            rotation_sin2=float(self.rotation_sin2),
+            h00B4=[int(value) for value in self.h00B4],
+            vtable=self.vtable,
+            is_item_type=self.is_item_type,
+            is_gadget_type=self.is_gadget_type,
+            is_living_type=self.is_living_type,
+            _item_agent=item.snapshot_item() if item is not None else None,
+            _gadget_agent=gadget.snapshot_gadget() if gadget is not None else None,
+            _living_agent=living.snapshot_living() if living is not None else None,
+        )
+
     @property
     def position(self) -> tuple[float, float, int]:
         """Return the agent's x, y, and plane values."""
@@ -179,9 +514,14 @@ class AgentStruct(Structure):
             return None
         if isinstance(self, AgentItemStruct):
             return self
-        value = AgentItemStruct.from_buffer_copy(bytes(self))
-        if self._remote_reader is not None:
+        if self._remote_reader is not None and self._remote_address is not None:
+            raw = self._remote_reader.read(
+                self._remote_address, ctypes.sizeof(AgentItemStruct)
+            )
+            value = AgentItemStruct.from_buffer_copy(raw)
             value.bind_reader(self._remote_reader, self._remote_address)
+        else:
+            value = AgentItemStruct.from_buffer_copy(bytes(self))
         return cast(AgentItemStruct, value)
 
     def GetAsAgentGadget(self) -> AgentGadgetStruct | None:
@@ -191,9 +531,14 @@ class AgentStruct(Structure):
             return None
         if isinstance(self, AgentGadgetStruct):
             return self
-        value = AgentGadgetStruct.from_buffer_copy(bytes(self))
-        if self._remote_reader is not None:
+        if self._remote_reader is not None and self._remote_address is not None:
+            raw = self._remote_reader.read(
+                self._remote_address, ctypes.sizeof(AgentGadgetStruct)
+            )
+            value = AgentGadgetStruct.from_buffer_copy(raw)
             value.bind_reader(self._remote_reader, self._remote_address)
+        else:
+            value = AgentGadgetStruct.from_buffer_copy(bytes(self))
         return cast(AgentGadgetStruct, value)
 
     def GetAsAgentLiving(self) -> AgentLivingStruct | None:
@@ -203,9 +548,14 @@ class AgentStruct(Structure):
             return None
         if isinstance(self, AgentLivingStruct):
             return self
-        value = AgentLivingStruct.from_buffer_copy(bytes(self))
-        if self._remote_reader is not None:
+        if self._remote_reader is not None and self._remote_address is not None:
+            raw = self._remote_reader.read(
+                self._remote_address, ctypes.sizeof(AgentLivingStruct)
+            )
+            value = AgentLivingStruct.from_buffer_copy(raw)
             value.bind_reader(self._remote_reader, self._remote_address)
+        else:
+            value = AgentLivingStruct.from_buffer_copy(bytes(self))
         return cast(AgentLivingStruct, value)
 
 
@@ -220,6 +570,16 @@ class AgentItemStruct(AgentStruct):
         ("extra_type", c_uint32),
     ]
 
+    def snapshot_item(self) -> AgentItem:
+        """Copy item-specific fields to Reforged's value record."""
+
+        return AgentItem(
+            owner=int(self.owner),
+            item_id=int(self.item_id),
+            h00CC=int(self.h00CC),
+            extra_type=int(self.extra_type),
+        )
+
 
 class AgentGadgetStruct(AgentStruct):
     """The complete native gadget-agent record (0xE4 bytes)."""
@@ -233,8 +593,24 @@ class AgentGadgetStruct(AgentStruct):
         ("h00D4", c_uint32 * 4),
     ]
 
+    def snapshot_gadget(self) -> AgentGadget:
+        """Copy gadget-specific fields to Reforged's value record."""
 
-class DyeInfoStruct(Structure):
+        return AgentGadget(
+            h00C4=int(self.h00C4),
+            h00C8=int(self.h00C8),
+            extra_type=int(self.extra_type),
+            gadget_id=int(self.gadget_id),
+            h00D4=(
+                int(self.h00D4[0]),
+                int(self.h00D4[1]),
+                int(self.h00D4[2]),
+                int(self.h00D4[3]),
+            ),
+        )
+
+
+class DyeInfoStruct(TargetStruct):
     """Packed native dye information embedded in equipment items."""
 
     _pack_ = 1
@@ -246,9 +622,20 @@ class DyeInfoStruct(Structure):
         ("dye4", c_uint8, 4),
     ]
 
+    def snapshot(self) -> DyeInfo:
+        """Copy the packed bit fields into Reforged's value record."""
 
-class ItemDataStruct(Structure):
-    """The native 0x10-byte embedded equipment item record."""
+        return DyeInfo(
+            dye_tint=int(self.dye_tint),
+            dye1=int(self.dye1),
+            dye2=int(self.dye2),
+            dye3=int(self.dye3),
+            dye4=int(self.dye4),
+        )
+
+
+class ItemDataStruct(TargetStruct):
+    """The native C++ 0x10-byte embedded equipment item record."""
 
     _pack_ = 1
     _fields_ = [
@@ -258,6 +645,46 @@ class ItemDataStruct(Structure):
         ("value", c_uint32),
         ("interaction", c_uint32),
     ]
+
+    def snapshot(self) -> ItemData:
+        """Copy the native record to Reforged's Python value record."""
+
+        return ItemData(
+            model_file_id=int(self.model_file_id),
+            type=int(self.type),
+            dye=self.dye.snapshot(),
+            value=int(self.value),
+            interaction=int(self.interaction),
+        )
+
+
+class ReforgedItemDataStruct(TargetStruct):
+    """Literal ctypes layout declared by Reforged's Python source.
+
+    Reforged declares ``type`` as ``c_uint32`` here, producing a 0x13-byte
+    packed record. Native C++ declares the enum as one byte and asserts 0x10;
+    this source-shaped class is therefore for parity inspection, not live reads.
+    """
+
+    _pack_ = 1
+    _fields_ = [
+        ("model_file_id", c_uint32),
+        ("type", c_uint32),
+        ("dye", DyeInfoStruct),
+        ("value", c_uint32),
+        ("interaction", c_uint32),
+    ]
+
+    def snapshot(self) -> ItemData:
+        """Copy the source-shaped Python record to its value record."""
+
+        return ItemData(
+            model_file_id=int(self.model_file_id),
+            type=int(self.type),
+            dye=self.dye.snapshot(),
+            value=int(self.value),
+            interaction=int(self.interaction),
+        )
 
 
 class EquipmentItemsUnionStruct(ctypes.Union):
@@ -277,6 +704,56 @@ class EquipmentItemsUnionStruct(ctypes.Union):
         ("costume_head", ItemDataStruct),
     ]
 
+    def snapshot(self) -> EquipmentItemsUnion:
+        """Copy all equipment item slots and named union overlays."""
+
+        return EquipmentItemsUnion(
+            items=tuple(item.snapshot() for item in self.items),
+            weapon=self.weapon.snapshot(),
+            offhand=self.offhand.snapshot(),
+            chest=self.chest.snapshot(),
+            legs=self.legs.snapshot(),
+            head=self.head.snapshot(),
+            feet=self.feet.snapshot(),
+            hands=self.hands.snapshot(),
+            costume_body=self.costume_body.snapshot(),
+            costume_head=self.costume_head.snapshot(),
+        )
+
+
+class ReforgedEquipmentItemsUnionStruct(ctypes.Union):
+    """Literal Reforged-Python item-union layout, for source parity checks."""
+
+    _pack_ = 1
+    _fields_ = [
+        ("items", ReforgedItemDataStruct * 9),
+        ("weapon", ReforgedItemDataStruct),
+        ("offhand", ReforgedItemDataStruct),
+        ("chest", ReforgedItemDataStruct),
+        ("legs", ReforgedItemDataStruct),
+        ("head", ReforgedItemDataStruct),
+        ("feet", ReforgedItemDataStruct),
+        ("hands", ReforgedItemDataStruct),
+        ("costume_body", ReforgedItemDataStruct),
+        ("costume_head", ReforgedItemDataStruct),
+    ]
+
+    def snapshot(self) -> EquipmentItemsUnion:
+        """Copy this source-shaped union to its value representation."""
+
+        return EquipmentItemsUnion(
+            items=tuple(item.snapshot() for item in self.items),
+            weapon=self.weapon.snapshot(),
+            offhand=self.offhand.snapshot(),
+            chest=self.chest.snapshot(),
+            legs=self.legs.snapshot(),
+            head=self.head.snapshot(),
+            feet=self.feet.snapshot(),
+            hands=self.hands.snapshot(),
+            costume_body=self.costume_body.snapshot(),
+            costume_head=self.costume_head.snapshot(),
+        )
+
 
 class EquipmentItemIDsUnionStruct(ctypes.Union):
     """The nine embedded equipment item IDs."""
@@ -295,13 +772,39 @@ class EquipmentItemIDsUnionStruct(ctypes.Union):
         ("item_id_costume_head", c_uint32),
     ]
 
+    def snapshot(self) -> EquipmentItemIDsUnion:
+        """Copy the item ID array and all named union overlays."""
 
-class EquipmentStruct(Structure):
+        return EquipmentItemIDsUnion(
+            item_ids=(
+                int(self.item_ids[0]),
+                int(self.item_ids[1]),
+                int(self.item_ids[2]),
+                int(self.item_ids[3]),
+                int(self.item_ids[4]),
+                int(self.item_ids[5]),
+                int(self.item_ids[6]),
+                int(self.item_ids[7]),
+                int(self.item_ids[8]),
+            ),
+            item_id_weapon=int(self.item_id_weapon),
+            item_id_offhand=int(self.item_id_offhand),
+            item_id_chest=int(self.item_id_chest),
+            item_id_legs=int(self.item_id_legs),
+            item_id_head=int(self.item_id_head),
+            item_id_feet=int(self.item_id_feet),
+            item_id_hands=int(self.item_id_hands),
+            item_id_costume_body=int(self.item_id_costume_body),
+            item_id_costume_head=int(self.item_id_costume_head),
+        )
+
+
+class EquipmentStruct(TargetStruct):
     """The native 0xD8-byte equipment record."""
 
     _pack_ = 1
     _fields_ = [
-        ("vtable_ptr", c_uint32),
+        ("vtable", c_uint32),
         ("h0004", c_uint32),
         ("h0008", c_uint32),
         ("h000C", c_uint32),
@@ -344,8 +847,103 @@ class EquipmentStruct(Structure):
 
         return tuple(int(value) for value in self.ids_union.item_ids)
 
+    def snapshot(self) -> Equipment:
+        """Copy the full equipment record, including selected hand items."""
 
-class TagInfoStruct(Structure):
+        left_hand = self.left_hand
+        right_hand = self.right_hand
+        shield = self.shield
+        return Equipment(
+            vtable=int(self.vtable),
+            h0004=int(self.h0004),
+            h0008=int(self.h0008),
+            h000C=int(self.h000C),
+            h0018=int(self.h0018),
+            left_hand_map=int(self.left_hand_map),
+            right_hand_map=int(self.right_hand_map),
+            head_map=int(self.head_map),
+            shield_map=int(self.shield_map),
+            items_union=self.items_union.snapshot(),
+            ids_union=self.ids_union.snapshot(),
+            left_hand=left_hand.snapshot() if left_hand is not None else None,
+            right_hand=right_hand.snapshot() if right_hand is not None else None,
+            shield=shield.snapshot() if shield is not None else None,
+        )
+
+
+class ReforgedEquipmentStruct(TargetStruct):
+    """Reforged-Python Equipment layout projected to fixed-width x86 pointers.
+
+    The source Python ``ItemDataStruct`` makes its item union and enclosing
+    equipment record larger than the C++ native declarations. This class
+    preserves that Python-source layout for parity inspection and snapshots;
+    native process reads must use ``EquipmentStruct`` instead.
+    """
+
+    _pack_ = 1
+    _fields_ = [
+        ("vtable", c_uint32),
+        ("h0004", c_uint32),
+        ("h0008", c_uint32),
+        ("h000C", c_uint32),
+        ("left_hand_ptr", c_uint32),
+        ("right_hand_ptr", c_uint32),
+        ("h0018", c_uint32),
+        ("shield_ptr", c_uint32),
+        ("left_hand_map", c_uint8),
+        ("right_hand_map", c_uint8),
+        ("head_map", c_uint8),
+        ("shield_map", c_uint8),
+        ("items_union", ReforgedEquipmentItemsUnionStruct),
+        ("ids_union", EquipmentItemIDsUnionStruct),
+    ]
+
+    @property
+    def left_hand(self) -> ReforgedItemDataStruct | None:
+        """Return the source-selected left-hand item, if its index is valid."""
+
+        index = int(self.left_hand_map)
+        return self.items_union.items[index] if index < 9 else None
+
+    @property
+    def right_hand(self) -> ReforgedItemDataStruct | None:
+        """Return the source-selected right-hand item, if its index is valid."""
+
+        index = int(self.right_hand_map)
+        return self.items_union.items[index] if index < 9 else None
+
+    @property
+    def shield(self) -> ReforgedItemDataStruct | None:
+        """Return the source-selected shield item, if its index is valid."""
+
+        index = int(self.shield_map)
+        return self.items_union.items[index] if index < 9 else None
+
+    def snapshot(self) -> Equipment:
+        """Copy the Python-source layout into Reforged's value record."""
+
+        left_hand = self.left_hand
+        right_hand = self.right_hand
+        shield = self.shield
+        return Equipment(
+            vtable=int(self.vtable) if self.vtable else 0,
+            h0004=int(self.h0004),
+            h0008=int(self.h0008),
+            h000C=int(self.h000C),
+            h0018=int(self.h0018),
+            left_hand_map=int(self.left_hand_map),
+            right_hand_map=int(self.right_hand_map),
+            head_map=int(self.head_map),
+            shield_map=int(self.shield_map),
+            items_union=self.items_union.snapshot(),
+            ids_union=self.ids_union.snapshot(),
+            left_hand=left_hand.snapshot() if left_hand is not None else None,
+            right_hand=right_hand.snapshot() if right_hand is not None else None,
+            shield=shield.snapshot() if shield is not None else None,
+        )
+
+
+class TagInfoStruct(TargetStruct):
     """The native compact living-agent tag record."""
 
     _pack_ = 1
@@ -356,22 +954,45 @@ class TagInfoStruct(Structure):
         ("level", c_uint16),
     ]
 
+    def snapshot(self) -> TagInfo:
+        """Copy the packed tag fields into Reforged's value record."""
 
-class VisibleEffectStruct(Structure):
+        return TagInfo(
+            guild_id=int(self.guild_id),
+            primary=int(self.primary),
+            secondary=int(self.secondary),
+            level=int(self.level),
+        )
+
+
+class VisibleEffectStruct(TargetStruct):
     """One native visible effect entry (0x0C bytes)."""
 
     _pack_ = 1
     _fields_ = [
         ("unk", c_uint32),
-        ("effect_id", c_uint32),
+        ("id", c_uint32),
         ("has_ended", c_uint32),
     ]
+
+    @property
+    def effect_id(self) -> int:
+        """Return the effect identifier under Stealth's descriptive alias."""
+
+        return int(self.id)
 
     @property
     def is_active(self) -> bool:
         """Return whether the target effect has not entered its end state."""
 
         return int(self.has_ended) == 0
+
+    def snapshot(self) -> VisibleEffect:
+        """Copy this record to Reforged's Python value form."""
+
+        return VisibleEffect(
+            unk=int(self.unk), id=int(self.id), has_ended=int(self.has_ended)
+        )
 
 
 class AgentLivingStruct(AgentStruct):
@@ -672,7 +1293,7 @@ class AgentLivingStruct(AgentStruct):
 
     @property
     def corpse_exploit_state(self) -> str:
-        """Return the Reforged corpse-state label."""
+        """Return the source diagnostic label for the current corpse state."""
 
         if self.is_alive:
             return "alive"
@@ -682,7 +1303,7 @@ class AgentLivingStruct(AgentStruct):
 
     @property
     def corpse_exploit_signature(self) -> tuple[int, ...]:
-        """Return the native fields used to compare corpse states."""
+        """Return the source fields used to compare corpse states."""
 
         return (
             int(self.effects),
@@ -705,6 +1326,112 @@ class AgentLivingStruct(AgentStruct):
             int(self.h0180),
         )
 
+    def snapshot_living(self) -> AgentLiving:
+        """Copy every maintained living field and derived property."""
+
+        equipment = self.equipment
+        tags = self.tags
+        visible_effects = self.visible_effects
+        return AgentLiving(
+            owner=int(self.owner),
+            h00C8=int(self.h00C8),
+            h00CC=int(self.h00CC),
+            h00D0=int(self.h00D0),
+            h00D4=[int(value) for value in self.h00D4],
+            animation_type=float(self.animation_type),
+            h00E4=[int(value) for value in self.h00E4],
+            weapon_attack_speed=float(self.weapon_attack_speed),
+            attack_speed_modifier=float(self.attack_speed_modifier),
+            player_number=int(self.player_number),
+            agent_model_type=int(self.agent_model_type),
+            transmog_npc_id=int(self.transmog_npc_id),
+            h0100=int(self.h0100),
+            h0104=int(self.h0104),
+            h010C=int(self.h010C),
+            primary=int(self.primary),
+            secondary=int(self.secondary),
+            level=int(self.level),
+            team_id=int(self.team_id),
+            h0112=[int(value) for value in self.h0112],
+            h0114=int(self.h0114),
+            energy_regen=float(self.energy_regen),
+            h011C=int(self.h011C),
+            energy=float(self.energy),
+            max_energy=int(self.max_energy),
+            h0128=int(self.h0128),
+            hp_pips=float(self.hp_pips),
+            h0130=int(self.h0130),
+            hp=float(self.hp),
+            max_hp=int(self.max_hp),
+            effects=int(self.effects),
+            h0140=int(self.h0140),
+            hex=int(self.hex),
+            h0145=[int(value) for value in self.h0145],
+            model_state=int(self.model_state),
+            type_map=int(self.type_map),
+            h0160=[int(value) for value in self.h0160],
+            in_spirit_range=int(self.in_spirit_range),
+            h0180=int(self.h0180),
+            login_number=int(self.login_number),
+            animation_speed=float(self.animation_speed),
+            animation_code=int(self.animation_code),
+            animation_id=int(self.animation_id),
+            h0194=[int(value) for value in self.h0194],
+            dagger_status=int(self.dagger_status),
+            allegiance=int(self.allegiance),
+            weapon_type=int(self.weapon_type),
+            skill=int(self.skill),
+            h01BA=int(self.h01BA),
+            weapon_item_type=int(self.weapon_item_type),
+            offhand_item_type=int(self.offhand_item_type),
+            weapon_item_id=int(self.weapon_item_id),
+            offhand_item_id=int(self.offhand_item_id),
+            equipment=equipment.snapshot() if equipment is not None else None,
+            tags=tags.snapshot() if tags is not None else None,
+            visible_effects=[effect.snapshot() for effect in visible_effects],
+            is_bleeding=self.is_bleeding,
+            is_conditioned=self.is_conditioned,
+            is_used_corpse=self.is_used_corpse,
+            is_crippled=self.is_crippled,
+            is_dead=self.is_dead,
+            is_deep_wounded=self.is_deep_wounded,
+            is_poisoned=self.is_poisoned,
+            is_enchanted=self.is_enchanted,
+            is_degen_hexed=self.is_degen_hexed,
+            is_hexed=self.is_hexed,
+            is_weapon_spelled=self.is_weapon_spelled,
+            is_in_combat_stance=self.is_in_combat_stance,
+            has_quest=self.has_quest,
+            is_dead_by_type_map=self.is_dead_by_type_map,
+            is_exploitable=self.is_exploitable,
+            is_female=self.is_female,
+            has_boss_glow=self.has_boss_glow,
+            is_hiding_cape=self.is_hiding_cape,
+            can_be_viewed_in_party_window=self.can_be_viewed_in_party_window,
+            is_spawned=self.is_spawned,
+            is_being_observed=self.is_being_observed,
+            is_knocked_down=self.is_knocked_down,
+            is_moving=self.is_moving,
+            is_attacking=self.is_attacking,
+            is_casting=self.is_casting,
+            is_idle=self.is_idle,
+            is_alive=self.is_alive,
+            is_player=self.is_player,
+            is_npc=self.is_npc,
+        )
+
+
+class ReforgedAgentLivingStruct(TargetStruct):
+    """The Python Reforged ``AgentLivingStruct`` declaration (size 0x1C2).
+
+    The native live-read view is two bytes longer. This separate layout uses
+    the same fixed-width target pointer representations while retaining the
+    Python source's complete field list without the native-only trailing bytes.
+    """
+
+    _pack_ = 1
+    _fields_ = list(AgentStruct._fields_) + list(AgentLivingStruct._fields_[:-1])
+
 
 assert ctypes.sizeof(Vec2fStruct) == 0x08
 assert ctypes.sizeof(GamePositionStruct) == 0x0C
@@ -716,17 +1443,22 @@ assert ctypes.sizeof(AgentItemStruct) == 0xD4
 assert ctypes.sizeof(AgentGadgetStruct) == 0xE4
 assert ctypes.sizeof(DyeInfoStruct) == 0x03
 assert ctypes.sizeof(ItemDataStruct) == 0x10
+assert ctypes.sizeof(ReforgedItemDataStruct) == 0x13
+assert ctypes.sizeof(ReforgedEquipmentItemsUnionStruct) == 0xAB
 assert ctypes.sizeof(EquipmentStruct) == 0xD8
+assert ctypes.sizeof(ReforgedEquipmentStruct) == 0xF3
 assert ctypes.sizeof(TagInfoStruct) == 0x06
 assert ctypes.sizeof(VisibleEffectStruct) == 0x0C
 assert ctypes.sizeof(AgentLivingStruct) == 0x1C4
+assert ctypes.sizeof(ReforgedAgentLivingStruct) == 0x1C2
 assert AgentLivingStruct.allegiance.offset == 0x1B5
+assert ReforgedAgentLivingStruct.allegiance.offset == 0x1B5
 
 _agent_record_type = TypeVar("_agent_record_type", bound=AgentStruct)
 
 
-@dataclass(frozen=True)
-class AgentReference:
+@dataclass(frozen=True, repr=False)
+class AgentReference(Describable):
     """A lightweight reference to one current remote agent record."""
 
     agent_id: int
@@ -763,8 +1495,8 @@ class AgentReference:
         return self.is_item and bool(self.owner_id)
 
 
-@dataclass(frozen=True)
-class AgentArraySnapshot:
+@dataclass(frozen=True, repr=False)
+class AgentArraySnapshot(Describable):
     """One bounded view of the native agent pointer table."""
 
     references: tuple[AgentReference, ...]
@@ -971,14 +1703,14 @@ class AgentArraySnapshot:
         return [reference.agent_id for reference in self.dead_enemies]
 
 
-class AgentArrayStruct(Structure):
+class AgentArrayStruct(TargetStruct):
     """A bounded external view of Reforged's ``AgentArrayStruct``.
 
     The native structure contains one ``GWArray<Agent*>`` header.  The
     external view keeps that exact header, while category methods delegate to
-    the validated snapshot that produced this object.  ``raw_agents`` is an
-    explicit materialization operation and is bounded by the owning reader's
-    configured pointer limit.
+    the validated snapshot that produced this object. Binding the view applies
+    the source context gate and builds its bounded per-agent lookup cache;
+    ``raw_agents`` exposes that materialized list in table-slot order.
     """
 
     _pack_ = 1
@@ -986,6 +1718,11 @@ class AgentArrayStruct(Structure):
 
     _owner: AgentArray | None = None
     _snapshot: AgentArraySnapshot | None = None
+    _allegiance_cache: dict[str, list[int]] | None
+    _agent_by_id: dict[int, AgentStruct]
+    _last_instance_timer: int
+    frame_counter: int
+    frame_throttle: int
 
     def bind_external(
         self, owner: AgentArray, snapshot: AgentArraySnapshot
@@ -994,7 +1731,87 @@ class AgentArrayStruct(Structure):
 
         self._owner = owner
         self._snapshot = snapshot
+        self._ensure_cache_up_to_date()
         return self
+
+    def _ensure_fields(self) -> None:
+        """Initialize the source cache attributes on this local view."""
+
+        if not hasattr(self, "_allegiance_cache"):
+            self._allegiance_cache = None
+        if not hasattr(self, "_agent_by_id"):
+            self._agent_by_id = {}
+        if not hasattr(self, "_last_instance_timer"):
+            self._last_instance_timer = 0
+        if not hasattr(self, "frame_counter"):
+            self.frame_counter = 0
+        if not hasattr(self, "frame_throttle"):
+            self.frame_throttle = 2
+
+    def _drop_cache(self) -> None:
+        """Clear locally cached categories and records."""
+
+        self._ensure_fields()
+        self._allegiance_cache = None
+        self._agent_by_id = {}
+        self._last_instance_timer = 0
+
+    def _ensure_cache_up_to_date(self) -> None:
+        """Build source-shaped caches from the latest validated external view.
+
+        Reforged checks several in-process contexts before rebuilding this
+        cache. Stealth supplies the equivalent per-client context check; a
+        missing owner, snapshot, or required context clears these local caches.
+        """
+
+        self._ensure_fields()
+        if (
+            self._owner is None
+            or self._snapshot is None
+            or not self._owner._cache_contexts_are_available()
+        ):
+            self._drop_cache()
+            return
+        self._build_allegiance_cache()
+
+    def _iter_valid_agents(self) -> Iterator[AgentStruct]:
+        """Yield non-null materialized records with nonzero agent IDs."""
+
+        for agent in self.raw_agents:
+            if agent is not None and int(agent.agent_id) != 0:
+                yield agent
+
+    def _build_allegiance_cache(self) -> None:
+        """Populate the source category cache from validated snapshot IDs."""
+
+        self._ensure_fields()
+        snapshot = self._snapshot
+        if snapshot is None:
+            self._drop_cache()
+            return
+
+        self._allegiance_cache = {
+            "all": snapshot.GetAgentArray(),
+            "ally": snapshot.GetAllyArray(),
+            "neutral": snapshot.GetNeutralArray(),
+            "enemy": snapshot.GetEnemyArray(),
+            "spirit_pet": snapshot.GetSpiritPetArray(),
+            "minion": snapshot.GetMinionArray(),
+            "npc_minipet": snapshot.GetNPCMinipetArray(),
+            "living": [reference.agent_id for reference in snapshot.living],
+            "item": snapshot.GetItemAgentArray(),
+            "owned_item": snapshot.GetOwnedItemAgentArray(),
+            "gadget": snapshot.GetGadgetAgentArray(),
+            "dead_ally": snapshot.GetDeadAllyArray(),
+            "dead_enemy": snapshot.GetDeadEnemyArray(),
+        }
+        # Reforged stores direct in-process ctypes views here. The external
+        # equivalent materializes each validated record through its owning
+        # reader, preserving the same ID lookup cache without casting target
+        # addresses into host pointers.
+        self._agent_by_id = {
+            int(agent.agent_id): agent for agent in self._iter_valid_agents()
+        }
 
     @property
     def raw_agents(self) -> list[AgentStruct | None]:
@@ -1022,58 +1839,65 @@ class AgentArrayStruct(Structure):
     ) -> AgentStruct | AgentLivingStruct | AgentItemStruct | AgentGadgetStruct | None:
         """Return one complete validated record by agent identifier."""
 
+        self._ensure_fields()
+        cached_agent = self._agent_by_id.get(agent_id)
+        if cached_agent is not None:
+            return cached_agent
         if self._owner is None:
             return None
-        return self._owner.read_agent_by_id(agent_id, self._snapshot)
+        agent = self._owner.read_agent_by_id(agent_id, self._snapshot)
+        if agent is not None:
+            self._agent_by_id[agent_id] = agent
+        return agent
 
-    def _ids(self, method_name: str) -> list[int]:
-        if self._snapshot is None:
+    def _ids(self, category_name: str) -> list[int]:
+        self._ensure_fields()
+        if self._allegiance_cache is None:
             return []
-        method = getattr(self._snapshot, method_name)
-        return cast(list[int], method())
+        return list(self._allegiance_cache.get(category_name, []))
 
     def GetAgentArray(self) -> list[int]:
-        return self._ids("GetAgentArray")
+        return self._ids("all")
 
     def GetAllyArray(self) -> list[int]:
-        return self._ids("GetAllyArray")
+        return self._ids("ally")
 
     def GetNeutralArray(self) -> list[int]:
-        return self._ids("GetNeutralArray")
+        return self._ids("neutral")
 
     def GetEnemyArray(self) -> list[int]:
-        return self._ids("GetEnemyArray")
+        return self._ids("enemy")
 
     def GetSpiritPetArray(self) -> list[int]:
-        return self._ids("GetSpiritPetArray")
+        return self._ids("spirit_pet")
 
     def GetMinionArray(self) -> list[int]:
-        return self._ids("GetMinionArray")
+        return self._ids("minion")
 
     def GetNPCMinipetArray(self) -> list[int]:
-        return self._ids("GetNPCMinipetArray")
+        return self._ids("npc_minipet")
 
     def GetItemAgentArray(self) -> list[int]:
-        return self._ids("GetItemAgentArray")
+        return self._ids("item")
 
     def GetOwnedItemAgentArray(self) -> list[int]:
-        return self._ids("GetOwnedItemAgentArray")
+        return self._ids("owned_item")
 
     def GetGadgetAgentArray(self) -> list[int]:
-        return self._ids("GetGadgetAgentArray")
+        return self._ids("gadget")
 
     def GetDeadAllyArray(self) -> list[int]:
-        return self._ids("GetDeadAllyArray")
+        return self._ids("dead_ally")
 
     def GetDeadEnemyArray(self) -> list[int]:
-        return self._ids("GetDeadEnemyArray")
+        return self._ids("dead_enemy")
 
 
 assert ctypes.sizeof(AgentArrayStruct) == ctypes.sizeof(GWArray)
 
 
-@dataclass(frozen=True)
-class LivingAgentSnapshot:
+@dataclass(frozen=True, repr=False)
+class LivingAgentSnapshot(Describable):
     """Complete living-agent records captured during one refresh cycle.
 
     The records retain the complete native ``AgentLiving`` layout. This is a
@@ -1127,6 +1951,8 @@ class AgentArray:
     _MIN_REMOTE_ADDRESS = 0x10000
     _DEFAULT_MAX_POINTER_SLOTS = 4096
     _DEFAULT_MAX_REFERENCES = 300
+    _callback_name_ptr = "AgentArray.UpdatePtr"
+    _callback_name_cache = "AgentArray.UpdateCache"
 
     def __init__(
         self,
@@ -1136,6 +1962,7 @@ class AgentArray:
         agent_context: AccAgentContext,
         max_pointer_slots: int = _DEFAULT_MAX_POINTER_SLOTS,
         max_references: int = _DEFAULT_MAX_REFERENCES,
+        cache_context_validator: Callable[[], bool] | None = None,
     ) -> None:
         """Create an agent-array reader for one connected client."""
 
@@ -1147,10 +1974,12 @@ class AgentArray:
         self._scanner = scanner
         self._patterns = patterns
         self._agent_context = agent_context
+        self._cache_context_validator = cache_context_validator
         self._max_pointer_slots = max_pointer_slots
         self._max_references = max_references
         self._array_address: int | None = None
         self._snapshot: AgentArraySnapshot | None = None
+        self._context_view: AgentArrayStruct | None = None
         self._living_snapshot: LivingAgentSnapshot | None = None
         self._living_generation = 0
 
@@ -1177,6 +2006,57 @@ class AgentArray:
         """Return the most recent validated pointer-table snapshot."""
 
         return self._snapshot
+
+    def get_ptr(self) -> int:
+        """Return the cached resolver result using the source facade name."""
+
+        return self._array_address or 0
+
+    def _update_ptr(self) -> int:
+        """Resolve the array pointer using the source facade method name."""
+
+        return self.initialize()
+
+    def reset_cache(self) -> None:
+        """Discard locally cached snapshots without closing the process reader."""
+
+        if self._context_view is not None:
+            self._context_view._drop_cache()
+        self._snapshot = None
+        self._context_view = None
+        self._living_snapshot = None
+
+    def enable(self) -> None:
+        """Declare the source callback entry point, unavailable externally."""
+
+        raise NotImplementedError(
+            "AgentArray.enable requires Reforged's injected callback runtime."
+        )
+
+    def disable(self) -> None:
+        """Clear this reader's snapshots; process-handle ownership is unchanged."""
+
+        self.reset_cache()
+        self._array_address = None
+
+    def get_context(self) -> AgentArrayStruct | None:
+        """Return the most recently materialized source-shaped view."""
+
+        return self._context_view
+
+    def _update_cache(self) -> None:
+        """Run the source-named category-cache refresh on the current view."""
+
+        context = self.get_context()
+        if context is not None:
+            context._ensure_cache_up_to_date()
+
+    def _cache_contexts_are_available(self) -> bool:
+        """Check the source cache's additional context-presence conditions."""
+
+        if self._cache_context_validator is None:
+            return True
+        return self._cache_context_validator()
 
     def resolve_address(self, perf_counter: PerfCounter | None = None) -> int:
         """Return the stable native array address used by the resolver."""
@@ -1215,21 +2095,23 @@ class AgentArray:
             with perf_counter.measure("agent_array.read"):
                 snapshot = self._read_snapshot(perf_counter)
         self._snapshot = snapshot
+        self._context_view = None
         self._living_snapshot = None
         return snapshot
 
     def read_context(
         self, perf_counter: PerfCounter | None = None
     ) -> AgentArrayStruct | None:
-        """Return a source-shaped view bound to the latest validated snapshot."""
+        """Return a source-shaped view and build its validated local cache."""
 
         snapshot = self.read(perf_counter)
         if snapshot is None:
             return None
         header = self._read_array_header(self.resolve_address(), "agent array")
-        return AgentArrayStruct.from_buffer_copy(bytes(header)).bind_external(
-            self, snapshot
-        )
+        self._context_view = AgentArrayStruct.from_buffer_copy(
+            bytes(header)
+        ).bind_external(self, snapshot)
+        return self._context_view
 
     def _current_snapshot(self) -> AgentArraySnapshot | None:
         """Use the cached snapshot, refreshing only when none exists."""
@@ -1275,17 +2157,82 @@ class AgentArray:
     def GetItemAgentArray(self) -> list[int]:
         return self._category_ids("GetItemAgentArray")
 
+    def GetItemArray(self) -> list[int]:
+        """Return item agent IDs using Reforged's facade method name."""
+
+        return self.GetItemAgentArray()
+
     def GetOwnedItemAgentArray(self) -> list[int]:
         return self._category_ids("GetOwnedItemAgentArray")
 
+    def GetOwnedItemArray(self) -> list[int]:
+        """Return owned item IDs using Reforged's facade method name."""
+
+        return self.GetOwnedItemAgentArray()
+
     def GetGadgetAgentArray(self) -> list[int]:
         return self._category_ids("GetGadgetAgentArray")
+
+    def GetGadgetArray(self) -> list[int]:
+        """Return gadget IDs using Reforged's convenience method name."""
+
+        return self.GetGadgetAgentArray()
 
     def GetDeadAllyArray(self) -> list[int]:
         return self._category_ids("GetDeadAllyArray")
 
     def GetDeadEnemyArray(self) -> list[int]:
         return self._category_ids("GetDeadEnemyArray")
+
+    class Manipulation:
+        """List operations copied from Reforged's AgentArray facade."""
+
+        @staticmethod
+        def Merge(array1: list[int], array2: list[int]) -> list[int]:
+            """Return the set union of two agent-ID lists."""
+
+            return list(set(array1).union(set(array2)))
+
+        @staticmethod
+        def Subtract(array1: list[int], array2: list[int]) -> list[int]:
+            """Return IDs in ``array1`` that are not in ``array2``."""
+
+            return list(set(array1) - set(array2))
+
+        @staticmethod
+        def Intersect(array1: list[int], array2: list[int]) -> list[int]:
+            """Return the set intersection of two agent-ID lists."""
+
+            return list(set(array1).intersection(set(array2)))
+
+    class Sort:
+        """Sorting helpers that do not require the separate Agent library."""
+
+        @staticmethod
+        def ByCondition(
+            agent_array: list[int] | None,
+            condition_func: Callable[[int], Any],
+            reverse: bool = False,
+        ) -> list[int]:
+            """Sort IDs by a caller-provided key, matching Reforged behavior."""
+
+            if agent_array is None:
+                return []
+            return sorted(agent_array, key=condition_func, reverse=reverse)
+
+    class Filter:
+        """Filtering helpers that do not require the separate Agent library."""
+
+        @staticmethod
+        def ByCondition(
+            agent_array: list[int] | None,
+            filter_func: Callable[[int], Any],
+        ) -> list[int]:
+            """Keep IDs accepted by a caller-provided predicate."""
+
+            if agent_array is None:
+                return []
+            return list(filter(filter_func, agent_array))
 
     @property
     def living_snapshot(self) -> LivingAgentSnapshot | None:

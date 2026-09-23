@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_uint32
 from typing import Protocol
 
 from .game_context import GameContext, GameContextStruct
-from .gw_array import GWArray, GWArrayValueView, RemoteMemoryReader
+from .gw_array import GWArray, RemoteMemoryReader
+
+
+_MAX_GADGET_INFO_READ_BYTES = 16 * 1024 * 1024
+_X86_ADDRESS_LIMIT = 1 << 32
 
 
 class _memory_reader(RemoteMemoryReader, Protocol):
@@ -28,7 +34,7 @@ def _read_encoded_wide(reader: _memory_reader, address: int, limit: int = 256) -
     return bytes(raw).decode("utf-16-le", errors="replace")
 
 
-class GadgetInfoStruct(Structure):
+class GadgetInfoStruct(TargetStruct):
     """The native 0x10 gadget-info record."""
 
     _pack_ = 1
@@ -58,11 +64,11 @@ class GadgetInfoStruct(Structure):
         return _read_encoded_wide(self._remote_reader, int(self.name_enc))
 
 
-class GadgetContextStruct(Structure):
+class GadgetContextStruct(TargetStruct):
     """The fixed-width x86 0x10-byte native gadget root."""
 
     _pack_ = 1
-    _fields_ = [("gadget_info_array", GWArray)]
+    _fields_ = [("gadget_info", GWArray)]
 
     _remote_reader: _memory_reader | None = None
     _remote_address: int | None = None
@@ -83,25 +89,67 @@ class GadgetContextStruct(Structure):
         return getattr(self, "_remote_address", None)
 
     @property
+    def gadget_info_array(self) -> GWArray:
+        """Compatibility spelling for the native ``gadget_info`` field."""
+
+        return self.gadget_info
+
+    @gadget_info_array.setter
+    def gadget_info_array(self, value: GWArray) -> None:
+        self.gadget_info = value
+
+    @property
     def array_size(self) -> int:
         """Return the advertised gadget-info count."""
 
-        return int(self.gadget_info_array.m_size)
+        return int(self.gadget_info.m_size)
 
-    def gadget_infos(self, limit: int = 256) -> list[GadgetInfoStruct]:
-        """Read at most ``limit`` value records from the target array."""
+    def gadget_infos(self, limit: int | None = None) -> list[GadgetInfoStruct]:
+        """Read gadget records, fully by default or as an explicit sample.
+
+        The native context exposes the complete advertised array. An omitted
+        limit therefore reads every record. Passing a limit requests a smaller
+        sample explicitly. Reads that exceed the external reader's safety
+        ceiling fail rather than returning an unannounced partial result.
+        """
 
         if self._remote_reader is None:
             raise RuntimeError("GadgetContext snapshot is not bound to a reader.")
-        view = GWArrayValueView(
-            self._remote_reader, self.gadget_info_array, GadgetInfoStruct
-        )
-        if not view.valid():
+        total = int(self.gadget_info.m_size)
+        capacity = int(self.gadget_info.m_capacity)
+        buffer = int(self.gadget_info.m_buffer)
+        if total > capacity:
+            raise ValueError(
+                f"GadgetContext array size {total} exceeds capacity {capacity}."
+            )
+        if total == 0:
             return []
+        if buffer < 0x10000:
+            raise ValueError(
+                f"GadgetContext array has {total} records but an invalid buffer "
+                f"address 0x{buffer:08X}."
+            )
+        count = total if limit is None else min(total, max(0, int(limit)))
+        byte_count = count * ctypes.sizeof(GadgetInfoStruct)
+        if byte_count > _MAX_GADGET_INFO_READ_BYTES:
+            raise ValueError(
+                f"GadgetContext request needs {byte_count} bytes; the external "
+                f"read limit is {_MAX_GADGET_INFO_READ_BYTES} bytes."
+            )
+        if buffer + byte_count > _X86_ADDRESS_LIMIT:
+            raise ValueError(
+                f"GadgetContext read range 0x{buffer:08X}+{byte_count} "
+                "exceeds the x86 address space."
+            )
+        if count == 0:
+            return []
+        raw_records = self._remote_reader.read(buffer, byte_count)
+        record_size = ctypes.sizeof(GadgetInfoStruct)
         return [
-            value
-            for index in range(min(view.size(), max(0, limit)))
-            if (value := view.get(index)) is not None
+            GadgetInfoStruct.from_buffer_copy(
+                raw_records, index * record_size
+            ).bind_reader(self._remote_reader, buffer + index * record_size)
+            for index in range(count)
         ]
 
 assert ctypes.sizeof(GadgetInfoStruct) == 0x10

@@ -2,30 +2,35 @@
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_uint32
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 from .game_context import GameContext, GameContextStruct
-from .gw_array import GWArray, GWArrayValueView, RemoteMemoryReader
+from .gw_array import GWArray, RemoteMemoryReader
+
+
+_MAX_TRADE_ARRAY_READ_BYTES = 16 * 1024 * 1024
 
 
 class _memory_reader(RemoteMemoryReader, Protocol):
     """The byte-reading operation needed by trade records."""
 
 
-class TradeItemStruct(Structure):
+class TradeItemStruct(TargetStruct):
     """The native 0x08 offered-item record."""
 
     _pack_ = 1
     _fields_ = [("item_id", c_uint32), ("quantity", c_uint32)]
 
 
-class TradePlayerStruct(Structure):
+class TradePlayerStruct(TargetStruct):
     """The native 0x14 offer record for one side of a trade."""
 
     _pack_ = 1
-    _fields_ = [("gold", c_uint32), ("items_array", GWArray)]
+    _fields_ = [("gold", c_uint32), ("items", GWArray)]
 
     _remote_reader: _memory_reader | None = None
 
@@ -38,23 +43,67 @@ class TradePlayerStruct(Structure):
         return self
 
     @property
-    def items(self) -> list[TradeItemStruct]:
-        """Read at most 64 offered items."""
+    def items_array(self) -> GWArray:
+        """Compatibility alias for the native ``items`` array header."""
+
+        return self.items
+
+    @property
+    def offered_items(self) -> list[TradeItemStruct]:
+        """Read the complete advertised offer array when it is valid."""
 
         if self._remote_reader is None:
             raise RuntimeError("TradePlayer snapshot is not bound to a reader.")
-        view = GWArrayValueView(self._remote_reader, self.items_array, TradeItemStruct)
-        if not view.valid():
+
+        address = int(self.items.m_buffer)
+        count = int(self.items.m_size)
+        capacity = int(self.items.m_capacity)
+        if address == 0 or count == 0 or count > capacity:
             return []
+        if address < 0x10000:
+            raise ValueError(
+                f"Trade offer array has an implausible address: 0x{address:08X}"
+            )
+
+        byte_count = count * ctypes.sizeof(TradeItemStruct)
+        if byte_count > _MAX_TRADE_ARRAY_READ_BYTES:
+            raise ValueError(
+                "Trade offer array exceeds the per-array read limit: "
+                f"count={count}, bytes={byte_count}"
+            )
+        if address + byte_count > 0x1_0000_0000:
+            raise ValueError(
+                "Trade offer array extends beyond the 32-bit target address space: "
+                f"address=0x{address:08X}, bytes={byte_count}"
+            )
+
+        raw = self._remote_reader.read(address, byte_count)
+        if len(raw) != byte_count:
+            raise OSError(
+                "Trade offer array read returned an unexpected byte count: "
+                f"address=0x{address:08X}, requested={byte_count}, received={len(raw)}"
+            )
+
+        item_size = ctypes.sizeof(TradeItemStruct)
         return [
-            value
-            for index in range(min(view.size(), 64))
-            if (value := view.get(index)) is not None
+            TradeItemStruct.from_buffer_copy(raw, offset)
+            for offset in range(0, byte_count, item_size)
         ]
 
+    @property
+    def item_records(self) -> list[TradeItemStruct]:
+        """Readable alias for the externally materialized offer records."""
 
-class TradeContextStruct(Structure):
+        return self.offered_items
+
+
+class TradeContextStruct(TargetStruct):
     """The native fixed-width x86 0x38 trade root."""
+
+    TRADE_CLOSED: ClassVar[int] = 0
+    TRADE_INITIATED: ClassVar[int] = 1
+    TRADE_OFFER_SEND: ClassVar[int] = 2
+    TRADE_ACCEPTED: ClassVar[int] = 4
 
     _pack_ = 1
     _fields_ = [
@@ -99,7 +148,11 @@ class TradeContextStruct(Structure):
         """Return the current player's offered item with this ID, if any."""
 
         return next(
-            (item for item in self.player_offer.items if int(item.item_id) == item_id),
+            (
+                item
+                for item in self.player_offer.offered_items
+                if int(item.item_id) == item_id
+            ),
             None,
         )
 
@@ -112,19 +165,34 @@ class TradeContextStruct(Structure):
     def is_trade_initiated(self) -> bool:
         """Return whether the trade has been initiated."""
 
-        return bool(int(self.flags) & 0x1)
+        return bool(int(self.flags) & self.TRADE_INITIATED)
 
     @property
     def is_trade_offered(self) -> bool:
         """Return whether an offer has been sent."""
 
-        return bool(int(self.flags) & 0x2)
+        return bool(int(self.flags) & self.TRADE_OFFER_SEND)
 
     @property
     def is_trade_accepted(self) -> bool:
         """Return whether the trade has been accepted."""
 
-        return bool(int(self.flags) & 0x4)
+        return bool(int(self.flags) & self.TRADE_ACCEPTED)
+
+    def GetIsTradeOffered(self) -> bool:
+        """Match the native helper name for the trade-offered flag."""
+
+        return self.is_trade_offered
+
+    def GetIsTradeInitiated(self) -> bool:
+        """Match the native helper name for the trade-initiated flag."""
+
+        return self.is_trade_initiated
+
+    def GetIsTradeAccepted(self) -> bool:
+        """Match the native helper name for the trade-accepted flag."""
+
+        return self.is_trade_accepted
 
 
 assert ctypes.sizeof(TradeItemStruct) == 0x08

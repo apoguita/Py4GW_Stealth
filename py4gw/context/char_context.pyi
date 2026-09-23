@@ -1,10 +1,11 @@
+from ..target_struct import TargetStruct
 from ctypes import Structure
 from typing import Any, ClassVar
 
 from .gw_array import GWArray
 
 
-class ObserverMatchFlags(Structure):
+class ObserverMatchFlags(TargetStruct):
     type: int
     reserved: int
     version: int
@@ -21,7 +22,7 @@ class ObserverMatchFlags(Structure):
     data2: int
 
 
-class ObserverMatch(Structure):
+class ObserverMatch(TargetStruct):
     match_id: int
     match_id_dup: int
     map_id: int
@@ -44,7 +45,7 @@ class ObserverMatch(Structure):
     def team_name2_str(self) -> str | None: ...
 
 
-class ProgressBar(Structure):
+class ProgressBar(TargetStruct):
     pips: int
     color: list[int]
     background: list[int]
@@ -52,7 +53,7 @@ class ProgressBar(Structure):
     progress: float
 
 
-class CharContextStruct(Structure):
+class CharContextStruct(TargetStruct):
     h0000_array: GWArray
     h0010: int
     h0014_array: GWArray

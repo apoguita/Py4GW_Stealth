@@ -161,26 +161,28 @@ change a row to `PASS` or `FAIL`.
 | `AvailableCharacterArray` | PASS | Read path verified; callback registration unavailable externally | PASS — declaration parity; runtime limitation recorded |
 | `PartyContext` | PASS | Read path verified; callback registration unavailable externally | PASS — declaration parity; runtime limitation recorded |
 | `GuildContext` | PASS | Read path verified; callback registration unavailable externally | PASS — declaration parity; runtime limitation recorded |
-| `AccAgentContext` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| `AgentContext` / `AgentArray` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| `Camera` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| `FriendList` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| `ChatBuffer` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| `WorldContext` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| `TradeContext` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| `ItemContext` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| `AccountContext` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| `GadgetContext` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| `MapContext` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| `MissionMapContext` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| `WorldMapContext` | NOT AUDITED | NOT AUDITED | NOT AUDITED |
-| Render/UI/salvage surfaces | NOT AUDITED | NOT AUDITED | NOT AUDITED |
+| `AccAgentContext` | PASS | Root and nested read path verified; callback registration unavailable externally | PASS — declaration parity; native-only AgentInfo pointer path unresolved |
+| `AgentContext` / `AgentArray` | PASS — source declarations represented; Python/native layout differences explicitly represented | Bounded live read path verified; injected callback lifecycle unavailable externally | PASS — declaration parity; runtime limitation recorded |
+| `Camera` | PASS — native structure and Reforged Python facade declarations represented | Read-only resolver/getters verified; game-thread actions unavailable externally | PASS — declaration parity; runtime limitation recorded |
+| `FriendList` | PASS — native structure and PyFriendList declarations represented | Read-only root/records verified; game-thread actions unavailable externally | PASS — declaration parity; runtime limitation recorded |
+| `ChatBuffer` | PASS — native structures and pointer APIs represented | Read-only ring and typing reads verified | PASS — declaration parity |
+| `WorldContext` | **STRUCTS AND SOURCE MEMBER NAMES REPRESENTED** — 30 source classes and every `_fields_` name/order matched; no source property/method name was missing in the member inventory; native root size and checked offsets match. Value types, empty-array return values, source buffer shape, `GetPlayerById`, `PlayerStruct.name_enc_str`, and the runtime `vanquished_areas` behavior match the inspected Python source. The source `.pyi` disagrees by declaring `list[int] | None`; the runtime method returns `None` unconditionally. | Latest live test accessed all 61 root properties and 188 properties across 44 sampled child records; each implemented source array accessor matched its advertised count, including arrays larger than the former caps. An offline test preserves the `vanquished_areas` runtime behavior. Offline tests cover string lengths above the former cap | Callback registration is unavailable externally; reads above the explicit 16 MiB array or 32,768-character string ceilings fail; live values are not compared field-by-field against an injected Reforged runtime. Not full context/API certification |
+| `TradeContext` | **NATIVE FIELDS, CONSTANTS, AND HELPERS REPRESENTED** — record field order and x86 sizes match; all four native state constants and three flag helpers are represented; no direct Reforged Python context module exists in the inspected source tree | Live root read was previously verified; offline tests now verify full offer-array traversal beyond the former 64-item truncation and explicit failure for an over-limit request | Array materialization is an external-reader adaptation with a 16 MiB explicit ceiling; trade mutations are not enabled |
+| `ItemContext` | **LAYOUTS AND `Item`/`Bag` HELPER NAMES REPRESENTED** — native item/context fields and x86 sizes/offsets match; native methods are callable, bag search misses return `npos`, and `IsOfferedInTrade` uses the external TradeContext reader. No direct Reforged Python context-structure module exists | Live ItemContext and modifier reads pass; offline tests verify callable methods, full `GetModifier` lookup beyond 64 entries, offered/not-offered cases, and dye-aware bag search | `GetModifier` materializes a value copy and explicit array limits remain; Reforged wrapper and mutating-feature parity is not certified |
+| `AccountContext` | **STRUCTS PASS** — native account root and nested records matched by names/order and x86 sizes/offsets; no same-named Reforged Python context module exists | Read path verified; nested account arrays are bounded | Struct declaration pass only; no broader Reforged wrapper/API parity claim |
+| `GadgetContext` | **STRUCTS PASS** — both native records match names/order and x86 sizes; no same-named Reforged Python context module exists | Latest live test read all 9,500/9,500 advertised records through the direct GameContext pointer; offline tests verify full traversal beyond 256 and failure above the 16 MiB ceiling | Only APIs present in the native context source are claimed; no data beyond the explicit external-read ceiling is materialized |
+| `MapContext` | STRUCTS PASS — Reforged declarations and native pathing/props records are present with checked x86 sizes, source field order, and key offsets; source SinkNode helper declarations are represented | Root, arrays, links, props, snapshots, source facade helpers, PID-scoped caches, and travel portals verified; SinkNode helper logic is offline-tested but unused by the current source snapshot, which leaves `sink_nodes` empty | The tested client stores direct pointers into trapezoid arrays, unlike the unused source helper's pointer-to-pointer interpretation. Reforged `.pyi` pointer annotations differ from runtime `.py`/C++. This is recorded but does not block active reads. Callback registration is unavailable externally |
+| `MissionMapContext` | SOURCE DATA STRUCTURES AND READERS PORTED — all three structures, `read_at(reader, address)`, `ConnectedClient.read_mission_map_context(address)`, `subcontexts`/`subcontext2`, and source data properties are offline-tested | **LIVE READ VERIFIED** via the read-only frame-array route: frame 1591 published `0x26404750`, the `frame_id` cross-check passed, and root plus child values were internally consistent | In-process callback registration remains unavailable; the frame-array route is the read-only substitute |
+| `WorldMapContext` | SOURCE DATA STRUCTURE AND READER PORTED — source fields/order, `read_at(reader, address)`, and `ConnectedClient.read_world_map_context(address)` are offline-tested | **LIVE READ VERIFIED** via the read-only frame-array route: frame 3698 published `0x4526A578`, the `frame_id` cross-check passed, and the values read back consistent | In-process callback registration remains unavailable; the frame-array route is the read-only substitute. The world-map frame registers a `jmp` thunk, so the walk also follows near jumps |
+| `GwDxContext` | OUT OF SCOPE — native render-state record, not a required in-game context migration target | Not required | Existing declaration retained for reference; no render-state pointer work is planned |
+| UI support APIs | Outside context inventory — `ui.h` contains event/data records and accessors, but no `UIContext` structure | NOT AUDITED | Separate UI surface; not part of context-by-context parity |
+| Salvage actions | NOT AUDITED | NOT AUDITED | NOT AUDITED |
 
 ## Current certification state
 
 `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`, `GameplayContext`,
-`ServerRegion`, `InstanceInfo`, `TextParser`, `AvailableCharacterArray`, and
-`PartyContext`, and `GuildContext`
+`ServerRegion`, `InstanceInfo`, `TextParser`, `AvailableCharacterArray`,
+`PartyContext`, `GuildContext`, and `AccAgentContext`
 have completed declaration audits. Their source structures, fields,
 properties, facade methods, signatures, and source `.pyi` surfaces are
 represented. Their external read paths are verified by focused tests and live
@@ -433,6 +435,172 @@ Pyright: 0 errors, 0 warnings, 0 informations
 Reviewer/date: Codex / 2026-09-22
 ```
 
+### AccAgentContext certification record
+
+```text
+Context: AccAgentContext / native GW::Context::AgentContext
+Source files and revision: Reforged native_src/context/AccAgentContext.py and
+  AccAgentContext.pyi; Reforged_Native/include/GW/context/agent.h,
+  include/GW/context/game.h, and src/GW/context/context_methods.cpp
+  (working-tree sources)
+Declaration result: PASS for the selected context declarations
+Runtime availability: GameContext.agent pointer, complete 0x1B0 root,
+  summary records, gadget-name reads, movement records, and source array
+  properties verified externally; callback registration unavailable; native
+  AgentInfo layout is declared but has no pointer field in AgentContext and no
+  getter in context_methods.cpp, so its live array source remains unresolved
+Missing or changed declarations: none in the Reforged AccAgentContext module;
+  native-only AgentInfo and AgentInfoArray are declared as separate companion
+  types with no inferred pointer relationship
+Transport-only adaptations: target pointers use uint32 addresses; pointer
+  arrays and AgentMovement* entries are traversed through remote reads; source
+  empty value-array properties return empty lists; movement array returns None
+  when its header is empty; native array member names are additive aliases for
+  the Reforged *_array fields
+Live evidence: tests/test_acc_agent_context.py passed against the running client
+  on 2026-09-22. AgentContext=0x07453460; summaries=2002; movement entries=2002;
+  valid movement IDs=104; instance_timer=1805937958
+Tests: tests/test_acc_agent_context_offline.py (6 passed) and
+  tests/test_acc_agent_context.py (3 passed)
+Pyright: 0 errors, 0 warnings, 0 informations
+Reviewer/date: Codex / 2026-09-22
+```
+
+### AgentContext / AgentArray certification record
+
+```text
+Context: native GW::Context::AgentContext and Reforged AgentContext/AgentArray
+Source files inspected: Reforged_Native/include/GW/context/agent.h,
+  src/GW/context/context_methods.cpp; Reforged
+  native_src/context/AgentContext.py and AgentContext.pyi; Reforged AgentArray.py
+Root relationship: the native AgentContext root reached through
+  GameContext.agent is the same 0x1B0 root already covered under AccAgentContext;
+  no second root or pointer was added
+Implemented and externally verified: distinct global agent-array resolver,
+  bounded pointer-table traversal, native movement-table validity checks,
+  lazy typed record reads, living snapshots, source category methods, and
+  read-only effects/equipment/tag access. Struct declarations and source value
+  snapshots were separately checked against Reforged Python and native C++.
+Changes in this step: added Reforged facade names GetItemArray and
+  GetOwnedItemArray, and exposed per-reader get_ptr, _update_ptr, reset_cache,
+  enable, disable, and get_context names. enable explicitly reports that the
+  injected callback runtime is unavailable.
+Record/value struct parity result: PASS. The source Python living layout
+  (0x1C2) and native live-read layout (0x1C4) are represented explicitly;
+  Python/native item and equipment disagreements also have separate types.
+  The source value structure contains no extra corpse-diagnostic fields. This
+  is not a claim that Reforged's in-process execution model is reproduced.
+  AgentArrayStruct's source helper names are present. Its cache gate reads the
+  matching external contexts, while record caching uses remote reads instead
+  of process-local ctypes pointers. Native live-read layouts remain
+  authoritative for target memory. The Python Reforged ItemDataStruct layout
+  is separately represented for source parity and must not be used for native
+  live reads.
+AgentContext/AgentArray declaration result: PASS. The shared-memory fallback
+  transports the same bounded current array; Stealth serves ID lookup from its
+  validated current snapshot instead. Callback registration and process-wide
+  facade state remain runtime adaptations to per-client external readers.
+  The separate `Agent.py` helper surface was not part of this context audit.
+Source disagreements in AgentArray's equipment view: Reforged Python
+  `ItemDataStruct` uses a 32-bit type field and has size 0x13, while native
+  `ItemData` uses a 1-byte type and has size 0x10. ItemContext separately
+  declares the native `item.h` `ItemData` layout. The Reforged layout also
+  expands the Python equipment union to 0xAB and its
+  containing Equipment record to 0xF3; native C++ asserts 0x90 and 0xD8.
+  Separate ``Reforged*`` layout views preserve the Python declarations while
+  native layouts remain in use for live reads. Reforged Python
+  AgentLivingStruct is packed to 0x1C2 while native AgentLiving is 0x1C4;
+  Stealth declares separate Python-source and native live-read layouts.
+  The .pyi has stale snapshot return annotations in places; conversion
+  behavior follows the .py implementation and value types.
+Live evidence: tests/test_agent_array.py passed on 2026-09-22 against the
+  running client. Latest observation: reported size=1945, capacity=2048,
+  accepted references=98, stale=0, unreadable=0, truncated=False, living=95,
+  gadgets=3; one living refresh captured 95 records with zero stale and
+  unreadable records. Refresh=6.659 ms; pointer table=0.528 ms; movement
+  table=1.181 ms; classification=2.756 ms; source-shaped cache build=6.492 ms;
+  resolver initialization=135.579 ms.
+Offline evidence: tests/test_agent_array_offline.py (15 passed, including
+  source Python and native live-read layout variants)
+Pyright: 0 errors, 0 warnings, 0 informations
+Next context in the serial checklist: `Camera`. The independent `Agent.py`
+  helper surface remains unaudited and is tracked separately; it does not
+  invalidate declaration parity for `AgentContext` / `AgentArray`.
+Reviewer/date: Codex / 2026-09-22
+```
+
+### Camera certification record
+
+```text
+Context: native GW::Context::Camera, native GW::camera operations, and the
+  Reforged Python Py4GWCoreLib/Camera.py facade
+Sources inspected: Reforged_Native/include/GW/context/camera.h,
+  Reforged_Native/include/GW/camera/camera.h,
+  Reforged_Native/src/GW/camera/camera_bindings.cpp,
+  Reforged/Py4GWCoreLib/Camera.py
+Declaration result: native Camera fields and struct methods use source names
+  and x86 offsets. Reforged Camera.py getter and action-wrapper names are all
+  declared. Read getters and IsPointInFOV are implemented over external reads;
+  source actions explicitly raise NotImplementedError and never write to the
+  target or invoke a game-thread call.
+Missing parity: none in the declared native structure or Reforged Python
+  facade. Runtime action execution is unavailable by project boundary.
+Live evidence: tests/test_camera.py passed on 2026-09-22; camera address
+  0x017CAC10. Resolver, structure values, and facade getters were verified.
+Offline evidence: tests/test_camera_offline.py (4 passed; exact field-name list,
+  offsets, getter behavior, and disabled mutators)
+Pyright: 0 errors, 0 warnings, 0 informations
+Certificate: PASS — declaration parity; runtime limitation recorded.
+Reviewer/date: Codex / 2026-09-22
+```
+
+### FriendList certification record
+
+```text
+Context: native GW::Context::FriendList / Friend and Reforged PyFriendList
+Sources inspected: Reforged_Native/include/GW/context/friend_list.h,
+  common/constants/friend_list.h, friend_list_methods.cpp,
+  friend_list_bindings.cpp; Reforged/stubs/PyFriendList.pyi
+Declaration result: PASS. Native fields are present under their source names;
+  FriendEventData includes its 12-byte header and zero-length flexible-array
+  declaration. Friend type/status values and all PyFriendList stub function
+  names/signatures are represented.
+Transport adaptation: the native GWArray and Friend* entries are traversed
+  with bounded fixed-width remote reads. UTF-16 name buffers use uint16 units.
+Runtime limitation: set_friend_list_status, add_friend, and add_ignore are
+  declared but raise NotImplementedError because native bindings enqueue work
+  on the in-client game thread. Native RemoveFriend is not exposed in the
+  PyFriendList stub and was not added to that facade.
+Live evidence: tests/test_friend_list.py passed on 2026-09-22. FriendList
+  address=0x01C4AE78; 59 friends, 0 ignores, 59 records, status=online.
+Offline evidence: tests/test_friend_list_offline.py (5 passed; exact field
+  names/layouts, decoding, lookup/count behavior, and disabled actions)
+Pyright: 0 errors, 0 warnings, 0 informations
+Certificate: PASS — declaration parity; runtime limitation recorded.
+Reviewer/date: Codex / 2026-09-22
+```
+
+### ChatBuffer certification record
+
+```text
+Context: native GW::Context::ChatBuffer / ChatMessage
+Sources inspected: Reforged_Native/include/GW/context/chat.h,
+  context_methods.cpp, and offsets/chat.json. There is no same-named
+  Reforged Python context facade.
+Declaration result: PASS. ChatBuffer, ChatMessage, FILETIME, the 0x200 slot
+  array, and the flexible UTF-16 message tail are represented by source names.
+  Pointer-slot and typing-state resolvers are read-only.
+Scope distinction: PyPlayer.GetChatHistory is a separate Player API and is not
+  part of this ChatBuffer declaration certificate.
+Live evidence: tests/test_chat_buffer.py passed on 2026-09-22; ChatBuffer
+  address=0x27CBE0D8, next=324, 512 non-null readable message slots observed.
+Offline evidence: tests/test_chat_buffer_offline.py (4 passed; exact fields,
+  layouts, FILETIME conversion, bounded payload, and ring traversal)
+Pyright: 0 errors, 0 warnings, 0 informations
+Certificate: PASS — declaration parity; raw payload remains encoded.
+Reviewer/date: Codex / 2026-09-22
+```
+
 ### GameContext certification record
 
 ```text
@@ -453,4 +621,76 @@ Tests: tests/test_game_context_offline.py and tests/test_game_context.py passed;
   full discovery run previously passed
 Pyright: 0 errors, 0 warnings, 0 informations
 Reviewer/date: Codex / 2026-09-22
+```
+
+### MissionMapContext certification record
+
+```text
+Context: MissionMapContext
+Source files inspected: Py4GW_Reforged/Py4GWCoreLib/native_src/context/
+  MissionMapContext.py and MissionMapContext.pyi;
+  Py4GW_Reforged_Native/include/GW/context/map.h,
+  src/GW/map/map.cpp, and src/GW/shared_memory/manager.cpp
+Declaration result: PASS. All three structure field lists and offsets match
+  the Reforged/native x86 declarations. `MissionMapContextStruct.read_at`
+  reads a caller-supplied root address and binds its reader;
+  `ConnectedClient.read_mission_map_context(address)` exposes it publicly.
+  Source properties `subcontexts` and `subcontext2`, plus facade members
+  `get_ptr`, `_update_ptr`, `enable`, `disable`, and `get_context`, are present.
+  The two child properties read remote pointers through the bound process
+  reader.
+Transport adaptation: target pointers are fixed-width uint32 values; the
+  pointer-array read checks its advertised size/capacity and x86 range.
+Runtime limitation: native `map.cpp` captures the root from a UI interaction
+  callback's `message->wParam`, clears it when the frame is destroyed, and
+  shared memory republishes it. Stealth cannot register that callback;
+  `_update_ptr` and `enable` explicitly raise NotImplementedError. No external
+  root pointer or live read is claimed.
+Offline evidence: tests/test_mission_map_context_offline.py (9 passed; exact
+  root read from a supplied address, public ConnectedClient reader, field
+  order/offsets, child pointer properties, invalid address/short read/array
+  header, and callback-facade limitation)
+Pyright: 0 errors, 0 warnings, 0 informations
+Certificate: PASS — structure/property/facade declaration parity and
+  address-based root reader; callback pointer acquisition remains unresolved.
+Reviewer/date: Codex / 2026-09-22
+```
+
+### WorldMapContext certification record
+
+```text
+Context: WorldMapContext
+Source files inspected: Py4GW_Reforged/Py4GWCoreLib/native_src/context/
+  WorldMapContext.py and WorldMapContext.pyi;
+  Py4GW_Reforged_Native/include/GW/context/map.h,
+  src/GW/context/context_methods.cpp, src/GW/map/map.cpp, and
+  src/GW/shared_memory/manager.cpp
+Declaration result: PASS. All WorldMapContextStruct field names, order,
+  fixed x86 sizes, and offsets match source. `read_at(reader, address)` reads
+  the fixed root from a caller-supplied address. The public
+  `ConnectedClient.read_world_map_context(address)` method exposes this read
+  without exposing the process-memory reader. Facade members `get_ptr`,
+  `_update_ptr`, `enable`, `disable`, and `get_context` are represented.
+Runtime limitation: native `map.cpp` captures the root from a UI interaction
+  callback's `message->wParam`, clears it when the frame is destroyed, and
+  shared memory republishes it. Stealth acquires the same pointer read-only by
+  walking the client's UI frame array to the frame that registered the
+  world-map callback (`py4gw/ui/`), cross-checking the context's stored
+  `frame_id` against that frame's index. That route is offline-tested but not
+  yet confirmed live, so no live read is claimed. `_update_ptr` and `enable`
+  still explicitly raise NotImplementedError because registering an in-process
+  callback remains unavailable.
+Offline evidence: tests/test_world_map_context_offline.py (6 passed; root read
+  from a supplied address, public ConnectedClient reader, field order/offsets,
+  address bounds, and callback-facade limitation);
+  tests/test_ui_frame_offline.py (25 passed; frame layouts, frame-array
+  validation, frame tree, frame-id cross-check, and the frame-array
+  acquisition end to end)
+Pyright: 0 errors, 0 warnings, 0 informations (project-wide run reports only
+  the two pre-existing unresolved `nicegui` imports in main.py and
+  tests/nicegui_probe.py)
+Certificate: PASS — structure/facade declaration parity, address-based root
+  reader, and a read-only frame-array acquisition route that awaits live
+  confirmation.
+Reviewer/date: Codex / 2026-09-22; frame-array route added 2026-09-23
 ```

@@ -8,6 +8,8 @@ x86 root structure through the external process reader.
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
 from ctypes import Structure, c_uint8, c_uint16, c_uint32
 from typing import Any, Protocol, TypeVar, cast
@@ -23,21 +25,21 @@ class _memory_reader(RemoteMemoryReader, Protocol):
 _structure_type = TypeVar("_structure_type", bound=Structure)
 
 
-class TextCacheStruct(Structure):
+class TextCacheStruct(TargetStruct):
     """The native ``TextCache`` record referenced by ``TextParser``."""
 
     _pack_ = 1
     _fields_ = [("h0000", c_uint32)]
 
 
-class TextParserSubStructStruct(Structure):
+class TextParserSubStructStruct(TargetStruct):
     """The native one-word sub-structure referenced by ``TextParser``."""
 
     _pack_ = 1
     _fields_ = [("h0000", c_uint32)]
 
 
-class TextFileSlotStruct(Structure):
+class TextFileSlotStruct(TargetStruct):
     """The Reforged 0x24-byte text-file slot record."""
 
     _pack_ = 1
@@ -79,7 +81,7 @@ class TextFileSlotStruct(Structure):
         return "".join(characters)
 
 
-class LanguageSlotStruct(Structure):
+class LanguageSlotStruct(TargetStruct):
     """The Reforged 0x0C per-language file-slot header."""
 
     _pack_ = 1
@@ -90,7 +92,7 @@ class LanguageSlotStruct(Structure):
     ]
 
 
-class TextParserStruct(Structure):
+class TextParserStruct(TargetStruct):
     """The fixed-width x86 port of native ``GW::Context::TextParser``."""
 
     _pack_ = 1

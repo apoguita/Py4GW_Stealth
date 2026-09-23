@@ -1,3 +1,4 @@
+from ..target_struct import TargetStruct
 from ctypes import Structure
 from typing import Any, Optional
 
@@ -5,15 +6,15 @@ from .game_context import GameContext
 from .gw_array import RemoteMemoryReader
 
 
-class TextCacheStruct(Structure):
+class TextCacheStruct(TargetStruct):
     h0000: int
 
 
-class TextParserSubStructStruct(Structure):
+class TextParserSubStructStruct(TargetStruct):
     h0000: int
 
 
-class TextFileSlotStruct(Structure):
+class TextFileSlotStruct(TargetStruct):
     _pad0: Any
     file_hash_ptr: int
     _pad1: int
@@ -28,13 +29,13 @@ class TextFileSlotStruct(Structure):
     def file_hash(self) -> str: ...
 
 
-class LanguageSlotStruct(Structure):
+class LanguageSlotStruct(TargetStruct):
     slot_array_ptr: int
     _h0004: int
     slot_count: int
 
 
-class TextParserStruct(Structure):
+class TextParserStruct(TargetStruct):
     _h0000: Any
     dec_start_ptr: int
     dec_end_ptr: int

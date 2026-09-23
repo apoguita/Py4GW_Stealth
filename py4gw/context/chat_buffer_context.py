@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from ..target_struct import TargetStruct
+
 import ctypes
-from ctypes import Structure, c_uint32
+from ctypes import Structure, c_uint16, c_uint32
 from datetime import datetime, timezone
 from typing import Protocol
 
@@ -15,6 +17,19 @@ class _memory_reader(RemoteMemoryReader, Protocol):
     """The byte-reading operation needed by the chat reader."""
 
 
+CHAT_LOG_LENGTH = 0x200
+
+
+class FileTimeStruct(TargetStruct):
+    """Windows ``FILETIME`` layout used by native chat messages."""
+
+    _pack_ = 1
+    _fields_ = [
+        ("dwLowDateTime", c_uint32),
+        ("dwHighDateTime", c_uint32),
+    ]
+
+
 def _decode_wide_bytes(raw: bytes) -> str:
     """Decode target UTF-16 text up to the first NUL character."""
 
@@ -23,15 +38,15 @@ def _decode_wide_bytes(raw: bytes) -> str:
     return decoded.split("\x00", 1)[0]
 
 
-class ChatMessageStruct(Structure):
+class ChatMessageStruct(TargetStruct):
     """The fixed header of one native ``ChatMessage`` record."""
 
     _pack_ = 1
     _fields_ = [
         ("channel", c_uint32),
-        ("unknown_0004", c_uint32),
-        ("timestamp_low", c_uint32),
-        ("timestamp_high", c_uint32),
+        ("unk1", c_uint32),
+        ("timestamp", FileTimeStruct),
+        ("message", c_uint16 * 0),
     ]
 
     _remote_reader: _memory_reader | None = None
@@ -59,7 +74,9 @@ class ChatMessageStruct(Structure):
     def timestamp_100ns(self) -> int:
         """Return the native FILETIME value as 100-nanosecond ticks."""
 
-        return (int(self.timestamp_high) << 32) | int(self.timestamp_low)
+        return (int(self.timestamp.dwHighDateTime) << 32) | int(
+            self.timestamp.dwLowDateTime
+        )
 
     @property
     def timestamp_utc(self) -> datetime | None:
@@ -119,16 +136,16 @@ class ChatMessageStruct(Structure):
         return tuple(ord(character) for character in self.message_str)
 
 
-class ChatBufferStruct(Structure):
+class ChatBufferStruct(TargetStruct):
     """The native 0x80C chat ring-buffer structure."""
 
-    _CHAT_LOG_LENGTH = 0x200
+    _CHAT_LOG_LENGTH = CHAT_LOG_LENGTH
     _pack_ = 1
     _fields_ = [
-        ("next_index", c_uint32),
-        ("unknown_0004", c_uint32),
-        ("unknown_0008", c_uint32),
-        ("message_pointers", c_uint32 * _CHAT_LOG_LENGTH),
+        ("next", c_uint32),
+        ("unk1", c_uint32),
+        ("unk2", c_uint32),
+        ("messages", c_uint32 * _CHAT_LOG_LENGTH),
     ]
 
     _remote_reader: _memory_reader | None = None
@@ -153,14 +170,14 @@ class ChatBufferStruct(Structure):
         return self
 
     @property
-    def messages(self) -> list[ChatMessageStruct]:
+    def message_records(self) -> list[ChatMessageStruct]:
         """Read bounded message headers from non-null ring-buffer slots."""
 
         if self._remote_reader is None:
             raise RuntimeError("ChatBuffer is not bound to a memory reader.")
 
         records: list[ChatMessageStruct] = []
-        for pointer in list(self.message_pointers)[: self._max_message_count]:
+        for pointer in list(self.messages)[: self._max_message_count]:
             address = int(pointer)
             if address < 0x10000:
                 continue
@@ -180,10 +197,23 @@ class ChatBufferStruct(Structure):
             )
         return records
 
+    @property
+    def next_index(self) -> int:
+        """Readable alias for the source ``next`` ring index."""
+
+        return int(self.next)
+
+    @property
+    def message_pointers(self) -> ctypes.Array[c_uint32]:
+        """Compatibility alias for the source ``messages`` pointer array."""
+
+        return self.messages
+
 
 assert ctypes.sizeof(ChatMessageStruct) == 0x10
 assert ctypes.sizeof(ChatBufferStruct) == 0x80C
-assert ChatBufferStruct.message_pointers.offset == 0x0C
+assert ctypes.sizeof(FileTimeStruct) == 0x08
+assert ChatBufferStruct.messages.offset == 0x0C
 
 
 class ChatBuffer:

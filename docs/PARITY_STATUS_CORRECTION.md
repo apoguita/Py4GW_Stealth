@@ -21,10 +21,10 @@ may raise an explicit unsupported-operation error; it must not disappear from
 the port.
 
 The current tree still has declaration gaps. For example, the source-only
-members include `CharContext.get_ptr/enable/disable/get_context`, the
-`MapContext` pathing/props/travel and cache methods, `WorldContext.quest_log`,
-and the `AgentContext` lifecycle/cache/snapshot methods. These are migration
-work, not approved design omissions.
+members include the `AgentContext` lifecycle/cache/snapshot methods. The
+`MapContext` and `WorldContext` source member names have now been compared
+and represented; their in-client callback registration remains explicitly
+unavailable to an external controller.
 
 ## Known gaps in readers previously described as complete
 
@@ -40,24 +40,35 @@ work, not approved design omissions.
 | `AvailableCharacterArray` | Roster layout, names, and bounded entries | Reforged lifecycle methods and injected roster publication. |
 | `PartyContext` | Root, member records, searches, native helper aliases, and facade | Callback registration requires the injected runtime; no selected source declaration is omitted. |
 | `GuildContext` | Root, guild records, roster/history, names, `from_hex`, and facade | Callback registration requires the injected runtime; no selected source declaration is omitted. |
-| `AccAgentContext` | Root, movement records, summaries, and bounded arrays | Lifecycle methods and injected pointer publication. |
-| `AgentArray` | Bounded references, categories, typed records, effects, equipment, and tags | Reforged lifecycle/cache methods, shared-memory fallback, and the larger wrapper API. |
-| `Camera` | Read-only camera record and derived read helpers | Setters, unlock patch state, and source-side camera control behavior. |
-| `FriendList` | Root, records, decoding, counts, and lookups | Mutating friend operations and any source-side update behavior. |
-| `WorldContext` | Root and many bounded child records/helpers | Lifecycle methods, the source `quest_log` surface, and any other source fields/helpers not covered by the verified child readers. |
-| `TradeContext` | Root, offers, records, and state flags | Trade actions: open, offer, remove, accept, and cancel. |
-| `ItemContext` | Root, bags, items, raw modifier words, and native helper rules | Reforged semantic modifier catalog, upgrade-name layer, item actions, salvage actions, and other in-process behavior. |
+| `AccAgentContext` | Root, movement records, summaries, native-only `AgentInfo` layout, all array aliases, and facade | Callback registration requires the injected runtime. Native `AgentInfoArray` has no field/getter pointer source in the inspected context code, so only its declaration is represented. |
+| `AgentArray` | Bounded references, categories, typed records, effects, equipment, tags, corpse-state helpers, source item names, and pure list merge/sort/filter helpers | Reforged `Sort.ByAttribute`, `Sort.ByDistance`, `Sort.ByHealth`, `Filter.ByAttribute`, `Filter.ByDistance`, and `Routines.DetectLargestAgentCluster` require the separate `Agent.py` query surface, which is not migrated. Callback registration is unavailable externally; Reforged shared-memory transport is replaced by bounded remote reads. |
+| `Camera` | Native record and Reforged getter declarations; read-only getters verified | Game-thread camera actions and state-changing setters remain unavailable externally. |
+| `FriendList` | Native structure and PyFriendList declarations; read-only records/counts/status verified | Mutating friend operations are declared but unavailable because they require the in-client game thread. Native `RemoveFriend` is not exposed in the PyFriendList stub. |
+| `WorldContext` | All source classes, fields, and member names are represented. Its value types, empty-array returns, null-versus-empty string results, message/dialog buffer shape, player lookup field, and `PlayerStruct.name_enc_str` pointer behavior match the inspected source. Live checks cover each implemented source array accessor and confirm each result count equals its advertised size, including 2,009 map agents and 9,271 NPC models. `vanquished_areas` follows Reforged Python runtime's current unconditional `None`, although the native structure contains an array header; the source `.pyi` disagrees and advertises `list[int] | None`. Indirect strings above 256 characters are no longer silently truncated. | Callback registration remains unavailable; requests above the 16 MiB array or 32,768-character string ceiling fail explicitly, and live values are not compared field-by-field against an in-client Reforged runtime. Full API parity remains open. |
+| `TradeContext` | Root, native constants, records, flag helpers, and complete advertised offer-array reads within the explicit external-read ceiling | Trade actions: open, offer, remove, accept, and cancel. |
+| `ItemContext` | Root and native records; callable `Item` and `Bag` source helper methods; `Bag.find*` returns native `npos`; `GetModifier` scans the complete advertised count within its explicit read ceiling; `IsOfferedInTrade` reads through TradeContext | The Reforged semantic modifier catalog, upgrade-name layer, item actions, salvage actions, and other in-process behavior are separate. |
 | `AccountContext` | Native root and bounded account queries | There is no direct Reforged Python context facade to claim parity with; only the inspected native consumers are represented. |
-| `GadgetContext` | Root and bounded gadget records through external readers | Lifecycle and gadget actions. |
+| `GadgetContext` | Native root/record declarations and complete advertised `GadgetInfo` array reads, within the explicit 16 MiB external-read ceiling | No same-named Reforged Python context facade was found; no context lifecycle or gadget action surface is defined by `gadget.h`. |
 
 ## Already explicitly partial or pending
 
 - `ChatBuffer`: decoded chat history is not externally reproduced.
-- `MapContext`: root, spawn arrays, and initial pathing context roots are
-  present; pathing children, props, travel portals, snapshots, and caches are
-  not present. See [`PATHING_MIGRATION_PLAN.md`](PATHING_MIGRATION_PLAN.md).
-- `MissionMapContext` and `WorldMapContext`: no independent external pointer
-  source is verified.
+- `MapContext`: root, spawn arrays, pathing roots, linked records, props,
+  travel portals, source snapshots, and PID-scoped caches are implemented.
+  SinkNode pointer/list helpers are represented and offline-tested, but the
+  current Reforged snapshot leaves `sink_nodes` empty and no active consumer
+  was found in the searched source. The tested client stores direct pointers
+  into trapezoid arrays; Stealth preserves those raw values and does not apply
+  the unused helpers. This is documented, not treated as an active read-data
+  blocker. Automatic callback registration also remains unavailable. See
+  [`PATHING_MIGRATION_PLAN.md`](PATHING_MIGRATION_PLAN.md).
+- `MissionMapContext` and `WorldMapContext`: source structures, data
+  properties, and supplied-address readers are ported and offline-tested. The
+  Native source obtains their roots through callbacks; Stealth has not yet
+  implemented its own route to those pointers, so live verification remains
+  unavailable. This is a runtime limitation, not missing
+  structure/read-property parity. The agreed research path is in
+  [`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md).
 - Render/UI, salvage, and other action/execution surfaces are not implemented.
 
 ## Reporting rule from this point forward

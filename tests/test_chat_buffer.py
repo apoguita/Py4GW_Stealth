@@ -68,11 +68,11 @@ class LiveChatBufferTests(unittest.TestCase):
         self.assertIsNotNone(snapshot)
         assert snapshot is not None
         self.assertIsInstance(snapshot, ChatBufferStruct)
-        self.assertLessEqual(int(snapshot.next_index), 0x200)
-        messages = snapshot.messages
+        self.assertLessEqual(int(snapshot.next), 0x200)
+        messages = snapshot.message_records
         self.assertLessEqual(len(messages), 0x200)
         print(
-            f"Live chat: next={snapshot.next_index}, messages={len(messages)}, "
+            f"Live chat: next={snapshot.next}, messages={len(messages)}, "
             f"typing={self.chat.is_typing()}"
         )
         if messages:

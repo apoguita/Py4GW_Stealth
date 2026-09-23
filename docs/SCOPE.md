@@ -2,10 +2,15 @@
 
 ## Purpose
 
-Py4GW Stealth is the external counterpart research project for Py4GW Reforged.
-Py4GW Reforged runs Python inside Guild Wars through the injected
-`Py4GW.dll`. Stealth investigates how selected Reforged capabilities can be
-recreated from an external Python process instead.
+Py4GW Stealth is an independent external-host project for reading Guild Wars
+data and, eventually, executing source-backed work on the game's thread. It
+aims to be self-sufficient: Py4GW Reforged and Py4GW_Reforged_Native are
+source references, not runtime dependencies. Stealth must not rely on
+Reforged's injected DLL, embedded Python runtime, or shared-memory mapping.
+The selected architecture for callback and game-thread work is a
+Stealth-owned payload or patch without loading a conventional DLL. That still
+modifies the process and is injection. The first target is the WorldMap UI
+callback pointer; its payload is not implemented yet.
 
 This is capability-by-capability work. Stealth is not a complete replacement
 for Py4GW Reforged, and no feature is assumed to be externally possible until
@@ -26,17 +31,18 @@ The current reader inventory is not a parity claim by itself. See
 status of every migrated reader and the missing work recorded for partial
 surfaces.
 
-Work that requires target-code execution, writes, hooks, callbacks, or
-injected state is deliberately frozen in
-[`DEFERRED_INJECTION.md`](DEFERRED_INJECTION.md). It is not part of the active
-read-only migration until its architecture and safety contract are approved.
-
-The long-term intent is broader than reading contexts: some future features
-may need code to execute on the Guild Wars game thread. An external reader
-cannot do that by itself. The intended direction is to avoid loading a DLL,
-while evaluating a smaller in-process payload/hook approach similar to the
-mechanism observed in GwAu3. That is still injection in the technical sense
-and is not implemented yet.
+The current implementation is read-only, but pure external reads are not
+enough to obtain every source-defined pointer or execute Native's
+game-thread operations. The Native source shows which pointers, hooks,
+callbacks, patches, and calls are involved. The goal is to reproduce those
+source-backed mechanisms in Stealth, with a reusable design that can gain a
+new mechanism or parameter form when a concrete Native operation requires it.
+Unknown or hypothetical mechanisms are not part of the initial design. The
+inventory and resumable phases are in
+[`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md); the first callback
+pointer slice is detailed in
+[`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md). No target-side
+payload, patch, or call has been implemented.
 
 ## Current deliverable
 
@@ -62,6 +68,13 @@ surface over the package. Windows process and memory behavior stays inside the
 - A small native NiceGUI window for testing the current library behavior.
 - Tests and documentation that explain each capability.
 - Small project-owned wrappers around documented Windows APIs.
+- Source-backed research into pointer lifetimes and callback/hook paths needed
+  for self-sufficient context reads. The selected payload architecture and
+  first callback target are recorded in the execution plan; implementation is
+  still pending.
+- Future source-backed hooks, callbacks, and game-thread operations needed
+  for Reforged Native parity, implemented one reviewed mechanism at a time as
+  described in [`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md).
 
 ## Current capability
 
@@ -77,8 +90,8 @@ The current `py4gw` package can:
   `InstanceInfo`, `TextParser`, `AvailableCharacterArray`, `PartyContext`,
   `GuildContext`, `AccAgentContext`, `Camera`, `FriendList`, `ChatBuffer`,
   `WorldContext`, `TradeContext`, `ItemContext`, `AccountContext`,
-  `GadgetContext`, and the read-only `MapContext` root with bounded spawn and
-  initial pathing-context records
+  `GadgetContext`, and the read-only `MapContext` root with bounded spawn,
+  pathing-context, and pathing-child arrays
   structures; and
 - read the source-defined ItemContext auxiliary tables (formulas,
   composite-model records, storage state, and PvP metadata) through cached
@@ -129,8 +142,12 @@ The current implementation does not:
 - select a client by character, map, or memory signature; or
 - promise compatibility with every Reforged feature.
 
-Any expansion beyond the current read-only scanner must be documented and
-designed before implementation.
+Target-side writes, code, or patches are part of the selected architecture,
+not an open design choice. The first source-backed implementation target is
+the WorldMap callback capture described in
+[`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md). It remains
+unimplemented. “No DLL” describes the delivery approach; it does not mean the
+target is unmodified or that the payload is undetectable.
 
 ## Terminology
 

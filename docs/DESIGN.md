@@ -27,10 +27,15 @@ py4gw/
     win32.py
   memory/
     memory.py       Read-only process-memory transport
+    mailbox.py      Fixed-width mailbox record codec; no target writer yet
   scanner/
     scanner.py      Offline pattern matching
     remote.py       PE sections and remote scanning
     patterns.py     Offset definitions and resolver chains
+  ui/
+    frame.py         UI frame, callback, and message layouts; frame-array reader
+    frame_tree.py    Read-only frame relations and callback-based lookup
+    frame_context.py Frame-published context location and frame-id cross-check
   context/
     char_context.py Reforged CharContext layout, reader, and accessor
     game_context.py External GameContext layout, resolver, and reader
@@ -134,6 +139,20 @@ Guild Wars structure interpretation remains outside
 the current capability.
 A `Gw.exe` result is a candidate found by filename, and a scanner result is
 only an address selected by a pattern or resolver.
+
+The `MailboxRecord` type validates the proposed fixed-width record format for
+the future WorldMap callback pointer handoff. It only converts and validates
+local byte strings; it does not allocate memory in, write to, or execute code
+inside a process. The callback target has been resolved and read on one live
+client, but no callback hook or payload is implemented.
+
+`py4gw/ui/` is the separate package for user-interface engine primitives. It
+holds the `Frame` and callback layouts, the read-only frame-array reader, the
+frame relations, and the frame-id cross-check that accepts a context pointer
+only when the context agrees on its owning frame. `WorldMapContext` uses it to
+acquire its root address without a hook. The package reads target memory only;
+it creates, destroys, and dispatches nothing. Its evidence status and live test
+procedure are in [`UI_FRAME_TREE.md`](UI_FRAME_TREE.md).
 
 ## The `Win32` class
 
@@ -474,10 +493,20 @@ The current implementation is pure external and read-only. It can read
 validated target ranges but does not modify any process. A `Gw.exe` result or
 scanner address is not proof of a supported Guild Wars build.
 
-Future game-thread execution would require code inside the target process; it
-cannot be achieved through the current external reader alone. The intended
-direction is to avoid DLL loading and investigate a smaller payload/hook
-bridge, but its mechanism and safety boundary are not yet designed.
+Future game-thread execution requires code inside the target process; it
+cannot be achieved through the current external reader alone. The selected
+architecture for that work is a Stealth-owned payload/patch installed by the
+external host, without a conventional injected DLL. It is still injection, and
+no such payload or hook is implemented yet. “No DLL” describes the delivery
+approach; it does not mean the target is unmodified or that the payload is
+undetectable.
+
+The first pointer that appeared to require that payload, `WorldMapContext`, is
+now acquired read-only through the UI frame array instead. That route is
+implemented and offline-verified but not yet confirmed on a live client; see
+[`UI_FRAME_TREE.md`](UI_FRAME_TREE.md). The callback plan in
+[`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md) remains the
+fallback if the read-only route does not confirm.
 
 The user-provided live observation recorded in `RESEARCH.md` found PID `39212`
 at `F:\GW\GW1\Gw.exe` with the client open and no candidates after the client

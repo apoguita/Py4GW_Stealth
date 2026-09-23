@@ -2,7 +2,8 @@
   "include": [
     "main.py",
     "py4gw",
-    "tests"
+    "tests",
+    "examples"
   ],
   "exclude": [
     "external",

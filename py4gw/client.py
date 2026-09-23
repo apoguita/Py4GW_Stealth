@@ -13,6 +13,12 @@ from .context import (
     GameContextStruct,
     MapContext,
     MapContextStruct,
+    MissionMapContextStruct,
+    MissionMapContext,
+    SalvageSessionInfo,
+    SalvageSessionInfoStruct,
+    WorldMapContext,
+    WorldMapContextStruct,
     GameplayContext,
     GameplayContextStruct,
     PreGameContext,
@@ -66,6 +72,7 @@ from .context import (
 from .memory import ProcessMemoryReader
 from .performance import PerfCounter
 from .scanner import PatternCatalog, RemoteScanner
+from .ui import FrameArray, FrameTree
 from .win32 import Win32
 
 
@@ -175,6 +182,7 @@ class ConnectedClient:
                 self._scanner,
                 patterns,
                 self._acc_agent_context,
+                cache_context_validator=self._agent_array_cache_contexts_are_valid,
             )
             self._agent_array.initialize(perf_counter)
             self._context = CharContext(
@@ -184,6 +192,33 @@ class ConnectedClient:
                 game_context=self._game_context,
             )
             self._context.initialize()
+            # The frame array resolver is not yet verified on a live client, so
+            # it is built but not resolved here; a failure must not stop a
+            # connection that every other reader still supports.
+            self._frame_array = FrameArray(self._reader, self._scanner, patterns)
+            # Some frames register a short jmp thunk rather than the handler a
+            # signature resolves, so the walk needs the near-jump follower.
+            self._frame_tree = FrameTree(
+                self._frame_array, self._scanner.function_from_near_call
+            )
+            self._world_map_context = WorldMapContext(
+                self._reader,
+                self._scanner,
+                patterns,
+                self._frame_tree,
+            )
+            self._mission_map_context = MissionMapContext(
+                self._reader,
+                self._scanner,
+                patterns,
+                self._frame_tree,
+            )
+            self._salvage_session = SalvageSessionInfo(
+                self._reader,
+                self._scanner,
+                patterns,
+                self._frame_tree,
+            )
         except Exception:
             self._reader.close()
             raise
@@ -231,6 +266,66 @@ class ConnectedClient:
         """Read MapContext and bounded pathing-context roots."""
 
         return self._map_context.read(max_spawn_entries, max_pathing_maps)
+
+    def read_mission_map_context(
+        self, address: int | None = None, max_subcontexts: int = 100_000
+    ) -> MissionMapContextStruct | None:
+        """Read the mission-map context, acquiring its address when omitted.
+
+        When ``address`` is supplied the reader uses it directly.  When it is
+        omitted the address is acquired from the client's UI frame array;
+        ``None`` then means no frame currently publishes the context.
+        """
+
+        if address is not None:
+            return MissionMapContextStruct.read_at(
+                self._reader, address, max_subcontexts
+            )
+        return self._mission_map_context.read(max_subcontexts)
+
+    def read_salvage_session(self) -> SalvageSessionInfoStruct | None:
+        """Read the salvage session, or ``None`` when no popup is open."""
+
+        return self._salvage_session.read()
+
+    @property
+    def frame_tree(self) -> FrameTree:
+        """Return the read-only UI frame-tree reader for this client."""
+
+        return self._frame_tree
+
+    @property
+    def world_map_context(self) -> WorldMapContext:
+        """Return the frame-array-backed WorldMapContext reader."""
+
+        return self._world_map_context
+
+    @property
+    def mission_map_context(self) -> MissionMapContext:
+        """Return the frame-array-backed MissionMapContext reader."""
+
+        return self._mission_map_context
+
+    @property
+    def salvage_session(self) -> SalvageSessionInfo:
+        """Return the frame-array-backed salvage-session reader."""
+
+        return self._salvage_session
+
+    def read_world_map_context(
+        self, address: int | None = None
+    ) -> WorldMapContextStruct | None:
+        """Read the world-map context, acquiring its address when omitted.
+
+        When ``address`` is supplied the reader uses it directly, which is how
+        offline checks exercise the structure half.  When it is omitted the
+        address is acquired from the client's UI frame array; ``None`` then
+        means no frame currently publishes the context.
+        """
+
+        if address is not None:
+            return WorldMapContextStruct.read_at(self._reader, address)
+        return self._world_map_context.read()
 
     @property
     def gameplay_context(self) -> GameplayContext:
@@ -419,7 +514,7 @@ class ConnectedClient:
 
         items: list[ItemStruct] = []
         for bag in self.read_item_bags():
-            items.extend(bag.items(limit_per_bag))
+            items.extend(bag.read_items(limit_per_bag))
         return items
 
     def read_inventory(self) -> InventoryStruct | None:
@@ -492,6 +587,37 @@ class ConnectedClient:
         """Read the current bounded set of agent references."""
 
         return self._agent_array.read(perf_counter)
+
+    def _agent_array_cache_contexts_are_valid(self) -> bool:
+        """Apply Reforged's required-context gate to the external array cache."""
+
+        try:
+            map_context = self.read_map_context()
+            char_context = self.read_char_context()
+            instance_info = self.read_instance_info()
+            world_context = self.read_world_context()
+            agent_context = self.read_acc_agent_context()
+        except (OSError, RuntimeError):
+            return False
+
+        if any(
+            context is None
+            for context in (
+                map_context,
+                char_context,
+                instance_info,
+                world_context,
+                agent_context,
+            )
+        ):
+            return False
+
+        assert char_context is not None
+        assert instance_info is not None
+        return (
+            int(instance_info.instance_type) in (0, 1)
+            and char_context.player_number is not None
+        )
 
     def read_agent(
         self, reference: AgentReference, perf_counter: PerfCounter | None = None
@@ -570,6 +696,7 @@ class ConnectedClient:
     def close(self) -> None:
         """Close the read-only process handle owned by this connection."""
 
+        MapContext._clear_pathing_cache_for_pid(self._pid)
         self._reader.close()
 
     def __enter__(self) -> ConnectedClient:
