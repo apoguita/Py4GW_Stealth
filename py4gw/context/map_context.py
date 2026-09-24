@@ -8,7 +8,7 @@ and pathing caches while keeping each cache scoped to one connected process.
 
 from __future__ import annotations
 
-from ..target_struct import TargetStruct
+from ..helpers.target_struct import TargetStruct
 
 import ctypes
 import struct
@@ -1901,38 +1901,34 @@ class MapContext:
 
     @staticmethod
     def _pathing_cache_inputs() -> tuple[tuple[int, int], MapContextStruct] | None:
-        """Return the current map and key when source context gates pass."""
+        """Return the current map and key when the readiness gate passes.
+
+        The gate runs first because it is far cheaper than the pathing read it
+        guards, and the cache key carries the map id so a map change rebuilds the
+        snapshot.  The gate is re-evaluated rather than timed, so there is no
+        window in which a stale snapshot is served after a map change.
+        """
 
         from ..client import current_client
 
         client = current_client()
         if client is None:
             return None
+        from ..map import Map
+
+        if not Map.IsMapReady():
+            return None
+        char_context = client.read_char_context()
+        if char_context is None:
+            return None
+        current_map_id = int(char_context.current_map_id)
         try:
             map_context = client.read_map_context(max_pathing_maps=100_000)
-            char_context = client.read_char_context()
-            instance_info = client.read_instance_info()
-            world_context = client.read_world_context()
-            acc_agent_context = client.read_acc_agent_context()
         except (OSError, RuntimeError, ValueError):
             return None
-        if any(
-            value is None
-            for value in (
-                map_context,
-                char_context,
-                instance_info,
-                world_context,
-                acc_agent_context,
-            )
-        ):
+        if map_context is None:
             return None
-        assert map_context is not None
-        assert char_context is not None
-        assert instance_info is not None
-        if int(instance_info.instance_type) not in (0, 1):
-            return None
-        return (client.pid, int(char_context.current_map_id)), map_context
+        return (client.pid, current_map_id), map_context
 
     @staticmethod
     def GetPathingMaps() -> list[PathingMap]:

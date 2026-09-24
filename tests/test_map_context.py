@@ -146,7 +146,7 @@ class LiveMapContextTests(unittest.TestCase):
     def test_reads_pathing_context_roots_only(self) -> None:
         """Read live pathing context roots without graph materialization."""
 
-        snapshot = self.context.read(max_pathing_maps=64)
+        snapshot = self.context.read(max_pathing_maps=100_000)
         if snapshot is None or snapshot.path_address is None:
             self.skipTest("The client has no active pathing context.")
         path_context = snapshot.path_context
@@ -156,7 +156,9 @@ class LiveMapContextTests(unittest.TestCase):
         if static_data is None:
             self.skipTest("The client has no active map static-data root.")
         maps = static_data.pathing_maps
-        self.assertLessEqual(len(maps), 64)
+        # The bound matches the limit requested above; the previous 64 was too
+        # small for larger maps, which have been observed with 68 pathing maps.
+        self.assertLessEqual(len(maps), 100_000)
         blocking_props = static_data.blocking_props_list
         print(
             f"Live pathing roots: path=0x{path_context.address or 0:08X}, "
@@ -168,7 +170,7 @@ class LiveMapContextTests(unittest.TestCase):
     def test_reads_pathing_map_child_arrays(self) -> None:
         """Read the source-counted arrays for each live pathing map."""
 
-        snapshot = self.context.read(max_pathing_maps=64)
+        snapshot = self.context.read(max_pathing_maps=100_000)
         if snapshot is None or snapshot.path_context is None:
             self.skipTest("The client has no active pathing context.")
         static_data = snapshot.path_context.static_data
@@ -196,7 +198,7 @@ class LiveMapContextTests(unittest.TestCase):
     def test_reads_live_pathing_pointer_links(self) -> None:
         """Read live links and report the source/live SinkNode disagreement."""
 
-        snapshot = self.context.read(max_pathing_maps=64)
+        snapshot = self.context.read(max_pathing_maps=100_000)
         if snapshot is None or snapshot.path_context is None:
             self.skipTest("The client has no active pathing context.")
         static_data = snapshot.path_context.static_data
@@ -285,7 +287,7 @@ class LiveMapContextTests(unittest.TestCase):
     def test_reads_live_pathing_snapshots(self) -> None:
         """Materialize the Reforged source snapshot surface from live records."""
 
-        snapshot = self.context.read(max_pathing_maps=64)
+        snapshot = self.context.read(max_pathing_maps=100_000)
         if snapshot is None or snapshot.path_context is None:
             self.skipTest("The client has no active pathing context.")
         static_data = snapshot.path_context.static_data

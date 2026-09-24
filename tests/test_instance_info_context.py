@@ -62,13 +62,37 @@ class LiveInstanceInfoTests(unittest.TestCase):
         )
 
     def test_resolves_live_instance_info(self) -> None:
-        """Resolve and cache the JSON InstanceInfo address."""
+        """Keep the scanned slot stable while the dereference stays fresh."""
 
-        address = self.context.resolve_address()
-        cached_address = self.context.cached_context_address or 0
-        self.assertGreater(cached_address, 0)
-        self.assertEqual(address, cached_address)
-        print(f"Live InstanceInfo address: 0x{cached_address:08X}")
+        slot = self.context.resolve_address()
+        cached_slot = self.context.cached_context_address or 0
+
+        # The cached value is the address of the pointer, because only the slot
+        # address is stable across map loads.
+        self.assertGreater(cached_slot, 0)
+        self.assertEqual(self.context.slot_address, cached_slot)
+
+        # The structure address is dereferenced per read, so it may legitimately
+        # be absent while the client is between maps.
+        pointer = self.context.pointer()
+        if pointer == 0:
+            self.assertIsNone(slot)
+            print("Live InstanceInfo slot holds null: the client is between maps")
+            return
+        self.assertEqual(slot, pointer)
+        print(
+            f"Live InstanceInfo slot: 0x{cached_slot:08X} -> 0x{pointer:08X}"
+        )
+
+    def test_dereference_is_re_read_not_cached(self) -> None:
+        """Re-dereference the slot on every call instead of pinning a map."""
+
+        self.context.read()
+        first = self.context.pointer()
+        second = self.context.pointer()
+        self.assertEqual(first, second, "the slot changed between two immediate reads")
+        # Two reads must each consult the slot rather than return one cached value.
+        self.assertEqual(self.context.resolve_address(), second)
 
     def test_reads_live_instance_info_and_nested_map(self) -> None:
         """Read the root structure and its current area metadata."""

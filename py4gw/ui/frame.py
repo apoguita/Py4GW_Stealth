@@ -17,7 +17,7 @@ readers were the first consumers.  They are not context-specific.
 
 from __future__ import annotations
 
-from ..target_struct import TargetStruct
+from ..helpers.target_struct import TargetStruct
 
 import ctypes
 from ctypes import Structure, c_float, c_uint32

@@ -1150,12 +1150,16 @@ class MainWindow:
             connection = ConnectedClient(process, self._win32)
             try:
                 snapshot = self._read_context_timed(connection)
-                character = (
-                    snapshot.player_name_str.strip()
-                    if snapshot.player_name_str is not None
-                    else None
-                ) or None
-                is_connected = snapshot.is_logged_in
+                if snapshot is None:
+                    character = None
+                    is_connected = False
+                else:
+                    character = (
+                        snapshot.player_name_str.strip()
+                        if snapshot.player_name_str is not None
+                        else None
+                    ) or None
+                    is_connected = snapshot.is_logged_in
             finally:
                 connection.close()
         except (OSError, RuntimeError, ValueError):
@@ -1218,12 +1222,16 @@ class MainWindow:
             pre_game_snapshot = self._read_pre_game_context_timed(self._connection)
             game_snapshot = self._read_game_context_timed(self._connection)
             snapshot = self._read_context_timed(self._connection)
-            character = (
-                snapshot.player_name_str.strip()
-                if snapshot.player_name_str is not None
-                else None
-            ) or None
-            is_logged_in = snapshot.is_logged_in
+            if snapshot is None:
+                character = None
+                is_logged_in = False
+            else:
+                character = (
+                    snapshot.player_name_str.strip()
+                    if snapshot.player_name_str is not None
+                    else None
+                ) or None
+                is_logged_in = snapshot.is_logged_in
         except (OSError, RuntimeError, ValueError) as error:
             self._connection = None
             self._connected_label.set_text(f"Connection failed: {error}")
@@ -1725,15 +1733,33 @@ class MainWindow:
             return
         self._show_context(snapshot)
 
-    def _read_context_timed(self, connection: ConnectedClient) -> CharContextStruct:
-        """Read one CharContext snapshot and retain its elapsed time."""
+    def _recent_ms(self, metric_name: str) -> float | None:
+        """Return the newest stored sample for a metric, or ``None``.
+
+        The ported counter stores one averaged sample per six completed
+        measurements, so this is the most recent completed sample rather than
+        the last single read. The source's ``Profiler::End`` returns nothing,
+        and ``GetMetricHistory`` is the function that exposes stored samples.
+        """
+
+        history = self._perf.get_history(metric_name)
+        return history[-1] if history else None
+
+    def _read_context_timed(
+        self, connection: ConnectedClient
+    ) -> CharContextStruct | None:
+        """Read one CharContext snapshot and retain its elapsed time.
+
+        Returns ``None`` while the readiness gate is closed, which the caller
+        already treats as "no context to display".
+        """
 
         metric_name = "CharContext.read"
         self._perf.start(metric_name)
         try:
             return connection.read_char_context()
         finally:
-            self._last_context_read_ms = self._perf.end(metric_name)
+            self._last_context_read_ms = self._recent_ms(metric_name)
 
     def _read_game_context_timed(
         self, connection: ConnectedClient
@@ -1745,7 +1771,7 @@ class MainWindow:
         try:
             return connection.read_game_context()
         finally:
-            self._last_game_context_read_ms = self._perf.end(metric_name)
+            self._last_game_context_read_ms = self._recent_ms(metric_name)
 
     def _read_pre_game_context_timed(
         self, connection: ConnectedClient
@@ -1757,7 +1783,7 @@ class MainWindow:
         try:
             return connection.read_pre_game_context()
         finally:
-            self._last_pre_game_context_read_ms = self._perf.end(metric_name)
+            self._last_pre_game_context_read_ms = self._recent_ms(metric_name)
 
     def _read_cinematic_timed(
         self, connection: ConnectedClient
@@ -1769,7 +1795,7 @@ class MainWindow:
         try:
             return connection.read_cinematic_context()
         finally:
-            self._last_cinematic_read_ms = self._perf.end(metric_name)
+            self._last_cinematic_read_ms = self._recent_ms(metric_name)
 
     def _read_camera_timed(
         self, connection: ConnectedClient
@@ -1781,7 +1807,7 @@ class MainWindow:
         try:
             return connection.read_camera_context()
         finally:
-            self._last_camera_read_ms = self._perf.end(metric_name)
+            self._last_camera_read_ms = self._recent_ms(metric_name)
 
     def _read_friend_list_timed(
         self, connection: ConnectedClient
@@ -1793,7 +1819,7 @@ class MainWindow:
         try:
             return connection.read_friend_list()
         finally:
-            self._last_friend_list_read_ms = self._perf.end(metric_name)
+            self._last_friend_list_read_ms = self._recent_ms(metric_name)
 
     def _read_chat_buffer_timed(
         self, connection: ConnectedClient
@@ -1805,7 +1831,7 @@ class MainWindow:
         try:
             return connection.read_chat_buffer()
         finally:
-            self._last_chat_buffer_read_ms = self._perf.end(metric_name)
+            self._last_chat_buffer_read_ms = self._recent_ms(metric_name)
 
     def _read_world_context_timed(
         self, connection: ConnectedClient
@@ -1817,7 +1843,7 @@ class MainWindow:
         try:
             return connection.read_world_context()
         finally:
-            self._last_world_context_read_ms = self._perf.end(metric_name)
+            self._last_world_context_read_ms = self._recent_ms(metric_name)
 
     def _read_map_context_timed(
         self, connection: ConnectedClient
@@ -1829,7 +1855,7 @@ class MainWindow:
         try:
             return connection.read_map_context()
         finally:
-            self._last_map_context_read_ms = self._perf.end(metric_name)
+            self._last_map_context_read_ms = self._recent_ms(metric_name)
 
     def _read_trade_context_timed(
         self, connection: ConnectedClient
@@ -1841,7 +1867,7 @@ class MainWindow:
         try:
             return connection.read_trade_context()
         finally:
-            self._last_trade_context_read_ms = self._perf.end(metric_name)
+            self._last_trade_context_read_ms = self._recent_ms(metric_name)
 
     def _read_item_context_timed(
         self, connection: ConnectedClient
@@ -1853,7 +1879,7 @@ class MainWindow:
         try:
             return connection.read_item_context()
         finally:
-            self._last_item_context_read_ms = self._perf.end(metric_name)
+            self._last_item_context_read_ms = self._recent_ms(metric_name)
 
     def _read_account_context_timed(
         self, connection: ConnectedClient
@@ -1865,7 +1891,7 @@ class MainWindow:
         try:
             return connection.read_account_context()
         finally:
-            self._last_account_context_read_ms = self._perf.end(metric_name)
+            self._last_account_context_read_ms = self._recent_ms(metric_name)
 
     def _read_gadget_context_timed(
         self, connection: ConnectedClient
@@ -1877,7 +1903,7 @@ class MainWindow:
         try:
             return connection.read_gadget_context()
         finally:
-            self._last_gadget_context_read_ms = self._perf.end(metric_name)
+            self._last_gadget_context_read_ms = self._recent_ms(metric_name)
 
     def _read_gameplay_context_timed(
         self, connection: ConnectedClient
@@ -1889,7 +1915,7 @@ class MainWindow:
         try:
             return connection.read_gameplay_context()
         finally:
-            self._last_gameplay_context_read_ms = self._perf.end(metric_name)
+            self._last_gameplay_context_read_ms = self._recent_ms(metric_name)
 
     def _read_server_region_timed(
         self, connection: ConnectedClient
@@ -1901,7 +1927,7 @@ class MainWindow:
         try:
             return connection.read_server_region()
         finally:
-            self._last_server_region_read_ms = self._perf.end(metric_name)
+            self._last_server_region_read_ms = self._recent_ms(metric_name)
 
     def _read_instance_info_timed(
         self, connection: ConnectedClient
@@ -1913,7 +1939,7 @@ class MainWindow:
         try:
             return connection.read_instance_info()
         finally:
-            self._last_instance_info_read_ms = self._perf.end(metric_name)
+            self._last_instance_info_read_ms = self._recent_ms(metric_name)
 
     def _read_text_parser_timed(
         self, connection: ConnectedClient
@@ -1925,7 +1951,7 @@ class MainWindow:
         try:
             return connection.read_text_parser()
         finally:
-            self._last_text_parser_read_ms = self._perf.end(metric_name)
+            self._last_text_parser_read_ms = self._recent_ms(metric_name)
 
     def _read_available_characters_timed(
         self, connection: ConnectedClient
@@ -1937,7 +1963,7 @@ class MainWindow:
         try:
             return connection.read_available_characters()
         finally:
-            self._last_available_characters_read_ms = self._perf.end(metric_name)
+            self._last_available_characters_read_ms = self._recent_ms(metric_name)
 
     def _read_party_context_timed(
         self, connection: ConnectedClient
@@ -1949,7 +1975,7 @@ class MainWindow:
         try:
             return connection.read_party_context()
         finally:
-            self._last_party_context_read_ms = self._perf.end(metric_name)
+            self._last_party_context_read_ms = self._recent_ms(metric_name)
 
     def _read_guild_context_timed(
         self, connection: ConnectedClient
@@ -1961,7 +1987,7 @@ class MainWindow:
         try:
             return connection.read_guild_context()
         finally:
-            self._last_guild_context_read_ms = self._perf.end(metric_name)
+            self._last_guild_context_read_ms = self._recent_ms(metric_name)
 
     def _read_acc_agent_context_timed(
         self, connection: ConnectedClient
@@ -1973,7 +1999,7 @@ class MainWindow:
         try:
             return connection.read_acc_agent_context()
         finally:
-            self._last_acc_agent_context_read_ms = self._perf.end(metric_name)
+            self._last_acc_agent_context_read_ms = self._recent_ms(metric_name)
 
     def _show_cinematic(self, snapshot: CinematicStruct | None) -> None:
         """Display the maintained Cinematic fields when the context is active."""
@@ -3516,8 +3542,21 @@ class MainWindow:
         self._context_table.filter = str(value or "")
         self._context_table.update()
 
-    def _show_context(self, snapshot: CharContextStruct) -> None:
-        """Display every maintained CharContext field in the table."""
+    def _show_context(self, snapshot: CharContextStruct | None) -> None:
+        """Display every maintained CharContext field in the table.
+
+        ``None`` means the readiness gate is closed. The character context is
+        map-scoped, so it is not readable until a map is ready; the table says so
+        rather than continuing to show the previous map's rows.
+        """
+
+        if snapshot is None:
+            self._context_table.rows = []
+            self._context_table.update()
+            self._context_status.set_text(
+                "CharContext is not available: no ready map"
+            )
+            return
 
         property_values = {
             "is_logged_in": snapshot.is_logged_in,

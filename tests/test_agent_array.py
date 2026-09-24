@@ -5,12 +5,13 @@ from __future__ import annotations
 import unittest
 import time
 
+import py4gw
+
 from py4gw import (
     AgentAllegiance,
     AgentGadgetStruct,
     AgentItemStruct,
     AgentLivingStruct,
-    ConnectedClient,
     PerfCounter,
     Win32,
 )
@@ -21,23 +22,28 @@ class LiveAgentArrayTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Connect to the first discovered client with read-only access."""
+        """Connect to the first discovered client with read-only access.
+
+        ``py4gw.connect`` is used rather than constructing ``ConnectedClient``
+        directly, because the accessor classes (``Map``, ``Party``, ``Player``)
+        are namespace members that resolve the current client, exactly as
+        Reforged's are namespace members over its process-global contexts. An
+        unregistered client leaves ``Map.IsMapReady()`` with nothing to answer
+        for, and the agent-array cache validator asks it on every rebuild.
+        """
 
         win32 = Win32()
         clients = win32.find_guild_wars()
         if not clients:
             raise unittest.SkipTest("Start Guild Wars before running this test.")
         cls.connection_perf = PerfCounter()
-        cls.client = ConnectedClient(
-            clients[0], win32=win32, perf_counter=cls.connection_perf
-        )
+        cls.client = py4gw.connect(clients[0])
 
     @classmethod
     def tearDownClass(cls) -> None:
-        """Close the selected process handle after the live checks."""
+        """Release the connection opened for the live checks."""
 
-        if hasattr(cls, "client"):
-            cls.client.close()
+        py4gw.disconnect()
 
     def test_resolves_live_agent_array(self) -> None:
         """Resolve the native agent-array address from the JSON resolver."""
@@ -48,7 +54,7 @@ class LiveAgentArrayTests(unittest.TestCase):
         print(f"Live AgentArray: 0x{address or 0:08X}")
         print(
             "  agent_array.resolver: "
-            f"{self.connection_perf.report('agent_array.resolver').average_ms:.3f} ms"
+            f"{self.connection_perf.calculate_report('agent_array.resolver').avg:.3f} ms"
         )
 
     def test_reads_bounded_live_references(self) -> None:
@@ -105,7 +111,7 @@ class LiveAgentArrayTests(unittest.TestCase):
             f"dead_allies={len(snapshot.dead_allies)}, "
             f"dead_enemies={len(snapshot.dead_enemies)}, "
             f"owned_items={len(snapshot.owned_items)}, "
-            f"elapsed={perf.report('agent_array.read').average_ms:.3f} ms"
+            f"elapsed={perf.calculate_report('agent_array.read').avg:.3f} ms"
         )
         for metric_name in (
             "agent_array.context_read",
@@ -113,8 +119,8 @@ class LiveAgentArrayTests(unittest.TestCase):
             "agent_array.movement_table",
             "agent_array.classification",
         ):
-            report = perf.report(metric_name)
-            print(f"  {metric_name}: {report.average_ms:.3f} ms")
+            report = perf.calculate_report(metric_name)
+            print(f"  {metric_name}: {report.avg:.3f} ms")
 
     def test_exposes_source_category_methods_and_struct_view(self) -> None:
         """Expose the source AgentArray category names over one snapshot."""
@@ -164,6 +170,8 @@ class LiveAgentArrayTests(unittest.TestCase):
         reference = snapshot.references[0]
         perf = PerfCounter()
         record = self.client.read_agent(reference, perf)
+        if record is None:
+            self.skipTest("The agent read is gated: the map is not ready.")
 
         self.assertEqual(int(record.agent_id), reference.agent_id)
         self.assertEqual(record.remote_address, reference.address)
@@ -178,8 +186,8 @@ class LiveAgentArrayTests(unittest.TestCase):
             "Live Agent detail: "
             f"id={int(record.agent_id)}, kind={reference.kind.value}, "
             f"type=0x{int(record.type):X}, position={record.position}, "
-            f"validation={perf.report('agent_array.reference_validation').average_ms:.3f} ms, "
-            f"record={perf.report('agent_array.agent_record').average_ms:.3f} ms"
+            f"validation={perf.calculate_report('agent_array.reference_validation').avg:.3f} ms, "
+            f"record={perf.calculate_report('agent_array.agent_record').avg:.3f} ms"
         )
 
     def test_refreshes_complete_living_snapshot(self) -> None:
@@ -200,7 +208,7 @@ class LiveAgentArrayTests(unittest.TestCase):
             f"generation={snapshot.generation}, records={snapshot.count}, "
             f"stale={snapshot.stale_count}, unreadable={snapshot.unreadable_count}, "
             f"effects_first=0x{int(first.effects):08X}, "
-            f"refresh={perf.report('agent_array.living_refresh').average_ms:.3f} ms, "
+            f"refresh={perf.calculate_report('agent_array.living_refresh').avg:.3f} ms, "
             f"age={snapshot.age_ms:.3f} ms"
         )
 

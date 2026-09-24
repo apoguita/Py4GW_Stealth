@@ -69,23 +69,26 @@ def measure_stage(
     byte_counts: list[int] = []
     for _ in range(samples):
         mark = reader.mark()
-        with counter.measure(name):
+        counter.start(name)
+        try:
             operation()
+        finally:
+            counter.end(name)
         read_count, byte_count = reader.since(mark)
         reads.append(read_count)
         byte_counts.append(byte_count)
 
-    report = counter.report(name)
+    report = counter.calculate_report(name)
     average_reads = sum(reads) / len(reads)
     average_bytes = sum(byte_counts) / len(byte_counts)
     print(
         f"{name:<30} "
-        f"min={report.minimum_ms:8.3f} ms  "
-        f"avg={report.average_ms:8.3f} ms  "
-        f"p50={report.p50_ms:8.3f} ms  "
-        f"p95={report.p95_ms:8.3f} ms  "
-        f"p99={report.p99_ms:8.3f} ms  "
-        f"max={report.maximum_ms:8.3f} ms  "
+        f"min={report.min:8.3f} ms  "
+        f"avg={report.avg:8.3f} ms  "
+        f"p50={report.p50:8.3f} ms  "
+        f"p95={report.p95:8.3f} ms  "
+        f"p99={report.p99:8.3f} ms  "
+        f"max={report.max:8.3f} ms  "
         f"reads={average_reads:6.1f}  bytes={average_bytes:10.1f}"
     )
 
@@ -136,7 +139,7 @@ def main() -> int:
     print(f"Samples per repeated stage: {arguments.samples}")
     print()
 
-    counter = PerfCounter(history_size=max(arguments.samples, 32))
+    counter = PerfCounter()
     with ProcessMemoryReader(win32, pid) as process_reader:
         reader = CountingReader(process_reader)
         scanner = RemoteScanner(

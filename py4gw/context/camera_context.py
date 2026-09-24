@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..target_struct import TargetStruct
+from ..helpers.target_struct import TargetStruct
 
 import ctypes
 import math

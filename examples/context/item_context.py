@@ -30,9 +30,14 @@ print()
 
 # named values, read directly
 print("inventory ptr:", context.inventory_ptr)
-print("bags:", len(client.read_item_bags()))
-print("item records:", len(client.read_item_records()))
-print("first item id:", client.read_item_records()[0].item_id)
+
+# These readers are map-scoped, so they answer None while the readiness gate is
+# closed rather than returning the previous map's items.
+bags = client.read_item_bags() or []
+records = client.read_item_records() or []
+print("bags:", len(bags))
+print("item records:", len(records))
+print("first item id:", records[0].item_id if records else "none")
 
 # every field as plain data, decoded, for use in code
 print("as dict:", context.to_dict())

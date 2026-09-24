@@ -81,7 +81,7 @@ Nested records read through the attribute, for example
 
 ## When a script prints `None`
 
-Four of these legitimately return `None`, and it is not an error:
+Five of these legitimately return `None`, and it is not an error:
 
 | Script | Prints `None` when |
 | --- | --- |
@@ -89,16 +89,24 @@ Four of these legitimately return `None`, and it is not an error:
 | `world_map_context.py` | the world map is not open |
 | `salvage_context.py` | no salvage window is open |
 | `pre_game_context.py` | a character is logged in |
+| `instance_info_context.py` | a map is loading, so the instance pointer is null |
 
 The three map/salvage contexts are published only through the UI frame that
 owns them, so they do not exist while their surface is closed.  This is the
 intended behaviour, not a failure to resolve a pointer.  See
 [`../../docs/UI_FRAME_TREE.md`](../../docs/UI_FRAME_TREE.md).
 
-Those four scripts wrap their field reads in `if context is not None:` because
-there is nothing to read while the surface is closed.
+The instance info is different: it is published through a module-global pointer
+that the client nulls while a map loads, and the reader deliberately
+re-dereferences that pointer on every read instead of caching it, so `None`
+means "the map is not ready yet".  That is the same signal the native runtime
+reports as `InstanceType.Loading`.  Call `py4gw.Map.IsMapReady()` before
+reading, and see [`../../docs/READINESS_GATE.md`](../../docs/READINESS_GATE.md).
 
-The other twenty-one check first and stop with a clear message:
+Those five scripts wrap their field reads in `if context is not None:` because
+there is nothing to read while the surface is closed or the map is loading.
+
+The other twenty check first and stop with a clear message:
 
 ```python
 if context is None:
@@ -111,9 +119,9 @@ explicit check is used rather than `assert` because `assert` is removed under
 `python -O`, which would turn a clear message into a late `AttributeError`.
 
 The two patterns mean different things and are not interchangeable: for the map,
-salvage, and pre-game contexts, `None` is a **normal state** meaning the surface
-is closed; for the other twenty-one it means **nothing is connected**, which is
-a usage error worth stopping on.
+salvage, pre-game, and instance-info contexts, `None` is a **normal state**
+meaning the surface is closed or the map is loading; for the other twenty it
+means **nothing is connected**, which is a usage error worth stopping on.
 
 Printing is handled by the library, not by these scripts. Game text can hold
 characters a Windows console cannot encode, so the printed form escapes only

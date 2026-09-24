@@ -7,7 +7,7 @@ frame that registered the mission-map callback; see ``py4gw.ui.frame_context``.
 
 from __future__ import annotations
 
-from ..target_struct import TargetStruct
+from ..helpers.target_struct import TargetStruct
 
 import ctypes
 from ctypes import Structure, c_float, c_uint32

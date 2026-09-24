@@ -8,7 +8,7 @@ array concepts while making that boundary explicit.
 
 from __future__ import annotations
 
-from ..target_struct import TargetStruct
+from ..helpers.target_struct import TargetStruct
 
 import ctypes
 from ctypes import Structure, c_uint32

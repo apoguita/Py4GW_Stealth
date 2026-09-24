@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..target_struct import TargetStruct
+from ..helpers.target_struct import TargetStruct
 
 import ctypes
 from ctypes import Structure, c_uint8, c_uint16, c_uint32

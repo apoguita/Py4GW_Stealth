@@ -57,7 +57,6 @@ class MissionMapContextOfflineTests(unittest.TestCase):
         address = 0x150000
         client = object.__new__(ConnectedClient)
         setattr(client, "_reader", _MemoryReader({address: bytes(source)}))
-
         context = client.read_mission_map_context(address)
 
         self.assertIsNotNone(context)

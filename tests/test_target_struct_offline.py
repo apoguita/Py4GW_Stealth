@@ -11,7 +11,7 @@ import unittest
 from ctypes import c_char, c_float, c_uint8, c_uint16, c_uint32
 from typing import Any, cast
 
-from py4gw.target_struct import Describable, TargetStruct, describe_value, format_value
+from py4gw.helpers.target_struct import Describable, TargetStruct, describe_value, format_value
 
 
 class _Inner(TargetStruct):

@@ -8,7 +8,7 @@ the layout can be decoded from bytes read from another process.
 
 from __future__ import annotations
 
-from ..target_struct import TargetStruct
+from ..helpers.target_struct import TargetStruct
 
 import ctypes
 from ctypes import Structure, c_float, c_int32, c_uint8, c_uint16, c_uint32

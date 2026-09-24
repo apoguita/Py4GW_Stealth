@@ -8,7 +8,7 @@ Usage:
 import sys
 
 import py4gw
-from py4gw.target_struct import format_value
+from py4gw.helpers.target_struct import format_value
 
 FULL = "--full" in sys.argv
 

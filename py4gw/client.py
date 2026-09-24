@@ -25,6 +25,8 @@ from .context import (
     PreGameContextStruct,
     ServerRegion,
     ServerRegionStruct,
+    PlayerAgentId,
+    PlayerAgentIdStruct,
     InstanceInfo,
     InstanceInfoStruct,
     TextParser,
@@ -70,14 +72,17 @@ from .context import (
     LivingAgentSnapshot,
 )
 from .memory import ProcessMemoryReader
-from .performance import PerfCounter
+from .perf_counter import PerfCounter
 from .scanner import PatternCatalog, RemoteScanner
 from .ui import FrameArray, FrameTree
 from .win32 import Win32
 
 
+
 class ConnectedClient:
     """Own the read-only resources for one selected ``Gw.exe`` process."""
+
+
 
     def __init__(
         self,
@@ -130,6 +135,12 @@ class ConnectedClient:
                 patterns,
             )
             self._server_region.initialize()
+            self._player_agent_id = PlayerAgentId(
+                self._reader,
+                self._scanner,
+                patterns,
+            )
+            self._player_agent_id.initialize()
             self._instance_info = InstanceInfo(
                 self._reader,
                 self._scanner,
@@ -359,6 +370,21 @@ class ConnectedClient:
         """Read and return the current server-region value, if available."""
 
         return self._server_region.read()
+
+    @property
+    def player_agent_id(self) -> PlayerAgentId:
+        """Return the external player-agent-id reader for this client."""
+
+        return self._player_agent_id
+
+    def read_player_agent_id(self) -> PlayerAgentIdStruct | None:
+        """Read the game global holding the player's current agent id.
+
+        The value covers both ordinary play and spectating, matching native
+        ``Context::GetObservingId()``.
+        """
+
+        return self._player_agent_id.read()
 
     @property
     def instance_info(self) -> InstanceInfo:
@@ -591,37 +617,15 @@ class ConnectedClient:
     def _agent_array_cache_contexts_are_valid(self) -> bool:
         """Apply Reforged's required-context gate to the external array cache."""
 
-        try:
-            map_context = self.read_map_context()
-            char_context = self.read_char_context()
-            instance_info = self.read_instance_info()
-            world_context = self.read_world_context()
-            agent_context = self.read_acc_agent_context()
-        except (OSError, RuntimeError):
-            return False
+        from .map import Map
 
-        if any(
-            context is None
-            for context in (
-                map_context,
-                char_context,
-                instance_info,
-                world_context,
-                agent_context,
-            )
-        ):
-            return False
+        return Map.IsMapReady()
 
-        assert char_context is not None
-        assert instance_info is not None
-        return (
-            int(instance_info.instance_type) in (0, 1)
-            and char_context.player_number is not None
-        )
+
 
     def read_agent(
         self, reference: AgentReference, perf_counter: PerfCounter | None = None
-    ) -> AgentStruct | AgentLivingStruct | AgentItemStruct | AgentGadgetStruct:
+    ) -> AgentStruct | AgentLivingStruct | AgentItemStruct | AgentGadgetStruct | None:
         """Read one complete typed record for an AgentArray reference."""
 
         return self._agent_array.read_agent(reference, perf_counter)
@@ -668,7 +672,9 @@ class ConnectedClient:
         return self._cinematic.read()
 
     def read_char_context(self) -> CharContextStruct:
-        """Read and return the current complete CharContext snapshot."""
+        """Read and return the current complete CharContext snapshot.
+
+        """
 
         return self._context.read()
 
@@ -743,3 +749,19 @@ def current_client() -> ConnectedClient | None:
     """Return the current selected client, if one has been connected."""
 
     return _current_client
+
+
+def require_client() -> ConnectedClient:
+    """Return the current selected client, or fail because none is connected.
+
+    The accessor every accessor class uses. Each wrapper previously carried its
+    own private copy of this check, which is the same three lines restated four
+    times; a missing connection is a usage error, not a per-class concern.
+    """
+
+    client = _current_client
+    if client is None:
+        raise RuntimeError(
+            "No Guild Wars client is connected. Call py4gw.connect() first."
+        )
+    return client

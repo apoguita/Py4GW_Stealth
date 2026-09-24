@@ -21,6 +21,23 @@ does not require the final project to remain pure external.
 `External host` does not mean `non-injected` by itself. A payload that is
 written into the process is still injection even when Python remains outside.
 
+**Live status (2026-09-23).** The game-thread bridge has now been verified
+against the live client, and the mechanisms below are no longer speculative:
+an entry hook on `leave_game_thread_func` was installed, fired, and restored,
+the queue was serviced on the game thread, and `agent.move_to_func` was called
+with the source-backed argument layout, moving the character exactly 10 units.
+A one-right-at-a-time `OpenProcess` probe showed the decisive constraint:
+`PROCESS_VM_WRITE`, `PROCESS_VM_OPERATION`, `PROCESS_CREATE_THREAD`, and
+`PROCESS_SUSPEND_RESUME` are denied to an **unelevated** controller
+(Windows error 5) and granted to an **elevated** one. This is ordinary UAC
+token splitting, not a client protection filter — an earlier note here said
+otherwise and was wrong. All target-side work on this client therefore requires
+an elevated controller, which is a real change in the trust boundary: the
+controller holds administrator rights over the machine. Full evidence and the
+live run output are in [`RESEARCH.md`](RESEARCH.md). Callbacks remain
+unimplemented: there is no registration or event surface, only one queue
+serviced at a single hook point.
+
 ## Not implemented yet
 
 | Surface | Source behavior | Current status | Next source-backed step |

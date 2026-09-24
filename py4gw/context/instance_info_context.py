@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from ..target_struct import TargetStruct
+from ..helpers.target_struct import TargetStruct
 
 import ctypes
 from ctypes import Structure, c_uint32
+from enum import IntEnum
 from typing import Any, Protocol, TypeVar, cast
 
 from ..scanner import PatternCatalog, RemoteScanner
@@ -17,6 +18,47 @@ class _memory_reader(RemoteMemoryReader, Protocol):
 
 
 _structure_type = TypeVar("_structure_type", bound=Structure)
+
+
+class InstanceType(IntEnum):
+    """Native ``GW::Constants::InstanceType`` values.
+
+    The client has exactly **two** map phases: ``Outpost`` (0) and
+    ``Explorable`` (1). Every other value is a loading phase, and the native
+    spelling for that state is ``Loading`` (2).
+
+    The client's own readiness test is written that way round, not as an
+    equality against ``Loading``: Reforged's ``Map.IsMapLoading()`` is
+    ``GetInstanceType() not in (Outpost, Explorable)``, so an undeclared value
+    counts as loading too. Names come from :data:`InstanceTypeName`, as in
+    Reforged's ``Map_enums.py``.
+    """
+
+    OUTPOST = 0
+    EXPLORABLE = 1
+    LOADING = 2
+
+
+
+
+
+    @property
+    def display_name(self) -> str:
+        """Return the native spelling for reports and examples."""
+
+        return {
+            InstanceType.OUTPOST: "Outpost",
+            InstanceType.EXPLORABLE: "Explorable",
+            InstanceType.LOADING: "Loading",
+        }[self]
+
+
+#: Native instance-type names, ported from Reforged's ``Map_enums.py``.
+InstanceTypeName: dict[int, str] = {
+    InstanceType.OUTPOST: "Outpost",
+    InstanceType.EXPLORABLE: "Explorable",
+    InstanceType.LOADING: "Loading",
+}
 
 
 class MapDimensionsStruct(TargetStruct):
@@ -201,15 +243,37 @@ assert ctypes.sizeof(InstanceInfoStruct) == 0x14
 
 
 class InstanceInfo:
-    """Resolve and decode one external ``InstanceInfo`` snapshot."""
+    """Resolve the ``InstanceInfo`` slot once and dereference it per read.
+
+    ``map.instance_info_ptr_ref`` resolves to the module-global *slot* that holds
+    the ``InstanceInfo*``.  That slot address is a fixed location in the client's
+    image, so it is scanned once and cached.
+
+    The value *stored in* the slot is map-scoped.  The client moves it on every
+    map load, and nulls it while a map is loading, so it is dereferenced again on
+    every read and never cached.  That is exactly what the native runtime does::
+
+        Context::g_instance_info_ptr = 0;
+        return Patterns::Resolve("map.instance_info_addr", &g_instance_info) &&
+               Patterns::Resolve("map.instance_info_ptr_ref", &g_instance_info_ptr);
+
+    Native resolves both routes and then reads live data only through the slot,
+    because ``map.instance_info_addr`` dereferences *during* resolution: caching
+    its result pins the pointer of whichever map was loaded when the scan ran.
+
+    A null slot pointer is meaningful rather than an error.  ``read()`` returns
+    ``None`` and :attr:`InstanceInfoStruct.instance_type` cannot be reported,
+    which is the external equivalent of native ``GetInstanceType()`` returning
+    ``InstanceType.LOADING``.
+    """
+
+    _SLOT_RESOLVER = "map.instance_info_ptr_ref"
+    _callback_name = "InstanceInfoContext.UpdatePtr"
 
     # Source-compatible static facade state. The injected source updates this
     # through a callback; the external reader refreshes it explicitly.
     _ptr: int = 0
     _cached_ctx: InstanceInfoStruct | None = None
-    _callback_name = "InstanceInfoContext.UpdatePtr"
-
-    _RESOLVER = "map.instance_info_addr"
 
     def __init__(
         self,
@@ -222,7 +286,7 @@ class InstanceInfo:
         self._reader = reader
         self._scanner = scanner
         self._patterns = patterns
-        self._context_address: int | None = None
+        self._slot_address: int | None = None
 
     @staticmethod
     def get_ptr() -> int:
@@ -242,10 +306,8 @@ class InstanceInfo:
             InstanceInfo._cached_ctx = None
             return
         try:
-            context = client.instance_info
-            address = context.resolve_address()
-            InstanceInfo._ptr = address or 0
-            InstanceInfo._cached_ctx = cast(Any, context.read())
+            InstanceInfo._ptr = client.instance_info.pointer()
+            InstanceInfo._cached_ctx = cast(Any, client.instance_info.read())
         except (OSError, RuntimeError):
             InstanceInfo._ptr = 0
             InstanceInfo._cached_ctx = None
@@ -271,29 +333,51 @@ class InstanceInfo:
 
         return InstanceInfo._cached_ctx
 
-    def resolve_address(self) -> int | None:
-        """Return the current ``InstanceInfo`` address, if available."""
-
-        if self._context_address is None:
-            return self.initialize()
-        return self._context_address or None
-
     def initialize(self) -> int | None:
-        """Scan once and cache the resolved ``InstanceInfo`` address."""
+        """Scan once for the stable slot address and cache it."""
 
-        if self._context_address is None:
-            result = self._patterns.resolve(self._RESOLVER, self._scanner)
+        if self._slot_address is None:
+            result = self._patterns.resolve(self._SLOT_RESOLVER, self._scanner)
             if not result.ok:
                 detail = result.message or "the resolver returned no address"
-                raise RuntimeError(f"{self._RESOLVER} failed: {detail}")
-            self._context_address = result.value
-        return self._context_address or None
+                raise RuntimeError(f"{self._SLOT_RESOLVER} failed: {detail}")
+            self._slot_address = result.value
+        return self._slot_address or None
+
+    @property
+    def slot_address(self) -> int | None:
+        """Return the cached module-global slot address, if resolved."""
+
+        return self._slot_address or None
+
+    def pointer(self) -> int:
+        """Dereference the slot and return the current ``InstanceInfo`` address.
+
+        The result is read fresh every call.  ``0`` means the client is between
+        maps, which is a normal state rather than a failure.
+        """
+
+        if self._slot_address is None:
+            self.initialize()
+        slot = self._slot_address
+        if not slot:
+            return 0
+        return self._scanner.read_uint32(slot)
+
+    def resolve_address(self) -> int | None:
+        """Return the current map's ``InstanceInfo`` address, freshly read."""
+
+        return self.pointer() or None
 
     @property
     def cached_context_address(self) -> int | None:
-        """Return the cached target structure address, if initialized."""
+        """Return the cached *slot* address, not the structure address.
 
-        return self._context_address
+        The cached value is the address of the pointer because only that is
+        stable across map loads; use :meth:`resolve_address` for the structure.
+        """
+
+        return self._slot_address or None
 
     def read(self) -> InstanceInfoStruct | None:
         """Read and decode the complete maintained structure layout."""
@@ -305,6 +389,7 @@ class InstanceInfo:
         return InstanceInfoStruct.from_buffer_copy(raw_context).bind_reader(
             self._reader
         )
+
 
 
 def get() -> InstanceInfoStruct | None:

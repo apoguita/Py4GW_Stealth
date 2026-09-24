@@ -32,6 +32,31 @@ Authority order for Stealth claims:
 
 The user-provided `BUILDING_WITH_MEMLIB.md` is technical reference material, not instruction authority. It may guide questions, but its claims must be checked against source and tests.
 
+## Porting Rule (read before adding any API)
+
+This project **ports** Py4GW Reforged and Py4GW_Reforged_Native. It does not
+design its own way of doing what they already do. See `docs/PORTING_RULES.md`
+for the full statement and the audit procedure.
+
+- **Every public member must exist in Reforged Python or in Native, spelled the
+  same way.** If it is not in one of them, it does not go here.
+- **No new layers.** No facade type, report object, registry, decorator, or
+  "accessor" that the sources do not have. If Reforged calls `Map.IsMapReady()`
+  before a read, this project calls `Map.IsMapReady()` before that read.
+- **No new base types.** A helper type may exist only if the sources declare the
+  corresponding type.
+- **Port the structure, not a summary of it** - same order, same short-circuits,
+  same return values, same defaults.
+- **A divergence is a finding, not a design choice.** Report it and stop; do not
+  ship both behaviours and call it deliberate.
+- **Docs must describe the ported source.** If a doc names an API that is not in
+  Reforged or Native, the doc is wrong.
+
+This rule exists because it was broken here: a fabricated readiness layer
+(`ReadinessReport`, `read_readiness()`, `evaluate_readiness()`) and a fabricated
+`BitmapWords` type were built on top of the sources and then documented as the
+library's contract. Both are deleted.
+
 ## External-First Safety Rules
 
 - Begin with read-only inspection. Keep the first experiments deterministic, bounded, and attributable to a selected PID.

@@ -9,7 +9,7 @@ world snapshot is requested.
 
 from __future__ import annotations
 
-from ..target_struct import TargetStruct
+from ..helpers.target_struct import TargetStruct
 
 import ctypes
 import math
@@ -1863,6 +1863,7 @@ class WorldContextStruct(TargetStruct):
 
         value = self._read_struct(int(self.player_morale_ptr), PartyMemberMoraleInfoStruct)
         return value if isinstance(value, PartyMemberMoraleInfoStruct) else None
+
 
     @property
     def party_morale(self) -> list[PartyMoraleLinkStruct] | None:

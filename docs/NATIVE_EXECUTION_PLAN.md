@@ -175,6 +175,67 @@ unfinished checkbox is the resume point.
 - [ ] Add a new parameter form or mechanism only when a concrete Native
   operation requires it; add tests for old and new descriptor versions.
 
+**Status 2026-09-23 — mechanism built and verified live.** A candidate
+bridge was delivered (external controller + 9-byte entry hook on
+`leave_game_thread_func` + queue-serviced dispatcher payload) and hardened
+against this plan's extensibility rule 5. The version-1 payload accepted the
+call target as a raw `arg3` field, which is exactly the "calling an arbitrary
+address with an untyped argument blob" this contract forbids. Version 2 adds
+`module_base`/`module_size` to the bridge header, publishes them at install,
+and makes the dispatcher reject any call target outside the client module with
+`CMD_ERROR` / `-102` before it is ever called.
+
+Verified live against `Gw.exe` PID 29520 (elevated controller): hook installed
+and fired, queue served on the game thread, `PING` returned `0xC0DEC0DE`, and
+`agent.move_to_func` moved the character exactly 10 units. Original bytes
+restored and the client left healthy on the same PID.
+
+Verified offline (no client contacted):
+
+- the guard is proven **by execution**, not inspection: a 32-bit harness links
+  the real `dispatcher.obj` and shows an out-of-module target is refused with
+  `-102` and is never entered, while an in-module target is called with the
+  documented `float[4]` layout;
+- the payload rebuilds from `native/dispatcher.c` via
+  `native/build_payload.ps1`, which refuses to emit a payload that carries
+  external relocations (position independence is a build-time gate);
+- 16 offline tests pass, including guard, ABI, and hook-byte-builder checks.
+
+The plan's rule 5 is now enforced in three places: the protocol rejects an
+unusable module range, the controller refuses to publish an unvouched resolved
+target, and the payload refuses to call one.
+
+Two deliberate follow-ups, not yet done:
+
+1. **Descriptor registry.** `arg3` still carries an address, now bounded. The
+   fully contract-shaped design is a controller-populated descriptor table in
+   the bridge and a `OP_CALL_DESC <index>` opcode, so no address crosses the
+   wire at all. That was scoped out of the hardening pass and is the next
+   architectural step for extensibility rule 4 (explicit typed parameter
+   forms).
+2. **Live validation — DONE (elevated).** The hook, the queue round trip, and a
+   call into a real Guild Wars function are now verified live. `move_to_func`
+   was called on the game thread with `arg = {x, y, (float)zplane, 0}` and the
+   character moved exactly 10 units, with the original bytes restored afterwards
+   and the client left responsive on the same PID. The ABI was cross-checked
+   against `Py4GW_Reforged_Native/src/GW/agent/agent_methods.cpp:145-155` and
+   against the real callee at static VA `0x00536E80`.
+
+   The one operational constraint: the controller must run **elevated**. An
+   unelevated controller is denied `PROCESS_VM_WRITE`,
+   `PROCESS_VM_OPERATION`, `PROCESS_CREATE_THREAD`, and
+   `PROCESS_SUSPEND_RESUME` by ordinary UAC token splitting — not by any client
+   protection. An earlier note in this plan called it a client blocker; that was
+   wrong. See [`RESEARCH.md`](RESEARCH.md).
+
+   Still open from the questions above: whether the mover needs additional
+   client state (loading screen, character select, dead/knocked-down), the
+   semantic meaning of `zplane`, and whether calling at the hook entry is
+   equivalent to Reforged Native's position after its queued callbacks — the
+   ordering matches by inspection, but that has not been probed with a
+   state-dependent operation.
+
+
 ### Phase 6 — Remaining hook and callback families (not started)
 
 - [ ] Work module by module from the inventory above: UI, events, packet,
@@ -205,6 +266,14 @@ in-game context scope.
 
 What remains for target-side code is execution, not acquisition: the
 game-thread bridge, decoded `ChatBuffer` history, and concrete Native
-operations. No live mailbox transfer, payload, hook, target write, remote
-thread, or live patch test has been implemented, and no bytes have been written
-to any client.
+operations.
+
+**Update 2026-09-23.** The game-thread bridge mechanism now exists and is
+verified live: hook installed, fired, restored; queue served on the game
+thread; `agent.move_to_func` called with the source-backed `float[4]` layout,
+moving the character exactly 10 units. The controller must run **elevated** —
+an unelevated one is denied the write/allocate/suspend rights by ordinary UAC
+token splitting, which an earlier note here mis-described as a client
+protection. No bytes remain written to any client. See the Phase 5 status above
+and [`RESEARCH.md`](RESEARCH.md).
+

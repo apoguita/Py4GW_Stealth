@@ -17,16 +17,17 @@ from py4gw import AgentLivingStruct, ConnectedClient, PerfCounter, Win32
 def report(counter: PerfCounter, name: str) -> None:
     """Print one timing report when the metric has completed samples."""
 
-    value = counter.report(name)
-    if value.count == 0:
+    value = counter.calculate_report(name)
+    samples = counter.get_history(name)
+    if not samples:
         return
     print(
         f"{name:<38} "
-        f"min={value.minimum_ms:8.3f} ms  "
-        f"avg={value.average_ms:8.3f} ms  "
-        f"p95={value.p95_ms:8.3f} ms  "
-        f"max={value.maximum_ms:8.3f} ms  "
-        f"samples={value.count:3d}"
+        f"min={value.min:8.3f} ms  "
+        f"avg={value.avg:8.3f} ms  "
+        f"p95={value.p95:8.3f} ms  "
+        f"max={value.max:8.3f} ms  "
+        f"samples={len(samples):3d}"
     )
 
 
@@ -49,8 +50,11 @@ def measure_nested(
 ) -> None:
     """Measure one nested living-record operation."""
 
-    with counter.measure(name):
+    counter.start(name)
+    try:
         operation()
+    finally:
+        counter.end(name)
 
 
 def main() -> int:
@@ -71,7 +75,7 @@ def main() -> int:
         print(f"Guild Wars PID {arguments.pid} was not found.")
         return 1
 
-    counter = PerfCounter(history_size=max(arguments.samples * 300, 32))
+    counter = PerfCounter()
     client = ConnectedClient(process, win32=win32, perf_counter=counter)
     try:
         last_snapshot = None

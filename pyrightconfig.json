@@ -12,5 +12,7 @@
   ],
   "pythonVersion": "3.13",
   "typeCheckingMode": "standard",
-  "reportMissingTypeStubs": "none"
+  "reportMissingTypeStubs": "none",
+  "venvPath": "C:/Users/Apo/AppData/Local/Programs/Python",
+  "venv": "Python313-32"
 }

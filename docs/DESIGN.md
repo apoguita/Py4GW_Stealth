@@ -21,7 +21,7 @@ main.py
 py4gw/
   __init__.py
   client.py       Selected-client connection and script facade
-  performance.py  Controller-side execution timing
+  perf_counter.py  Ported PyProfiler performance counters
   win32/
     __init__.py
     win32.py
@@ -356,20 +356,30 @@ reports whether the snapshot contains a character; these are separate states.
 `ConnectedClient` initializes the resolver-backed contexts during connection.
 `GameContext` performs the JSON signature scan and caches the stable
 module-global pointer location. `GameplayContext`, `PreGameContext`, and
-`ServerRegion` and `InstanceInfo` each cache their own resolver. `Cinematic`
-follows the
+`ServerRegion` each cache their own resolver scan, and `InstanceInfo` caches the
+`map.instance_info_ptr_ref` slot. `Cinematic` follows the
 `GameContext.cinematic` pointer, `CharContext` follows
 `GameContext.character`. Each later context read re-reads only its short dynamic pointer chain
 and structure bytes, so a context fetch does not scan the module again. The
 dynamic values are intentionally not cached because they can change when the
 client changes login or game state.
 
-`PerfCounter` measures named controller operations with `perf_counter_ns`,
-keeps bounded rolling histories, and produces minimum, average, percentile,
-and maximum reports. Its context manager records a measurement even when the
-wrapped operation raises. The native profiler's optional grouped averaging is
-available through `samples_per_record`; Python call-stack tracing is separate
-and is not enabled by this class.
+The rule behind that is stated once, in
+[`READINESS_GATE.md`](READINESS_GATE.md): cache what the pattern scan produced,
+because that is stable; never cache a dereferenced pointer, because that is
+map-scoped. `InstanceInfo` caches the *address of* the pointer and dereferences
+it per read, which is what the native runtime does and why a null slot reads as
+`InstanceType.LOADING` instead of a stale map. Map-scoped reads are guarded by
+`Map.IsMapReady()`, which is re-evaluated per read rather than cached, so no
+time-to-live window exists.
+
+`PerfCounter` is the port of Reforged Native's `PyProfiler`: named stopwatches
+over a 600-sample rolling history, reported as
+`(min, avg, p50, p95, p99, max)`. One averaged sample is stored every six
+completed measurements, which is the native throttle rather than a parameter.
+Its context manager records a measurement even when the wrapped operation
+raises. Python call-stack tracing is a separate instrument from Reforged's
+`Profiling.py` and is not ported yet.
 
 The native `Patterns` subsystem is a separate layer above `Scanner`. Stealth's
 `PatternCatalog` loads the copied JSON definitions and executes resolver
@@ -472,7 +482,8 @@ Guild Wars client is running:
 python tests\perf_context.py
 ```
 
-It uses `PerfCounter.measure(...)` for each stage and reports resolver scans,
+It times each stage with `PerfCounter.start`/`end` through a private helper,
+and reports resolver scans,
 pointer dereferences, fixed-structure reads, and array/property reads with
 percentiles and remote-read counts. This keeps diagnosis separate from the
 main UI's single latest-read display.

@@ -33,6 +33,125 @@ the selected payload is not yet built or tested. See
 [`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md) and
 [`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md).
 
+## Live result: the game-thread bridge works, but only elevated (2026-09-23)
+
+Target throughout: `F:\GW\GW1\Gw.exe`, PID 29520, SHA-256
+`44FBD68767A8D02B5DD4FB1A8A09B684A86B24716731327EE64905DD698FE124`,
+10493120 bytes, file version `1, 0, 0, 1`, ArenaNet "Guild Wars Game Client",
+main window "Guild Wars Reforged".
+
+### First attempt failed on the process token, not on the client
+
+An unelevated controller cannot obtain a write/execute handle. `OpenProcess`
+was probed one right at a time (read-only probe; handles opened and closed
+immediately):
+
+| Access right | Unelevated | Elevated |
+| --- | --- | --- |
+| `PROCESS_QUERY_INFORMATION` (0x0400) | allowed | allowed |
+| `PROCESS_VM_READ` (0x0010) | allowed | allowed |
+| `PROCESS_TERMINATE` (0x0001) | allowed | allowed |
+| `SYNCHRONIZE` (0x00100000) | allowed | allowed |
+| `PROCESS_VM_WRITE` (0x0020) | **denied, error 5** | **allowed** |
+| `PROCESS_VM_OPERATION` (0x0008) | **denied, error 5** | **allowed** |
+| `PROCESS_CREATE_THREAD` (0x0002) | **denied, error 5** | **allowed** |
+| `PROCESS_SUSPEND_RESUME` (0x0800) | **denied, error 5** | **allowed** |
+
+**Correction to an earlier reading of this finding.** This was first recorded
+here as a deliberate client-side protection filter. That was wrong. The cause
+is ordinary Windows UAC token splitting: `DESKTOP-DURJ7N0\Apo` is in the
+Administrators group, but an unelevated process carries a filtered token with
+the Administrators SID disabled. Both tokens are **Medium** integrity and share
+an **identical** `GetProcessMitigationPolicy`, which is exactly why an
+integrity- or mitigation-based check concluded "not elevated, therefore
+filtered". It was not filtered; the controller simply lacked the privilege.
+Relaunching the same unchanged controller elevated grants every right above.
+The control experiment (a 32-bit child accepting the full mask) showed only
+that the *unelevated* denial was client-specific, which is also what UAC token
+splitting predicts, so it did not distinguish the two explanations.
+
+Consequence for the project: target-side work on this client requires an
+elevated controller. That is a real operational constraint and a change in the
+trust boundary — the controller holds administrator rights over the machine,
+not merely over the game.
+
+### Live verification (elevated controller)
+
+The hardened bridge (bridge version 2, 612-byte header, 382-byte guarded
+dispatcher) was installed against the live client and driven end to end.
+
+Hook install and queue round trip (`tools/test_game_thread_bridge.py`):
+
+```text
+leave_game_thread_func   = 0x011F5880
+client module range      = 0x00FC0000 + 0xF49000
+saved target prologue    = 55 8b ec 81 ec 20 02 00 00
+installed entry patch    = e9 7b a7 cf 02 90 90 90 90
+published module bounds  = 0x00FC0000 + 0xF49000
+hook hits                = 0 -> 3
+dispatcher heartbeat     = 0 -> 3
+game-thread PING         = state=DONE result=0xC0DEC0DE
+```
+
+First live call into a Guild Wars function (`tools/test_move_10.py --move`):
+
+```text
+player agent id           = 25
+current position          = (1023.807, -640.257, plane=0)
+requested target          = (1033.807, -640.257, plane=0)
+OP_MOVE                   = state=DONE result=0
+observed position         = (1033.807, -640.257, plane=0)
+max observed displacement = 10.000 GW units
+distance to target        = 0.000
+```
+
+Displacement and target distance are exact. The move ABI was cross-checked
+against `Py4GW_Reforged_Native/src/GW/agent/agent_methods.cpp:145-155`
+(`void __cdecl(float* pos)`, `arg = {x, y, (float)zplane, 0}`) and against the
+real callee at static VA `0x00536E80`, whose prologue reads no `[ebp+8]` and
+ends in a plain `ret` — one argument, caller-cleaned, matching the dispatcher.
+
+Call-site phase also matches the source project:
+`src/GW/game_thread/game_thread.cpp:63-68` runs queued work and *then* calls the
+original; the Stealth detour runs its queue and then replays the stolen
+prologue, i.e. the same point in the same frame on the same thread.
+
+Both runs restored the original bytes (`Hook restored and remote bridge
+allocations freed`), and the client remained responsive, connected, and
+logged in afterwards on the same PID. No client was restarted to recover.
+
+### One defect found by the live run
+
+The first elevated attempt was refused by the bridge's own patch gate:
+
+```text
+Thread 45648 reported an implausible 32-bit EIP 0x77E1320C,
+outside the declared code range 0x00FC0000-0x01F09000.
+```
+
+The gate was correct to refuse and wrong to be that narrow. The client has
+**99 loaded modules** (including `RTSSHooks.dll` from RivaTuner and
+`steam_api.dll`), and a thread suspended for a patch is routinely parked in a
+system DLL such as `ntdll`. Trusting only the main image rejected a normal
+thread. The gate now accepts any address inside any loaded module
+(`Win32.enumerate_modules`, `RemoteExecutionTransport(executable_regions=...)`)
+and still fails closed when the address is in none of them. Re-running after
+the fix installed the hook on the first attempt.
+
+### Status of the three target-side capabilities
+
+- **Hooks — verified live.** Entry detour installed, fired, and restored.
+- **Game-thread code execution — verified live.** The payload ran inside the
+  client and the game thread serviced the queue.
+- **Call to a real Guild Wars function — verified live.** `agent.move_to_func`
+  called on the game thread with the source-backed argument layout.
+- **Callbacks — not implemented.** No registration or event surface exists;
+  only the one queue serviced at a single hook point.
+
+See [`DEFERRED_INJECTION.md`](DEFERRED_INJECTION.md) and
+[`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md).
+
+
 The Native project remains the source authority for pointer ownership and
 acquisition. Its direct signatures and callback-published pointers are
 different cases; Stealth will reproduce the relevant Native callback path

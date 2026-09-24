@@ -1,9 +1,34 @@
-from ..target_struct import TargetStruct
+from ..helpers.target_struct import TargetStruct
 from ctypes import Structure
+from enum import IntEnum
 from typing import Optional
 
 from ..scanner import PatternCatalog, RemoteScanner
 from .gw_array import RemoteMemoryReader
+
+
+class InstanceType(IntEnum):
+    OUTPOST = 0
+    EXPLORABLE = 1
+    LOADING = 2
+
+    @classmethod
+    def from_value(cls, value: int) -> Optional[InstanceType]: ...
+
+    @classmethod
+    def resolve_phase(cls, value: int | None) -> InstanceType: ...
+
+    @property
+    def is_playable(self) -> bool: ...
+
+    @property
+    def is_loading_phase(self) -> bool: ...
+
+    @property
+    def display_name(self) -> str: ...
+
+
+InstanceTypeName: dict[int, str]
 
 
 class MapDimensionsStruct(TargetStruct):
@@ -130,14 +155,20 @@ class InstanceInfo:
     @staticmethod
     def get_context() -> Optional[InstanceInfoStruct]: ...
 
-    def resolve_address(self) -> int | None: ...
-
     def initialize(self) -> int | None: ...
+
+    @property
+    def slot_address(self) -> int | None: ...
+
+    def pointer(self) -> int: ...
+
+    def resolve_address(self) -> int | None: ...
 
     @property
     def cached_context_address(self) -> int | None: ...
 
     def read(self) -> InstanceInfoStruct | None: ...
+
 
 
 def get() -> InstanceInfoStruct | None: ...

@@ -1,4 +1,4 @@
-from ..target_struct import TargetStruct
+from ..helpers.target_struct import TargetStruct
 from ctypes import Structure
 from typing import Any, ClassVar
 

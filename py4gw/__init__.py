@@ -12,7 +12,10 @@ from .scanner import (
     SectionRange,
 )
 from .memory import ProcessMemoryReader
-from .performance import PerfCounter, PerformanceReport
+from .perf_counter import MAX_SAMPLES, MetricSummary, PerfCounter
+from .map import Map
+from .party import Party
+from .player import ChatChannel, Player, PlayerStatus
 from .context import (
     BlockingPropStruct,
     MapPropStruct,
@@ -67,8 +70,11 @@ from .context import (
     PreGameContextStruct,
     ServerRegion,
     ServerRegionStruct,
+    PlayerAgentId,
+    PlayerAgentIdStruct,
     InstanceInfo,
     InstanceInfoStruct,
+    InstanceType,
     MapDimensionsStruct,
     AreaInfoStruct,
     TextCacheStruct,
@@ -326,8 +332,16 @@ __all__ = [
     "PreGameContextStruct",
     "ServerRegion",
     "ServerRegionStruct",
+    "PlayerAgentId",
+    "PlayerAgentIdStruct",
+    "Player",
+    "PlayerStatus",
+    "ChatChannel",
+    "Map",
+    "Party",
     "InstanceInfo",
     "InstanceInfoStruct",
+    "InstanceType",
     "MapDimensionsStruct",
     "AreaInfoStruct",
     "TextParser",
@@ -534,7 +548,8 @@ __all__ = [
     "GW_Array_Value_View",
     "ProcessMemoryReader",
     "PerfCounter",
-    "PerformanceReport",
+    "MetricSummary",
+    "MAX_SAMPLES",
     "RemoteScanner",
     "ResolutionResult",
     "ResolutionTraceStep",

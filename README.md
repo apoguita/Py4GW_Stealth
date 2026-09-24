@@ -125,6 +125,54 @@ addresses. It does not write to or execute code in the process. The scanner
 and the context readers have been verified against one live client build.
 Compatibility with other builds is not established.
 
+## Caching and readiness
+
+The library follows one rule: **cache what the pattern scan produced, because
+that is stable; never cache a dereferenced pointer, because that is map-scoped.**
+Guild Wars moves its context pointers on every map load, so a cached final value
+belongs to whichever map was loaded when the scan ran.
+
+There is no time-to-live cache. A full readiness gate costs about 0.073 ms while
+the one-time scan it depends on costs 4.6-27.6 ms, so the expensive half is the
+scan (already cached because it never changes) and the volatile half is cheap to
+re-read. The gate is therefore re-evaluated per read, and a map change is noticed
+because the client is re-asked rather than because a timer expired:
+
+```python
+from py4gw import Map
+
+client = py4gw.connect(pid)
+
+if Map.IsMapReady():
+    instance = client.read_instance_info()
+else:
+    print(Map.GetInstanceTypeName())   # e.g. "Loading"
+```
+
+`Map.IsMapReady()` is that predicate, ported member for member from Reforged's
+`Map.py` lines 40-118. See [`docs/READINESS_GATE.md`](docs/READINESS_GATE.md) for
+the members and the source lines, and
+[`docs/PORTING_RULES.md`](docs/PORTING_RULES.md) before adding anything.
+
+## Wrapper classes
+
+The Reforged wrapper classes are being ported one at a time, keeping every member
+name and signature. Each member either returns a real value from a readable game
+context or refuses with `NotImplementedError` naming the mechanism it would need;
+nothing is silently wrong, and nothing writes to the client.
+
+```python
+import py4gw
+from py4gw.player import Player
+
+py4gw.connect(py4gw.win32.list_processes()[0])
+print(Player.GetName(), Player.GetLevel(), Player.GetXY())
+```
+
+`Player` is the first ported wrapper: 70 Reforged members, 46 of them working
+externally and 24 refusing. See [`docs/PLAYER_PORT.md`](docs/PLAYER_PORT.md) for
+the per-member table.
+
 ## Main UI
 
 Run the current test surface from the project directory:
@@ -222,17 +270,21 @@ handle until `py4gw.disconnect()` is called. Connection performs the one-time
 signature scan and caches its stable pointer location; later context reads do
 not rescan the module.
 
-Controller-side execution timing is available through `PerfCounter`:
+Controller-side execution timing is available through `PerfCounter`, the
+port of Reforged Native's `PyProfiler`:
 
 ```python
 import py4gw
 from py4gw import PerfCounter
 
 perf = PerfCounter()
-with perf.measure("context.read"):
+perf.start("context.read")
+try:
     context = py4gw.context.charcontext.get()
+finally:
+    perf.end("context.read")
 
-print(perf.report("context.read").average_ms)
+print(perf.calculate_report("context.read").avg)
 ```
 
 This measures Python/controller work only; it does not measure code executing
@@ -244,6 +296,9 @@ inside Guild Wars.
 - [Installation guide](INSTALL.md) — setup and usage details
 - [Design contract](docs/DESIGN.md) — current implementation rules
 - [Performance](docs/PERFORMANCE.md) — timing, resolver caching, and the live harness
+- [Porting rules](docs/PORTING_RULES.md) — read before adding any API: this project ports Reforged and Native, it does not invent
+- [Readiness gate](docs/READINESS_GATE.md) — the ported `Map` gate that decides when map data may be read
+- [Player port](docs/PLAYER_PORT.md) — the ported Reforged `Player` class, its adaptations, and its disabled members
 - [Context inventory](docs/CONTEXT_INVENTORY.md) — native/Reforged context mapping and Stealth status
 - [Parity certification checklist](docs/PARITY_CERTIFICATION_CHECKLIST.md) — the one-context-at-a-time binary parity gate
 - [Context parity audit](docs/CONTEXT_PARITY_AUDIT.md) — source-backed fields, helpers, and explicit gaps for every migrated reader

@@ -217,9 +217,15 @@ keeps in another module.
   mission-map zoom field.
 - `context.ServerRegion`: signed 32-bit server-region value resolved from
   `map.region_id_addr` and cached for the connection.
+- `context.PlayerAgentId`: the game global holding the player's agent id,
+  resolved from `agent.player_agent_id_addr`. The resolved value is a stable
+  `.data` address and the id is read fresh per call, matching native
+  `Context::GetObservingId()`.
 - `context.InstanceInfo`: map-instance structure resolved from
-  `map.instance_info_addr`, with external nested `MapDimensions` and
-  `AreaInfo` reads.
+  `map.instance_info_ptr_ref`. The cached value is the address of the pointer and
+  the structure is dereferenced per read, because the pointer is map-scoped; a
+  null pointer reads as `InstanceType.LOADING`. See
+  [`READINESS_GATE.md`](READINESS_GATE.md).
 - `context.TextParser`: native `GameContext.text_parser` pointer at `+0x18`,
   the complete fixed-width root layout, typed `LanguageSlotStruct` and
   `TextFileSlotStruct` records, bounded language-slot/file-slot traversal,

@@ -2,21 +2,41 @@
 
 from __future__ import annotations
 
-from ..target_struct import Describable, TargetStruct
+from ..helpers.target_struct import Describable, TargetStruct
 
 import ctypes
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum, IntEnum, IntFlag
 from ctypes import Structure, c_float, c_uint8, c_uint16, c_uint32
-from contextlib import nullcontext
 from typing import Any, Callable, Iterator, Protocol, TypeVar, cast
 
-from ..performance import PerfCounter
+from ..perf_counter import PerfCounter
 from ..scanner import PatternCatalog, RemoteScanner
 from .acc_agent_context import AccAgentContext, Vec3fStruct
 from .gw_array import GWArray, RemoteMemoryReader
 from .gw_list import GWLinkStruct, GWListStruct, RemoteGWListView
+
+
+@contextmanager
+def _timed(perf_counter: PerfCounter | None, name: str) -> Iterator[None]:
+    """Time a block on the counter when one was supplied.
+
+    This is the reader's own wrapper over the ported ``start``/``end``. The
+    ported counter has no context manager because the source has none, and the
+    reader needs one: its stages raise, and an unpaired ``start`` would otherwise
+    be discarded.
+    """
+
+    if perf_counter is None:
+        yield
+        return
+    perf_counter.start(name)
+    try:
+        yield
+    finally:
+        perf_counter.end(name)
 
 
 class _memory_reader(RemoteMemoryReader, Protocol):
@@ -2070,11 +2090,8 @@ class AgentArray:
 
         if self._array_address is not None:
             return self._array_address
-        if perf_counter is None:
+        with _timed(perf_counter, "agent_array.resolver"):
             result = self._patterns.resolve(self._RESOLVER, self._scanner)
-        else:
-            with perf_counter.measure("agent_array.resolver"):
-                result = self._patterns.resolve(self._RESOLVER, self._scanner)
         if not result.ok:
             detail = result.message or "the resolver returned no address"
             raise RuntimeError(f"{self._RESOLVER} failed: {detail}")
@@ -2089,11 +2106,8 @@ class AgentArray:
         caller cannot mistake it for an empty agent list.
         """
 
-        if perf_counter is None:
-            snapshot = self._read_snapshot(None)
-        else:
-            with perf_counter.measure("agent_array.read"):
-                snapshot = self._read_snapshot(perf_counter)
+        with _timed(perf_counter, "agent_array.read"):
+            snapshot = self._read_snapshot(perf_counter)
         self._snapshot = snapshot
         self._context_view = None
         self._living_snapshot = None
@@ -2256,11 +2270,7 @@ class AgentArray:
         counted and omitted rather than reused from an older snapshot.
         """
 
-        refresh_context = (
-            perf_counter.measure("agent_array.living_refresh")
-            if perf_counter is not None
-            else nullcontext()
-        )
+        refresh_context = _timed(perf_counter, "agent_array.living_refresh")
         with refresh_context:
             array_snapshot = self.read(perf_counter)
             if array_snapshot is None:
@@ -2315,11 +2325,7 @@ class AgentArray:
         """Read one snapshot, optionally recording each traversal stage."""
 
         array_address = self.resolve_address(perf_counter)
-        pointer_context = (
-            perf_counter.measure("agent_array.pointer_table")
-            if perf_counter is not None
-            else nullcontext()
-        )
+        pointer_context = _timed(perf_counter, "agent_array.pointer_table")
         with pointer_context:
             agent_array = self._read_array_header(array_address, "agent array")
             reported_size = int(agent_array.m_size)
@@ -2338,11 +2344,7 @@ class AgentArray:
                     "agent pointer table",
             )
 
-        movement_context = (
-            perf_counter.measure("agent_array.context_read")
-            if perf_counter is not None
-            else nullcontext()
-        )
+        movement_context = _timed(perf_counter, "agent_array.context_read")
         with movement_context:
             context = self._agent_context.read()
         if context is None:
@@ -2351,11 +2353,7 @@ class AgentArray:
         movement_count = min(
             int(movement_array.m_size), self._max_pointer_slots
         ) if int(movement_array.m_size) <= int(movement_array.m_capacity) else 0
-        movement_context = (
-            perf_counter.measure("agent_array.movement_table")
-            if perf_counter is not None
-            else nullcontext()
-        )
+        movement_context = _timed(perf_counter, "agent_array.movement_table")
         with movement_context:
             movement_pointers = self._read_pointer_values(
                 movement_array,
@@ -2374,11 +2372,7 @@ class AgentArray:
         scanned_slots = 0
         stopped_by_reference_limit = False
 
-        classification_context = (
-            perf_counter.measure("agent_array.classification")
-            if perf_counter is not None
-            else nullcontext()
-        )
+        classification_context = _timed(perf_counter, "agent_array.classification")
         with classification_context:
             for slot, pointer in enumerate(pointers):
                 scanned_slots += 1
@@ -2471,11 +2465,7 @@ class AgentArray:
 
         if reference.address < self._MIN_REMOTE_ADDRESS:
             raise ValueError("The agent reference address is not valid.")
-        validation_context = (
-            perf_counter.measure("agent_array.reference_validation")
-            if perf_counter is not None
-            else nullcontext()
-        )
+        validation_context = _timed(perf_counter, "agent_array.reference_validation")
         with validation_context:
             self._validate_reference_current(reference)
         record_type: type[AgentStruct]
@@ -2487,11 +2477,8 @@ class AgentArray:
             record_type = AgentGadgetStruct
         else:
             record_type = AgentStruct
-        if perf_counter is None:
+        with _timed(perf_counter, "agent_array.agent_record"):
             record = self._read_record(reference.address, record_type)
-        else:
-            with perf_counter.measure("agent_array.agent_record"):
-                record = self._read_record(reference.address, record_type)
         if int(record.agent_id) != reference.agent_id:
             raise StaleAgentReferenceError(
                 f"Agent reference changed at 0x{reference.address:08X}: "

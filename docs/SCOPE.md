@@ -26,6 +26,21 @@ that those sources actually use or expose. We do not treat every unused native
 declaration as required work, and we do not invent a different public contract
 for the external reader. Only the process-memory transport changes.
 
+**Native and Reforged are the sources of truth. `external/GwAu3` is a reference
+project, not an authority.** Where GwAu3 disagrees with either base project, the
+base projects win. GwAu3 is useful for framing a question and for historical
+context; it is never the answer to "what does this do". The open salvage
+questions — `Salvage()` argument order and the meanings of the `0x78`/`0x79`
+packet headers — were being held as Native-vs-GwAu3 contradictions; they are not
+contradictions to resolve but cases where the native source decides.
+
+Where Native and Reforged *Python* disagree, Native wins as well. Two examples
+from the `Player` port, both recorded in [`PLAYER_PORT.md`](PLAYER_PORT.md):
+Native resolves duplicated fields with `PickHighest` (which discards `0` and
+`0xFFFFFFFF`) while Reforged's Python uses `max`; and Reforged's
+`IsPlayerLoaded` carries a `750` fallback threshold that appears nowhere in the
+native tree.
+
 The current reader inventory is not a parity claim by itself. See
 [`CONTEXT_PARITY_AUDIT.md`](CONTEXT_PARITY_AUDIT.md) for the source-by-source
 status of every migrated reader and the missing work recorded for partial
@@ -138,9 +153,28 @@ The current implementation does not:
 - write to Guild Wars memory;
 - inject a DLL, payload, executable code, or patch;
 - create a remote thread or hook a game function;
-- reproduce Py4GW `Py*` bindings, widgets, or automation helpers;
+- reproduce Py4GW's native `Py*` binding modules, its UI widgets, or the game
+  actions its wrappers perform;
 - select a client by character, map, or memory signature; or
 - promise compatibility with every Reforged feature.
+
+The distinction that matters is between a wrapper's **data surface**, which is
+in scope, and its **bindings and actions**, which are not:
+
+| Surface | Status |
+| --- | --- |
+| Reforged wrapper data members (`Player.GetLevel`, `Player.GetAgent`, ...) | **in scope** — ported as read-only accessors over the context readers |
+| Accessor classes ported from Reforged and Native (`Map`, `Party`, `Player`) | **in scope** — ported member for member, see [`PORTING_RULES.md`](PORTING_RULES.md) |
+| Native `Py*` binding modules (`PyPlayer`, `PyInventory`, ...) | **out of scope** — they require code inside the client |
+| UI widgets, ImGui panels, and the host framework | **out of scope** |
+| Wrapper action members (`Player.Move`, `Player.SendChat`, ...) | **out of scope** — ported as members that refuse, so a migrated script fails at the call site |
+
+Ported action members are present but disabled; they raise and never execute.
+The reason a wrapper class is worth porting even when many of its members
+refuse is that the *names and signatures* are the migration contract: a script
+moves over unchanged, and the members that cannot work say so instead of
+returning a plausible wrong value. See
+[`PLAYER_PORT.md`](PLAYER_PORT.md) for the reference implementation.
 
 Target-side writes, code, or patches are part of the selected architecture,
 not an open design choice. The first source-backed implementation target is

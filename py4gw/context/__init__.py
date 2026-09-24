@@ -6,6 +6,7 @@ from . import game_context
 from . import gameplay_context
 from . import pre_game_context
 from . import server_region_context
+from . import player_agent_id_context
 from . import instance_info_context
 from . import text_parser_context
 from . import available_character_context
@@ -84,10 +85,15 @@ from .pre_game_context import (
     PreGameContextStruct,
 )
 from .server_region_context import ServerRegion, ServerRegionStruct
+from .player_agent_id_context import (
+    PlayerAgentId,
+    PlayerAgentIdStruct,
+)
 from .instance_info_context import (
     AreaInfoStruct,
     InstanceInfo,
     InstanceInfoStruct,
+    InstanceType,
     MapDimensionsStruct,
 )
 from .text_parser_context import (
@@ -340,8 +346,11 @@ __all__ = [
     "GameplayContextStruct",
     "ServerRegion",
     "ServerRegionStruct",
+    "PlayerAgentId",
+    "PlayerAgentIdStruct",
     "InstanceInfo",
     "InstanceInfoStruct",
+    "InstanceType",
     "MapDimensionsStruct",
     "AreaInfoStruct",
     "TextParser",
@@ -590,6 +599,7 @@ gamecontext = game_context
 gameplaycontext = gameplay_context
 pregamecontext = pre_game_context
 serverregion = server_region_context
+playeragentid = player_agent_id_context
 instanceinfo = instance_info_context
 textparser = text_parser_context
 availablecharacters = available_character_context

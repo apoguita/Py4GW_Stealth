@@ -2,12 +2,33 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
-import tempfile
+import shutil
 import unittest
+from collections.abc import Iterator
 from pathlib import Path
 
 from py4gw import PatternCatalog
+
+
+@contextlib.contextmanager
+def fixture_directory(name: str) -> Iterator[Path]:
+    """Yield a scratch catalog directory beside this test file.
+
+    Nothing is written to a temporary or hidden location. The fixture is created
+    in this test's own folder, so it is visible while the test runs, and removed
+    when the test finishes. Each fixture gets its own directory because
+    ``PatternCatalog.from_directory`` loads every ``*.json`` it finds.
+    """
+
+    directory = Path(__file__).resolve().parent / name
+    shutil.rmtree(directory, ignore_errors=True)
+    directory.mkdir(parents=True)
+    try:
+        yield directory
+    finally:
+        shutil.rmtree(directory, ignore_errors=True)
 
 
 class _TestScanner:
@@ -108,8 +129,8 @@ class PatternCatalogTests(unittest.TestCase):
     def test_resolves_a_chain_and_keeps_trace(self) -> None:
         """A resolver applies its steps and records each operation."""
 
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "demo.json"
+        with fixture_directory("pattern_fixture_demo") as directory:
+            path = directory / "demo.json"
             path.write_text(
                 json.dumps(
                     {
@@ -149,8 +170,8 @@ class PatternCatalogTests(unittest.TestCase):
     def test_passes_assertion_offset_from_json(self) -> None:
         """Assertion resolvers preserve the native JSON result offset."""
 
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "assertion.json"
+        with fixture_directory("pattern_fixture_assertion") as directory:
+            path = directory / "assertion.json"
             path.write_text(
                 json.dumps(
                     {
