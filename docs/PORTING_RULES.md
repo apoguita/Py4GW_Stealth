@@ -91,6 +91,9 @@ mistaken for the source:
   surface, but still not in the sources.
 - `py4gw/map.py` private helpers (`_area`, `_area_value`, `_char_context`, ...)
   for members that do exist in Reforged.
-- `py4gw/map.py`, `py4gw/party.py` — partial port. Members not yet ported are
-  listed at the bottom of each module as pending. Those lists are plans, not
-  source.
+- `py4gw/party.py` — complete. All five namespaces are present, and
+  `tests/test_party_offline.py` fails if a member is dropped. Four members
+  return a constant because the source cannot produce anything else; see
+  [`PARTY_PORT.md`](PARTY_PORT.md).
+- `py4gw/map.py` — partial port. Members not yet ported are listed at the bottom
+  of the module as pending. That list is a plan, not source.

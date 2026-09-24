@@ -27,14 +27,18 @@ stubbed into a shape that would lie about working.
 
 from __future__ import annotations
 
+from enum import IntEnum
+from typing import Any
+
 from .client import ConnectedClient, require_client
 from .context.party_context import (
     HenchmanPartyMemberStruct,
     HeroPartyMemberStruct,
-    PlayerPartyMemberStruct,
     PartyContextStruct,
+    PartyInfoStruct,
+    PlayerPartyMemberStruct,
 )
-from .context.world_context import WorldContextStruct
+from .context.world_context import PetInfoStruct, WorldContextStruct
 
 
 def _disabled(member: str, requirement: str) -> NotImplementedError:
@@ -45,6 +49,131 @@ def _disabled(member: str, requirement: str) -> NotImplementedError:
         "It exists for source parity so a ported script fails at the call site "
         "and names the missing mechanism instead of returning a wrong value."
     )
+
+
+class HeroType(IntEnum):
+    """Native ``GW::Constants::HeroID``, ported from ``Hero_enums.py``."""
+
+    None_ = 0
+    Norgu = 1
+    Goren = 2
+    Tahlkora = 3
+    MasterOfWhispers = 4
+    AcolyteJin = 5
+    Koss = 6
+    Dunkoro = 7
+    AcolyteSousuke = 8
+    Melonni = 9
+    ZhedShadowhoof = 10
+    GeneralMorgahn = 11
+    MagridTheSly = 12
+    Zenmai = 13
+    Olias = 14
+    Razah = 15
+    MOX = 16
+    KeiranThackeray = 17
+    Jora = 18
+    PyreFierceshot = 19
+    Anton = 20
+    Livia = 21
+    Hayda = 22
+    Kahmu = 23
+    Gwen = 24
+    Xandra = 25
+    Vekk = 26
+    Ogden = 27
+    MercenaryHero1 = 28
+    MercenaryHero2 = 29
+    MercenaryHero3 = 30
+    MercenaryHero4 = 31
+    MercenaryHero5 = 32
+    MercenaryHero6 = 33
+    MercenaryHero7 = 34
+    MercenaryHero8 = 35
+    Miku = 36
+    ZeiRi = 37
+    Devona = 38
+    GhostOfAlthea = 39
+
+
+#: Native ``kHeroNameMap`` (``party_bindings.cpp:173``): display name to id.
+#: ``Devona`` and ``GhostOfAlthea`` have no entry in the source table.
+HERO_NAME_TO_ID: dict[str, HeroType] = {
+    "": HeroType.None_,
+    "Norgu": HeroType.Norgu,
+    "Goren": HeroType.Goren,
+    "Tahlkora": HeroType.Tahlkora,
+    "Master Of Whispers": HeroType.MasterOfWhispers,
+    "Acolyte Jin": HeroType.AcolyteJin,
+    "Koss": HeroType.Koss,
+    "Dunkoro": HeroType.Dunkoro,
+    "Acolyte Sousuke": HeroType.AcolyteSousuke,
+    "Melonni": HeroType.Melonni,
+    "Zhed Shadowhoof": HeroType.ZhedShadowhoof,
+    "General Morgahn": HeroType.GeneralMorgahn,
+    "Magrid The Sly": HeroType.MagridTheSly,
+    "Zenmai": HeroType.Zenmai,
+    "Olias": HeroType.Olias,
+    "Razah": HeroType.Razah,
+    "M.O.X.": HeroType.MOX,
+    "Keiran Thackeray": HeroType.KeiranThackeray,
+    "Jora": HeroType.Jora,
+    "Pyre Fierceshot": HeroType.PyreFierceshot,
+    "Anton": HeroType.Anton,
+    "Livia": HeroType.Livia,
+    "Hayda": HeroType.Hayda,
+    "Kahmu": HeroType.Kahmu,
+    "Gwen": HeroType.Gwen,
+    "Xandra": HeroType.Xandra,
+    "Vekk": HeroType.Vekk,
+    "Ogden Stonehealer": HeroType.Ogden,
+    "Mercenary Hero 1": HeroType.MercenaryHero1,
+    "Mercenary Hero 2": HeroType.MercenaryHero2,
+    "Mercenary Hero 3": HeroType.MercenaryHero3,
+    "Mercenary Hero 4": HeroType.MercenaryHero4,
+    "Mercenary Hero 5": HeroType.MercenaryHero5,
+    "Mercenary Hero 6": HeroType.MercenaryHero6,
+    "Mercenary Hero 7": HeroType.MercenaryHero7,
+    "Mercenary Hero 8": HeroType.MercenaryHero8,
+    "Miku": HeroType.Miku,
+    "Zei Ri": HeroType.ZeiRi,
+}
+
+
+class Hero:
+    """Native ``PyParty.Hero``, ported from ``party_bindings.cpp:214``.
+
+    The source keeps a hero id and two fields (``hero_name``,
+    ``hero_profession``) that neither constructor assigns, so ``GetName`` always
+    returns an empty string and ``GetProfession`` always returns ``0``.
+    """
+
+    _MAX_ID = int(HeroType.ZeiRi)
+
+    def __init__(self, value: int | str = 0) -> None:
+        """Resolve a hero from an id or a display name."""
+
+        if isinstance(value, str):
+            self._hero_id = HERO_NAME_TO_ID.get(value, HeroType.None_)
+        elif 0 <= int(value) <= Hero._MAX_ID:
+            self._hero_id = HeroType(int(value))
+        else:
+            self._hero_id = HeroType.None_
+
+    def GetID(self) -> int:
+        """Return the hero id."""
+
+        return int(self._hero_id)
+
+    def GetName(self) -> str:
+        """Return the hero name, which the source never populates."""
+
+        return ""
+
+    def GetProfession(self) -> int:
+        """Return the hero profession, which the source never populates."""
+
+        return 0
 
 
 class Party:
@@ -63,7 +192,7 @@ class Party:
             return None
 
     @staticmethod
-    def _party() -> object | None:
+    def _party() -> PartyInfoStruct | None:
         """Return the party record, or ``None`` while it is unavailable."""
 
         context = Party._context()
@@ -112,6 +241,21 @@ class Party:
                 return bool(member.is_connected)
         return False
 
+    @staticmethod
+    def party_instance() -> Any:
+        """Disabled: Reforged returns a ``PyParty`` native binding object.
+
+        The binding is constructed inside the client; there is nothing to
+        construct externally, and every member that used it here reads the party
+        context instead.
+        """
+
+        raise _disabled(
+            "party_instance",
+            "it returns a PyParty native binding object, which only exists "
+            "inside the client",
+        )
+
     # ── party identity ────────────────────────────────────────────────────
 
     @staticmethod
@@ -119,7 +263,7 @@ class Party:
         """Return the party's id, or ``0``."""
 
         party = Party._party()
-        return int(getattr(party, "party_id", 0)) if party is not None else 0
+        return int(party.party_id) if party is not None else 0
 
     @staticmethod
     def GetPlayers() -> list[PlayerPartyMemberStruct]:
@@ -132,7 +276,7 @@ class Party:
         party = Party._party()
         if party is None:
             return []
-        return list(getattr(party, "players", None) or [])
+        return list(party.players or [])
 
     @staticmethod
     def GetHeroes() -> list[HeroPartyMemberStruct]:
@@ -141,7 +285,7 @@ class Party:
         party = Party._party()
         if party is None:
             return []
-        return list(getattr(party, "heroes", None) or [])
+        return list(party.heroes or [])
 
     @staticmethod
     def GetHenchmen() -> list[HenchmanPartyMemberStruct]:
@@ -150,7 +294,7 @@ class Party:
         party = Party._party()
         if party is None:
             return []
-        return list(getattr(party, "henchmen", None) or [])
+        return list(party.henchmen or [])
 
     @staticmethod
     def GetPlayerCount() -> int:
@@ -160,18 +304,28 @@ class Party:
 
     @staticmethod
     def GetPartySize() -> int:
-        """Return how many players are in the party."""
+        """Return the party size: players, heroes and henchmen together.
 
-        return len(Party.GetPlayers())
+        Native ``get_party_size`` is
+        ``players.size() + heroes.size() + henchmen.size()``, not the player
+        count.
+        """
+
+        return (
+            len(Party.GetPlayers())
+            + len(Party.GetHeroes())
+            + len(Party.GetHenchmen())
+        )
 
     @staticmethod
     def GetHeroCount() -> int:
-        """Return how many heroes are in the party."""
+        """Return how many heroes are in the party.
 
-        context = Party._context()
-        if context is None:
-            return 0
-        return int(context.hero_count)
+        Native ``get_party_hero_count`` is ``heroes.size()`` on the party info,
+        not the party context's ``hero_count`` field.
+        """
+
+        return len(Party.GetHeroes())
 
     @staticmethod
     def GetHenchmanCount() -> int:
@@ -235,19 +389,32 @@ class Party:
 
     @staticmethod
     def IsPartyLeader() -> bool:
-        """Return whether this client is the party leader."""
+        """Return whether this client is the party leader.
 
-        context = Party._context()
-        return bool(context is not None and context.is_party_leader)
+        Native ``get_is_leader`` takes the first *connected* player in the party
+        and returns whether its login number is this player's. That is a
+        different computation from ``PartyContext::IsPartyLeader()``, which
+        reads bit 7 of the context flag, and the binding uses the former.
+        """
+
+        from .player import Player
+
+        players = Party.GetPlayers()
+        if not players:
+            return False
+        player_number = Player.GetPlayerNumber()
+        for member in players:
+            if bool(member.is_connected):
+                return int(member.login_number) == player_number
+        return False
 
     @staticmethod
     def IsPartyLoaded() -> bool:
         """Return whether the party is loaded.
 
         Reforged checks the map gate, then ``Player.IsPlayerLoaded``, then the
-        native binding's ``is_party_loaded``. That last value is a binding
-        property with no readable context field, so this port checks the first
-        two and says so rather than reporting a silently weaker answer.
+        native ``is_party_loaded``, which is every player-party member reporting
+        ``connected()``. All three are now ported.
         """
 
         from .map import Map
@@ -255,7 +422,121 @@ class Party:
 
         if not Map.IsMapReady():
             return False
-        return Player.IsPlayerLoaded()
+        if not Player.IsPlayerLoaded():
+            return False
+        return Party._is_party_connected()
+
+    @staticmethod
+    def _is_party_connected() -> bool:
+        """Return whether every player-party member reports ``connected()``.
+
+        Native ``get_is_party_loaded``, which the binding exposes as the
+        ``is_party_loaded`` property that ``Party.IsPartyLoaded`` reads last. It
+        requires a readable player array; an unreadable or empty one is ``False``
+        rather than a vacuous ``True``.
+
+        Private because Reforged's Python surface has no member for it; the
+        public member is the composite :meth:`IsPartyLoaded`.
+        """
+
+        players = Party.GetPlayers()
+        if not players:
+            return False
+        return all(bool(member.is_connected) for member in players)
+
+    @staticmethod
+    def IsHardMode() -> bool:
+        """Return whether the party is in hard mode.
+
+        Native ``get_is_party_in_hard_mode`` is
+        ``PartyContext::InHardMode()``: bit 4 of the context flag.
+        """
+
+        context = Party._context()
+        return bool(context is not None and context.in_hard_mode)
+
+    @staticmethod
+    def IsNormalMode() -> bool:
+        """Return whether the party is in normal mode."""
+
+        return not Party.IsHardMode()
+
+    @staticmethod
+    def IsAllTicked() -> bool:
+        """Return whether every player-party member is ticked.
+
+        Native ``get_is_party_ticked``: all players ticked, with an unreadable or
+        empty player array reporting ``False``.
+        """
+
+        players = Party.GetPlayers()
+        if not players:
+            return False
+        return all(bool(member.is_ticked) for member in players)
+
+    @staticmethod
+    def IsPlayerTicked(login_number: int) -> bool:
+        """Return whether one player-party member is ticked.
+
+        Native ``get_is_player_ticked`` treats its argument as an **index** into
+        the player array, with ``0xFFFFFFFF`` meaning "this player", found by
+        login number. Reforged's Python names the parameter ``login_number`` and
+        passes it straight through, so the name and the meaning disagree in the
+        source; the native meaning is kept here.
+        """
+
+        from .player import Player
+
+        players = Party.GetPlayers()
+        if not players:
+            return False
+        if login_number == 0xFFFFFFFF:
+            player_number = Player.GetPlayerNumber()
+            for member in players:
+                if int(member.login_number) == player_number:
+                    return bool(member.is_ticked)
+            return False
+        if login_number >= len(players):
+            return False
+        return bool(players[login_number].is_ticked)
+
+    @staticmethod
+    def GetOthers() -> list[int]:
+        """Return the agent ids of allies, minions and pets in the party.
+
+        Two different things are called ``others`` in the source. The binding
+        owns a ``std::vector<uint32_t> others`` that ``PyParty::GetContext``
+        clears and never fills, so the binding's copy is always empty.
+        ``GW::Context::PartyInfo::others`` is the game's own array, described
+        there as "agent id of allies, minions, pets", and Reforged reads that
+        one in ``native_src/context/PartyContext.py:78``. The array is the one
+        that carries data, so this reads it.
+        """
+
+        party = Party._party()
+        if party is None:
+            return []
+        return [int(value) for value in (party.others or [])]
+
+    @staticmethod
+    def GetHeroIndex(hero_id: HeroType | int) -> int:
+        """Return a hero's one-based position in the party, or ``0``.
+
+        Native matches on both the hero id and the owning player, and returns
+        ``index + 1`` so that ``0`` stays free to mean "not found".
+        """
+
+        from .player import Player
+
+        heroes = Party.GetHeroes()
+        login_number = Player.GetLoginNumber()
+        for index, hero in enumerate(heroes):
+            if (
+                int(hero.hero_id) == int(hero_id)
+                and int(hero.owner_player_id) == login_number
+            ):
+                return index + 1
+        return 0
 
     @staticmethod
     def IsHardModeUnlocked() -> bool:
@@ -407,6 +688,21 @@ class Party:
             return 0
 
         @staticmethod
+        def GetPlayerNameByLoginNumber(login_number: int) -> str:
+            """Disabled: it needs the client's agent name decoder.
+
+            Native ``GetPlayerNameByLoginNumber`` is
+            ``agent::GetPlayerNameByLoginNumber``, which returns an encoded
+            name buffer. Decoding that buffer is a native call, so the external
+            reader cannot produce the name.
+            """
+
+            raise _disabled(
+                "Players.GetPlayerNameByLoginNumber",
+                "it needs the client's encoded-name decoder for arbitrary agents",
+            )
+
+        @staticmethod
         def InvitePlayer(agent_id_or_name: object) -> None:
             """Disabled: invites are dispatched inside the client."""
 
@@ -423,32 +719,335 @@ class Party:
             )
 
 
-class Heroes:
-    """Not ported yet: Reforged's ``Party.Heroes`` helpers and actions."""
+    class Heroes:
+        """Reforged's ``Party.Heroes`` namespace."""
 
+        @staticmethod
+        def GetHeroAgentIDByPartyPosition(hero_position: int) -> int:
+            """Return a hero's agent id by party position.
 
-class Henchmen:
-    """Not ported yet: Reforged's ``Party.Henchmen`` actions."""
+            Native ``get_hero_agent_id``: position ``0`` is the controlled
+            character, and ``1..n`` are one-based into the hero array.
+            """
 
+            if hero_position == 0:
+                from .player import Player
 
-class Pets:
-    """Not ported yet: Reforged's ``Party.Pets`` helpers."""
+                return Player.GetAgentID()
+            heroes = Party.GetHeroes()
+            index = hero_position - 1
+            if index < 0 or index >= len(heroes):
+                return 0
+            return int(heroes[index].agent_id)
+
+        @staticmethod
+        def GetHeroIDByAgentID(agent_id: int) -> int | None:
+            """Return a hero's id by agent id.
+
+            The source returns nothing when no hero matches, which is ``None``
+            here rather than a fabricated ``0``.
+            """
+
+            for hero in Party.GetHeroes():
+                if int(hero.agent_id) == agent_id:
+                    return int(hero.hero_id)
+            return None
+
+        @staticmethod
+        def GetHeroIDByPartyPosition(hero_position: int) -> int | None:
+            """Return a hero's id by party position, or ``None``."""
+
+            for index, hero in enumerate(Party.GetHeroes()):
+                if index == hero_position:
+                    return int(hero.hero_id)
+            return None
+
+        @staticmethod
+        def GetHeroIdByName(hero_name: str) -> int:
+            """Return a hero's id by display name.
+
+            ``Hero(name).GetID()`` resolves against the source's name table
+            (``party_bindings.cpp:173``). An unknown name is ``HeroType.None_``.
+            """
+
+            hero = Hero(hero_name)
+            return hero.GetID()
+
+        @staticmethod
+        def GetHeroNameById(hero_id: int) -> str:
+            """Return a hero's display name by id.
+
+            **Always empty.** ``Hero::GetName`` returns the ``hero_name`` member
+            (``party_bindings.cpp:232``), and neither ``Hero`` constructor ever
+            assigns it, so the source cannot produce a name here.
+            """
+
+            return Hero(hero_id).GetName()
+
+        @staticmethod
+        def GetNameByAgentID(agent_id: int) -> str:
+            """Return a hero's display name by agent id.
+
+            **Always empty**, for the same reason as
+            :meth:`GetHeroNameById`: the name walk succeeds but the name it asks
+            for is never populated.
+            """
+
+            for hero in Party.GetHeroes():
+                if int(hero.agent_id) == agent_id:
+                    return Hero(int(hero.hero_id)).GetName()
+            return ""
+
+        @staticmethod
+        def GetHeroPartyPositionByAgentID(agent_id: int) -> int:
+            """Return a hero's zero-based party position, or ``-1``."""
+
+            for index, hero in enumerate(Party.GetHeroes()):
+                if int(hero.agent_id) == agent_id:
+                    return index
+            return -1
+
+        @staticmethod
+        def GetTargetIDByAgentID(agent_id: int) -> int:
+            """Return a hero's locked target id, or ``0``.
+
+            The source first requires the agent to be a hero in the party, then
+            walks ``world->hero_flags`` for its ``locked_target_id``.
+            """
+
+            if Party.Heroes.GetHeroPartyPositionByAgentID(agent_id) < 0:
+                return 0
+            world = Party._world()
+            if world is None:
+                return 0
+            for hero_flag in world.hero_flags or []:
+                if int(hero_flag.agent_id) == agent_id:
+                    return int(hero_flag.locked_target_id)
+            return 0
+
+        @staticmethod
+        def IsHeroFlagged(hero_party_number: int) -> bool:
+            """Return whether a hero is flagged.
+
+            Native ``PyParty::IsHeroFlagged`` handles **only** position ``0``,
+            where it reports whether the all-flag is set; every other position
+            returns ``False``, because the source notes that per-hero flags are
+            not reachable through the context it has. That limitation is the
+            source's, not this port's.
+            """
+
+            if hero_party_number != 0:
+                return False
+            return Party.Heroes.IsAllFlagged()
+
+        @staticmethod
+        def IsAllFlagged() -> bool:
+            """Return whether the all-flag is set.
+
+            Native reads ``world->all_flag`` raw and treats a non-zero x or y as
+            flagged, so this reads the same three floats directly rather than
+            going through ``WorldContextStruct.all_flag``, which withholds
+            non-finite values.
+
+            **Finding:** Guild Wars stores an *unset* all-flag as
+            ``(+inf, +inf, 0.0)``, and ``inf != 0.0``, so Native's own
+            comparison reports ``True`` when nothing is flagged. This port
+            reproduces that; it is the source's behaviour, not a read error. The
+            flag position is the trustworthy signal - see :meth:`GetAllFlag`.
+            """
+
+            world = Party._world()
+            if world is None:
+                return False
+            x = float(world.all_flag_array[0])
+            y = float(world.all_flag_array[1])
+            return x != 0.0 or y != 0.0
+
+        @staticmethod
+        def GetAllFlag() -> tuple[float, float]:
+            """Return the all-flag position as ``(x, y)``.
+
+            An unset flag reads back as ``(+inf, +inf)``, the value the game
+            stores; ``(0.0, 0.0)`` is only returned when there is no world
+            context to read.
+            """
+
+            world = Party._world()
+            if world is None:
+                return (0.0, 0.0)
+            return (float(world.all_flag_array[0]), float(world.all_flag_array[1]))
+
+        # ── actions (disabled) ────────────────────────────────────────────
+
+        @staticmethod
+        def AddHero(hero_id: int) -> None:
+            """Disabled: adding a hero runs a client action."""
+
+            raise _disabled("Heroes.AddHero", "it asks the client to add a hero")
+
+        @staticmethod
+        def AddHeroByName(hero_name: str) -> None:
+            """Disabled: adding a hero runs a client action."""
+
+            raise _disabled("Heroes.AddHeroByName", "it asks the client to add a hero")
+
+        @staticmethod
+        def KickHero(hero_id: int) -> None:
+            """Disabled: kicking a hero runs a client action."""
+
+            raise _disabled("Heroes.KickHero", "it asks the client to kick a hero")
+
+        @staticmethod
+        def KickHeroByName(hero_name: str) -> None:
+            """Disabled: kicking a hero runs a client action."""
+
+            raise _disabled("Heroes.KickHeroByName", "it asks the client to kick a hero")
+
+        @staticmethod
+        def KickAllHeroes() -> None:
+            """Disabled: kicking heroes runs a client action."""
+
+            raise _disabled("Heroes.KickAllHeroes", "it asks the client to kick its heroes")
+
+        @staticmethod
+        def UseSkill(hero_agent_id: int, slot: int, target_id: int) -> None:
+            """Disabled: it drives a hero skill through the client's keybinds."""
+
+            raise _disabled(
+                "Heroes.UseSkill",
+                "it enqueues a client control action for a hero skill",
+            )
+
+        @staticmethod
+        def SetSkillAIEnabled(hero_agent_id: int, slot: int, enabled: bool) -> None:
+            """Disabled: it changes hero skill AI inside the client."""
+
+            raise _disabled(
+                "Heroes.SetSkillAIEnabled", "it changes hero skill AI in the client"
+            )
+
+        @staticmethod
+        def FlagHero(hero_id: int, x: float, y: float) -> None:
+            """Disabled: flagging runs a client action."""
+
+            raise _disabled("Heroes.FlagHero", "it asks the client to flag a hero")
+
+        @staticmethod
+        def FlagAllHeroes(x: float, y: float) -> None:
+            """Disabled: flagging runs a client action."""
+
+            raise _disabled("Heroes.FlagAllHeroes", "it asks the client to flag its heroes")
+
+        @staticmethod
+        def UnflagHero(hero_id: int) -> None:
+            """Disabled: unflagging runs a client action."""
+
+            raise _disabled("Heroes.UnflagHero", "it asks the client to unflag a hero")
+
+        @staticmethod
+        def UnflagAllHeroes() -> None:
+            """Disabled: unflagging runs a client action."""
+
+            raise _disabled("Heroes.UnflagAllHeroes", "it asks the client to unflag its heroes")
+
+        @staticmethod
+        def SetHeroBehavior(hero_agent_id: int, behavior: int) -> None:
+            """Disabled: it changes hero behavior inside the client."""
+
+            raise _disabled(
+                "Heroes.SetHeroBehavior", "it changes hero behavior in the client"
+            )
+
+    class Henchmen:
+        """Reforged's ``Party.Henchmen`` namespace."""
+
+        @staticmethod
+        def AddHenchman(henchman_id: int) -> None:
+            """Disabled: adding a henchman runs a client action."""
+
+            raise _disabled(
+                "Henchmen.AddHenchman", "it asks the client to add a henchman"
+            )
+
+        @staticmethod
+        def KickHenchman(henchman_id: int) -> None:
+            """Disabled: kicking a henchman runs a client action."""
+
+            raise _disabled(
+                "Henchmen.KickHenchman", "it asks the client to kick a henchman"
+            )
+
+    class Pets:
+        """Reforged's ``Party.Pets`` namespace."""
+
+        @staticmethod
+        def _pet_info(owner_id: int) -> PetInfoStruct | None:
+            """Return the world pet record for an owner, or ``None``.
+
+            Native ``get_pet_info`` walks ``world->pets`` for a matching
+            ``owner_agent_id``, and treats owner ``0`` as the controlled
+            character.
+            """
+
+            world = Party._world()
+            if world is None:
+                return None
+            if owner_id == 0:
+                from .player import Player
+
+                owner_id = Player.GetAgentID()
+            for pet in world.pets or []:
+                if int(pet.owner_agent_id) == owner_id:
+                    return pet
+            return None
+
+        @staticmethod
+        def GetPetInfo(owner_id: int) -> PetInfoStruct:
+            """Return the pet record for an owner.
+
+            Native returns the record by value with every field zeroed when the
+            owner has no pet, so an absent pet is a zeroed record rather than a
+            missing one.
+            """
+
+            return Party.Pets._pet_info(owner_id) or PetInfoStruct()
+
+        @staticmethod
+        def GetPetBehavior(owner_id: int) -> int:
+            """Return a pet's behavior, or ``0`` when it has none."""
+
+            return int(Party.Pets.GetPetInfo(owner_id).behavior)
+
+        @staticmethod
+        def GetPetID(owner_id: int) -> int:
+            """Return a pet's agent id, or ``0`` when it has none."""
+
+            return int(Party.Pets.GetPetInfo(owner_id).agent_id)
+
+        @staticmethod
+        def SetPetBehavior(behavior: int, lock_target_id: int) -> None:
+            """Disabled: it changes pet behavior inside the client."""
+
+            raise _disabled(
+                "Pets.SetPetBehavior", "it changes pet behavior in the client"
+            )
 
 
 # ── pending Reforged members, recorded rather than faked ──────────────────
 #
-# Blocked because the value is a native binding property with no context field:
-#   Players.GetPlayerNameByLoginNumber   (needs the agent name decoder)
-#   IsPartyLoaded's final check          (native is_party_loaded)
+# None. Every member of Reforged's ``Party``, ``Party.Players``,
+# ``Party.Heroes``, ``Party.Henchmen`` and ``Party.Pets`` is present: the ones
+# that read a context are implemented, and the actions raise
+# ``NotImplementedError`` naming the mechanism they would need.
 #
-# Pending state readers, all reachable in principle from the party context and
-# the agent array:
-#   IsHardMode, IsNormalMode, IsAllTicked, IsPlayerTicked, GetHeroIndex,
-#   IsPartyLeaderByName, GetOthers, IsHeroFlagged, IsAllFlagged, GetAllFlag,
-#   GetPetBehavior, GetPetInfo, GetPetID
+# Two members return a documented constant because the source's own
+# implementation can only produce that constant:
+#   Party.GetOthers            -- native PyParty::others is never populated
+#   Heroes.GetHeroNameById,
+#   Heroes.GetNameByAgentID    -- Hero::GetName reads a field no constructor sets
 #
-# Pending actions, all of which need in-process code as the disabled members do:
-#   Heroes (AddHero, KickHero, FlagHero, SetHeroBehavior, UseSkill, ...),
-#   Henchmen (AddHenchman, KickHenchman), Pets (SetPetBehavior)
+# Two members are limited by the source rather than by this port:
+#   Heroes.IsHeroFlagged       -- native handles position 0 only, False otherwise
+#   Players.IsPlayerTicked     -- native treats its argument as an array index
 #
 # ``Frame``-based helpers are deferred with the frame-tree work in ``py4gw/ui``.

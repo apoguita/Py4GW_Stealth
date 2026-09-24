@@ -14,7 +14,7 @@ from .scanner import (
 from .memory import ProcessMemoryReader
 from .perf_counter import MAX_SAMPLES, MetricSummary, PerfCounter
 from .map import Map
-from .party import Party
+from .party import HERO_NAME_TO_ID, Hero, HeroType, Party
 from .player import ChatChannel, Player, PlayerStatus
 from .context import (
     BlockingPropStruct,
@@ -339,6 +339,9 @@ __all__ = [
     "ChatChannel",
     "Map",
     "Party",
+    "Hero",
+    "HeroType",
+    "HERO_NAME_TO_ID",
     "InstanceInfo",
     "InstanceInfoStruct",
     "InstanceType",

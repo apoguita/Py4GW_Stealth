@@ -169,9 +169,10 @@ py4gw.connect(py4gw.win32.list_processes()[0])
 print(Player.GetName(), Player.GetLevel(), Player.GetXY())
 ```
 
-`Player` is the first ported wrapper: 70 Reforged members, 46 of them working
-externally and 24 refusing. See [`docs/PLAYER_PORT.md`](docs/PLAYER_PORT.md) for
-the per-member table.
+`Player` and `Party` are ported. `Player` has 70 Reforged members, 46 working
+externally and 24 refusing; `Party` is complete across all five of its
+namespaces, with every action refusing. See [`docs/PLAYER_PORT.md`](docs/PLAYER_PORT.md) and
+[`docs/PARTY_PORT.md`](docs/PARTY_PORT.md) for the per-member tables.
 
 ## Main UI
 
@@ -299,6 +300,7 @@ inside Guild Wars.
 - [Porting rules](docs/PORTING_RULES.md) — read before adding any API: this project ports Reforged and Native, it does not invent
 - [Readiness gate](docs/READINESS_GATE.md) — the ported `Map` gate that decides when map data may be read
 - [Player port](docs/PLAYER_PORT.md) — the ported Reforged `Player` class, its adaptations, and its disabled members
+- [Party port](docs/PARTY_PORT.md) — the complete `Party` surface and the four members that can only return a constant
 - [Context inventory](docs/CONTEXT_INVENTORY.md) — native/Reforged context mapping and Stealth status
 - [Parity certification checklist](docs/PARITY_CERTIFICATION_CHECKLIST.md) — the one-context-at-a-time binary parity gate
 - [Context parity audit](docs/CONTEXT_PARITY_AUDIT.md) — source-backed fields, helpers, and explicit gaps for every migrated reader
