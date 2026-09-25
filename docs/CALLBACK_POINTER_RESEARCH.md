@@ -4,10 +4,12 @@
 > this document — acquiring `WorldMapContext` and `MissionMapContext` without a
 > hook — was resolved read-only, and both routes are live-verified open and
 > closed. See [`UI_FRAME_TREE.md`](UI_FRAME_TREE.md). The payload contract below
-> is retained for the work that still needs target-side code: the game-thread
-> bridge, decoded `ChatBuffer` history, and any future call into the client.
-> Nothing described as unimplemented here has been implemented, and no bytes
-> have been written to any client.
+> is retained for the work that still needs target-side code. That code has since
+> been built elsewhere and for different targets: `py4gw/game_thread/` installs
+> two entry hooks, an emitted dispatcher and an observer, and `py4gw.connect()`
+> installs it by default. **The WorldMap callback detour this document specifies is
+> still not built**, because the frame-array route reaches the same pointer without
+> one; the mechanism it was waiting on now exists.
 
 ## Direction
 
@@ -24,8 +26,9 @@ new source when the Native implementation already identifies one.
 
 Some context pointers are published only after the Native project receives a
 Guild Wars UI callback. The current Stealth readers for `MissionMapContext`
-and `WorldMapContext` are ready for a supplied address, but their callback-
-published addresses are not available to the external reader. Reforged Native
+and `WorldMapContext` are ready for a supplied address, and that address is now
+obtained read-only through the client's UI frame array — the same value the
+callback would publish. Reforged Native
 identifies the callback route and pointer-lifetime behavior; the selected
 Stealth implementation is stated below.
 
@@ -37,13 +40,14 @@ resolver addresses, and each frame stores its registered context pointer for
 the lifetime of the frame. Reading that slot reproduces the value a callback
 dereferences, with no hook, no payload, and no write.
 
-`py4gw/ui/` implements this route, and three contexts now acquire their root
+`py4gw/ui/` implements this route, and three contexts acquire their root
 through it: `WorldMapContext` (frame-id offset `0x0`), `MissionMapContext`
 (`0x14`), and `SalvageSessionInfo` (`0x4`). Evidence, layout, and the read-only
-test procedure are in [`UI_FRAME_TREE.md`](UI_FRAME_TREE.md). Live resolution
-and array structure are confirmed for all three on PID 29520; the callback
-handoff itself is `inferred` until an open/close test confirms that a frame
-publishes the context, with the frame-id cross-check as the acceptance test.
+test procedure are in [`UI_FRAME_TREE.md`](UI_FRAME_TREE.md). Live resolution,
+array structure and the open/close handoff are **verified** for the two map
+contexts on PID 29520 — the publishing frame, the frame-id cross-check, and the
+cleared state after close were all read back. `SalvageSessionInfo` is resolved
+but its open/close handoff is untested.
 
 This does not retire the payload plan below. It removes the map and salvage
 surfaces as features that forced the mechanism to exist before it was needed,
@@ -52,12 +56,13 @@ code: game-thread operations, the `GwDxContext` `EndScene`/`Reset` detour, and
 any future context whose owner is not readable.
 
 Architecture decision for those remaining cases: Stealth's external controller
-will install its own small payload/patch to capture the source-backed callback
+installs its own small payload/patch to capture the source-backed callback
 and publish the pointer. A conventional DLL injector and a Reforged runtime are
 not part of this design. The payload modifies `Gw.exe` and is injection; “no
 DLL” does not mean the target is unmodified or that the payload is
-undetectable. No hook, payload, patch, remote allocation, or write has been
-implemented yet.
+undetectable. That mechanism is now built and live-verified in
+`py4gw/game_thread/` for its own two targets; the WorldMap callback detour below
+is not among them.
 
 ## Source evidence
 
@@ -231,13 +236,13 @@ restoration procedure, and failure response are written down.
 
 ### Work plan and resume point
 
-Status: **Architecture selected; callback contract and read-only live
-preflight are complete; mailbox-format codec and its offline tests pass. A
-read-only frame-array route to the same pointer is implemented and
-offline-tested; it is not yet confirmed against a live client. The callback
-hook itself is not implemented.** Continue with the first unchecked
-implementation item. Live map testing remains a later, user-present stage
-after the implementation and rollback path are ready.
+Status, in two parts. **The motivating case is closed:** the frame-array route to
+the same pointer is implemented and live-verified open and closed, so neither map
+context needs a callback. **The WorldMap callback hook itself is still not
+implemented**, and the mechanism it would use now exists in `py4gw/game_thread/`.
+The callback contract is complete and the mailbox-format codec and its offline tests
+pass. Continue with the first unchecked implementation item if a surface still needs
+a callback; live map testing is no longer required for the two map contexts.
 
 - [x] Confirm the Native callback source and its pointer behavior: call the
   original callback, read through `message->wParam`, and clear the saved
@@ -276,24 +281,24 @@ after the implementation and rollback path are ready.
   offline tests, and `tests/preflight_frame_context_route.py`. See
   [`UI_FRAME_TREE.md`](UI_FRAME_TREE.md). This changes nothing in the client.
 
-**The selected design contract and read-only preflight are complete; the
-callback behavior is untested.** The mailbox format checks pass. The
-read-only frame-array route is implemented and offline-verified but **not yet
-confirmed on a live client**; run
-`python tests/preflight_frame_context_route.py` with the map open before
-deciding whether the payload is still needed for the world map. If the route
-is confirmed, the next implementation step is `MissionMapContext` (frame-id
-offset `0x14`); if it is not, the next step remains the WorldMap callback
-payload and its reviewed rollback. Before any live target test, repeat the
+**The selected design contract is complete; the callback behavior is untested.**
+The mailbox format checks pass. The
+read-only frame-array route is implemented and **confirmed on a live client** for
+both map contexts, with the surface open and closed, so the payload is not needed
+for them. `SalvageSessionInfo` resolves through the same route but its open/close
+handoff has not been tested. If a later surface does need a callback, the next
+implementation step is that detour and its reviewed rollback. Before any live
+target test, repeat the
 read-only preflight against the selected client. Do not build a mock Guild
-Wars callback target. The real-client test must be limited to WorldMap
-capture, pointer clear, and clean detach. The user will perform the map
+Wars callback target. A live callback test must be limited to the capture it
+installs, the pointer clear, and clean detach. The user performs the surface
 open/close actions while present; reconnect/owner-loss recovery is later work.
 
 ### Real-client test procedure
 
-This is the planned interactive test. It is not ready to run until the
-WorldMap detour and rollback path exist and have passed code review.
+This is the planned interactive test for the callback detour. It is not needed for
+the two map contexts, which are reached read-only, and it is not ready to run until
+the WorldMap detour and rollback path exist and have passed code review.
 
 1. The user starts one Guild Wars client and identifies the PID to use. The
    controller confirms that it is the expected x86 client and records the
@@ -332,25 +337,27 @@ for the user to make the WorldMap appear, report the read result, then ask the
 user to close it and wait for confirmation. Do not run those stages as an
 unattended test, and do not ask the user to manipulate the map until the
 install/detach path is implemented, reviewed, and ready to report its status
-clearly. At present that path is not implemented, so no map manipulation is
-needed yet.
+clearly. That path is not implemented, so no map manipulation is needed yet.
 
 ### Later work (not started)
 
-1. Implement and review the bounded WorldMap capture and rollback path. No
-   live patch is part of the current read-only preflight.
+1. Implement and review the bounded WorldMap capture and rollback path if a
+   surface needs a callback; no read-only route covers that case yet. Live patching
+   itself is no longer hypothetical — `py4gw/game_thread/` installs two entry
+   hooks and restores them, verified live.
 2. When the implementation is ready, run the interactive test above with the
    user present; do not automate the map open/close actions or run this stage
    unattended.
 3. If detach cannot be verified, do not free target code/data; use the
    documented recovery procedure and stop further testing.
-4. Test reconnect/owner-loss handling, then repeat for `MissionMapContext`,
-   only after the basic WorldMap path passes.
+4. Test reconnect/owner-loss handling for the new hook, then repeat for
+   any further callback-owned context.
 
 ## Evidence boundaries
 
 - Reforged Native establishes source behavior, not that Stealth has reproduced
-  it or that a live callback can already be received externally.
+  it; the frame-array route to the map contexts is Stealth's own boundary
+  difference, not a reproduction of the source's callback.
 - Reforged Python documents how the in-process facade consumes the published
   pointer; it is not a runtime dependency for Stealth.
 - GwAu3 and MemLib are comparative references only. Their code does not define

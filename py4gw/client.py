@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import struct
 from typing import Any
 
 from .context import (
@@ -76,6 +77,26 @@ from .perf_counter import PerfCounter
 from .scanner import PatternCatalog, RemoteScanner
 from .ui import FrameArray, FrameTree
 from .win32 import Win32
+from .win32.write_access import WriteAccess
+from .game_thread.bridge import Bridge
+from .game_thread.callbacks import Callbacks, EventListener
+from .game_thread.patcher import Patcher
+from .game_thread.shared_block import WATCH_DEPTH, WATCH_SIZE
+
+#: The two client functions this library hooks when it connects. The first is the
+#: game thread's own per-frame function, which is where our work runs; the second
+#: is the message sender, which is what lets a handler hear what the client did.
+_GAME_THREAD_HOOK = "game_thread.leave_game_thread_func"
+_GAME_THREAD_OBSERVE = "ui.send_ui_message_func"
+
+#: The whole instructions each entry patch replaces. The second stops before a
+#: relative branch: the trampoline replays these bytes at another address, and a
+#: branch replayed elsewhere goes somewhere else.
+_GAME_THREAD_HOOK_BYTES = bytes.fromhex("55 8B EC 81 EC 20 02 00 00")
+_GAME_THREAD_OBSERVE_BYTES = bytes.fromhex("55 8B EC 8B 45 08 83 F8 56")
+
+#: ``jmp rel32``, the first byte of an entry patch.
+_JMP_REL32 = 0xE9
 
 
 
@@ -89,17 +110,46 @@ class ConnectedClient:
         process: dict[str, Any] | int,
         win32: Win32 | None = None,
         perf_counter: PerfCounter | None = None,
+        game_thread: bool = True,
     ) -> None:
         """Connect to a discovered client and optionally time setup stages.
 
         ``perf_counter`` is only a diagnostic sink; it does not change the
         read-only connection behavior.
+
+        ``game_thread`` is on by default, which makes connecting a **write**: this
+        library hooks two of the client's functions, starts a listener thread that
+        reads what they report, and hands the hooks back on :meth:`close`. It is
+        off for a connection that only reads — a client-list refresh, a probe —
+        where patching a client per row would be absurd.
         """
 
         self._win32 = win32 or Win32()
         self._process = self._resolve_process(process)
         self._pid = int(self._process["pid"])
+        self._game_thread_enabled = game_thread
+        self._bridge: Bridge | None = None
+        self._callbacks: Callbacks | None = None
+        self._listener: EventListener | None = None
+        self._access: WriteAccess | None = None
+        self._suspended_threads = 0
+
+        # Elevation is asserted here, once, rather than left to surface later as a
+        # bare "Windows error 5" from the first operation that needs it. The pid is
+        # resolved first so the failure can name the process it refused.
+        if not self._win32.is_elevated():
+            raise RuntimeError(
+                f"pid {self._pid}: this controller is not elevated, and connecting "
+                "requires it. Windows gives an unelevated shell a filtered token "
+                "and denies it PROCESS_VM_WRITE, PROCESS_VM_OPERATION, "
+                "PROCESS_CREATE_THREAD and PROCESS_SUSPEND_RESUME with error 5. "
+                "Those are every right this library needs beyond reading. Relaunch "
+                "the shell as administrator and connect again."
+            )
+
         module = self._win32.get_main_module(self._pid)
+        self._module_base = int(module["base_address"])
+        self._module_size = int(module["size"])
         self._reader = ProcessMemoryReader(self._win32, self._pid)
         try:
             self._scanner = RemoteScanner(
@@ -109,6 +159,7 @@ class ConnectedClient:
             )
             self._scanner.initialize()
             patterns = PatternCatalog.from_directory("offsets")
+            self._patterns = patterns
             self._game_context = GameContext(
                 self._reader,
                 self._scanner,
@@ -233,6 +284,214 @@ class ConnectedClient:
         except Exception:
             self._reader.close()
             raise
+
+        # Last, so a failure in the read-only setup never leaves the client
+        # patched, and so the connection that reads contexts exists first.
+        if self._game_thread_enabled:
+            self._install_game_thread()
+
+    def _install_game_thread(self) -> None:
+        """Hook the game thread and the message sender, and start listening.
+
+        The two targets are resolved from the catalog and their entry bytes
+        checked *before* anything is written, so a client that changed underneath
+        us is refused rather than patched at the wrong place. A patch left by a
+        controller that died is repaired first, because refusing there would make
+        the only recovery a client restart.
+        """
+
+        hook_target = self._resolve(_GAME_THREAD_HOOK)
+        observe_target = self._resolve(_GAME_THREAD_OBSERVE)
+
+        access = WriteAccess(self._pid)
+        try:
+            self._suspended_threads = self._count_suspended_threads(access)
+            for name, address, expected in (
+                (_GAME_THREAD_HOOK, hook_target, _GAME_THREAD_HOOK_BYTES),
+                (_GAME_THREAD_OBSERVE, observe_target, _GAME_THREAD_OBSERVE_BYTES),
+            ):
+                self._prepare_target(access, name, address, expected)
+
+            bridge = Bridge(access, self._pid)
+            bridge.install(
+                hook_target,
+                _GAME_THREAD_HOOK_BYTES,
+                calls={},
+                module_base=self._module_base,
+                module_size=self._module_size,
+                watch=(),
+                observing=(observe_target, _GAME_THREAD_OBSERVE_BYTES),
+            )
+        except BaseException:
+            access.close()
+            raise
+
+        self._access = access
+        self._bridge = bridge
+        self._callbacks = Callbacks(bridge)
+        self._listener = EventListener(bridge, self._callbacks)
+        self._listener.start()
+
+    def _resolve(self, name: str) -> int:
+        """Resolve one address the way every other read in this project does."""
+
+        result = self._patterns.resolve(name, self._scanner)
+        if not result.ok:
+            raise RuntimeError(
+                f"pid {self._pid}: {name} did not resolve: {result.message}"
+            )
+        return int(result.value)
+
+    def _prepare_target(
+        self, access: WriteAccess, name: str, address: int, expected: bytes
+    ) -> None:
+        """Check a target's entry bytes, repairing this library's own stale patch.
+
+        The patch is a relative jump; if the bytes are one whose destination is
+        outside the client's module, it is ours from a controller that died, and
+        the known original bytes go back. Anything else is refused: this does not
+        guess at another tool's patch.
+        """
+
+        current = access.read(address, len(expected))
+        if current == expected:
+            return
+
+        if current[0] == _JMP_REL32:
+            destination = (
+                address + 5 + struct.unpack_from("<i", current, 1)[0]
+            ) & 0xFFFFFFFF
+            if not (
+                self._module_base <= destination < self._module_base + self._module_size
+            ):
+                Patcher(access, self._pid).patch(address, current, expected)
+                return
+
+        raise RuntimeError(
+            f"pid {self._pid}: {name} at 0x{address:08X} starts with "
+            f"{current.hex(' ')}, not {expected.hex(' ')}, and that is not a jump "
+            "out of the module. Refusing to patch it."
+        )
+
+    def _count_suspended_threads(self, access: WriteAccess) -> int:
+        """Count client threads that are suspended, and leave every count as it was.
+
+        ``SuspendThread`` returns the count *before* the call, so suspending and
+        resuming in a pair restores the count exactly while reporting whether a
+        dead controller left the thread suspended. Nothing is resumed here: a
+        thread can be suspended for the client's own reasons, and guessing wrong
+        would be worse than reporting it.
+        """
+
+        suspended = 0
+        for thread_id in access.list_thread_ids():
+            handle = access.open_thread(thread_id)
+            try:
+                previous = access.suspend_thread(handle)
+                access.resume_thread(handle)
+            finally:
+                access.close_thread(handle)
+            if previous > 0:
+                suspended += 1
+        return suspended
+
+    def resume_suspended_threads(self) -> int:
+        """Resume the client's suspended threads once each, and say how many.
+
+        For the one case a dead controller can leave behind: killed inside the
+        window where the installer had the client's threads suspended, so its
+        ``finally`` never resumed them and the client is frozen.
+        """
+
+        if self._access is None:
+            raise RuntimeError("this connection is not managing the game thread.")
+
+        resumed = 0
+        for thread_id in self._access.list_thread_ids():
+            handle = self._access.open_thread(thread_id)
+            try:
+                if self._access.suspend_thread(handle) > 0:
+                    self._access.resume_thread(handle)
+                    resumed += 1
+                self._access.resume_thread(handle)
+            finally:
+                self._access.close_thread(handle)
+        return resumed
+
+    @property
+    def suspended_threads(self) -> int:
+        """Return how many client threads were suspended when this connected."""
+
+        return self._suspended_threads
+
+    @property
+    def callbacks(self) -> Callbacks:
+        """Return the handler registry, so a kind can be listened for."""
+
+        if self._callbacks is None:
+            raise RuntimeError(
+                "this connection was opened without the game thread: pass "
+                "game_thread=True to connect for callbacks."
+            )
+        return self._callbacks
+
+    @property
+    def bridge(self) -> Bridge:
+        """Return the bridge: the queue, the hooks and everything they placed."""
+
+        if self._bridge is None:
+            raise RuntimeError(
+                "this connection was opened without the game thread: pass "
+                "game_thread=True to connect for the bridge."
+            )
+        return self._bridge
+
+    @property
+    def access(self) -> WriteAccess:
+        """Return the transport this connection writes through, if it has one."""
+
+        if self._access is None:
+            raise RuntimeError(
+                "this connection was opened without the game thread: pass "
+                "game_thread=True to connect to hook the client."
+            )
+        return self._access
+
+    def watch(self, message: int) -> int:
+        """Ask the observer to record one client message id, and return its slot.
+
+        The watch list lives in the client and the observer re-reads it on every
+        call, so this takes effect immediately and needs no reinstall. A slot
+        already holding the message is reused; when the list is full this refuses
+        rather than dropping a watch the caller asked for.
+        """
+
+        bridge = self.bridge
+        for slot in range(WATCH_DEPTH):
+            held = struct.unpack(
+                "<I", self.access.read(bridge.watch_address + slot * WATCH_SIZE, 4)
+            )[0]
+            if held == message:
+                return slot
+        for slot in range(WATCH_DEPTH):
+            address = bridge.watch_address + slot * WATCH_SIZE
+            if struct.unpack("<I", self.access.read(address, 4))[0] == 0:
+                self.access.write(address, struct.pack("<I", message))
+                return slot
+        raise RuntimeError(
+            f"the watch list holds {WATCH_DEPTH} message ids and is full."
+        )
+
+    def unwatch(self, message: int) -> None:
+        """Stop recording one message id, or refuse because it was not watched."""
+
+        bridge = self.bridge
+        for slot in range(WATCH_DEPTH):
+            address = bridge.watch_address + slot * WATCH_SIZE
+            if struct.unpack("<I", self.access.read(address, 4))[0] == message:
+                self.access.write(address, bytes(WATCH_SIZE))
+                return
+        raise ValueError(f"pid {self._pid}: message {message:#x} is not watched.")
 
     @property
     def pid(self) -> int:
@@ -700,10 +959,39 @@ class ConnectedClient:
         return self._context.is_logged_in
 
     def close(self) -> None:
-        """Close the read-only process handle owned by this connection."""
+        """Take the hooks out, release what they placed, and close the handle.
 
-        MapContext._clear_pathing_cache_for_pid(self._pid)
-        self._reader.close()
+        The order matters. The listener stops first because it is the only reader
+        of the event region and would otherwise read a block that is being
+        released; then both entry patches go back, then the allocations are freed,
+        and only then is the process handle closed. A handler that raised is
+        re-raised at the end, after the client has been put back, so a failure in
+        the caller's own code cannot leave the client patched.
+        """
+
+        failure: BaseException | None = None
+
+        listener, self._listener = self._listener, None
+        if listener is not None:
+            try:
+                listener.stop()
+            except BaseException as error:
+                failure = error
+
+        bridge, self._bridge = self._bridge, None
+        access, self._access = self._access, None
+        self._callbacks = None
+        try:
+            if bridge is not None and bridge.installed:
+                bridge.remove(free_allocations=True)
+        finally:
+            if access is not None:
+                access.close()
+            MapContext._clear_pathing_cache_for_pid(self._pid)
+            self._reader.close()
+
+        if failure is not None:
+            raise failure
 
     def __enter__(self) -> ConnectedClient:
         return self
@@ -727,12 +1015,18 @@ class ConnectedClient:
 _current_client: ConnectedClient | None = None
 
 
-def connect(process: dict[str, Any] | int) -> ConnectedClient:
-    """Select one Guild Wars client and make it the current connection."""
+def connect(process: dict[str, Any] | int, game_thread: bool = True) -> ConnectedClient:
+    """Select one Guild Wars client and make it the current connection.
+
+    ``game_thread`` defaults to on, which makes this a write: the client's game
+    thread and message sender are hooked, a listener thread starts, and both are
+    given back by :func:`disconnect`. Pass ``False`` for a connection that only
+    reads.
+    """
 
     global _current_client
     disconnect()
-    _current_client = ConnectedClient(process)
+    _current_client = ConnectedClient(process, game_thread=game_thread)
     return _current_client
 
 

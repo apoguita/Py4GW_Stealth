@@ -44,8 +44,8 @@ those structures together, so the lists are not expected to match one for
 one.
 
 The native and Reforged projects are the source contract for Stealth. A source
-entry is not yet a live-client result. Declaration parity and live external
-availability are recorded separately; an externally unavailable member must
+entry is not yet a live-client result. Declaration parity and live
+availability are recorded separately; a member whose mechanism is not ported must
 remain declared and be marked with its required mechanism.
 
 ## Native C++ context headers
@@ -206,7 +206,7 @@ keeps in another module.
 - `ConnectedClient`: selected-process ownership and connection state.
 - `context.CharContext`: external `CharContextStruct`, pointer-chain read,
   character-name decoding, `GWArray` views, and the declared source facade
-  methods; callback registration remains externally unavailable.
+  methods; callback registration is not ported.
 - `context.GameContext`: external root context, cached base-pointer resolver,
   and additive aliases for the native C++ field spellings.
 - `context.PreGameContext`: optional selection-menu context and login-character
@@ -295,8 +295,8 @@ The migration sequence so far is: `CharContext`, `GameContext`,
 the verified read-only `WorldContext`, `TradeContext`, `ItemContext` root,
 `AccountContext`, and `GadgetContext`, followed by the `MapContext` root and
 bounded spawn arrays. The source data ports for callback-owned
-`MissionMapContext` and `WorldMapContext` are also complete; their pointer
-publication remains unavailable externally. The live GuildContext check resolved
+`MissionMapContext` and `WorldMapContext` are also complete, and both now acquire
+their root through the client's UI frame array, live-verified open and closed. The live GuildContext check resolved
 address `0x00AD42A0` and
 read player `Fezzik The Untamed`, 243 guild records, 42 roster entries, and 20
 history entries on the verified client build.
@@ -306,9 +306,9 @@ read all 9,500 of its 9,500 advertised records. These addresses and counts are
 observations for that running client, not fixed values.
 `MissionMapContext` and `WorldMapContext` have source-matched structures and
 address-supplied readers, including their source data properties. Their ports
-are complete at that boundary. Live verification is unavailable because the
-source callback/shared-memory path publishes their root addresses and no such
-address is currently available externally.
+are complete at that boundary, and the pointer side is no longer missing: the
+frame-array route reaches the same addresses the source's callback publishes,
+without a hook, and both were verified live with the surface open and closed.
 
 ### Remaining or incomplete in Stealth
 
@@ -323,7 +323,7 @@ existing readers are listed in
 Each context reader still needs:
 
 1. a documented root-address path: a resolver when known, or a supplied
-   address when callback acquisition is intentionally unresolved;
+   address when the source's own acquisition path is not ported;
 2. a fixed-width external structure definition;
 3. explicit pointer and array follow rules;
 4. a public context API and connection-lifetime behavior; and
@@ -377,7 +377,7 @@ until the smaller roots are available:
   not treated as an active read-data blocker; offline tests do not validate
   that the unused source interpretation matches the client. Source-named facade/cache helpers
   are live-tested and caches are PID-scoped. Automatic callback registration
-  remains unavailable; see
+  is not ported; see
   [`PATHING_MIGRATION_PLAN.md`](PATHING_MIGRATION_PLAN.md).
 - `WorldContext` has a verified read-only slice; its native injected
   pointer-lifecycle helpers remain intentionally out of scope.
@@ -397,9 +397,9 @@ Stealth-owned access to these callback-published pointers is documented in
 
 Resolver-backed moderate readers are implemented. The callback-owned map
 contexts now have source-matched address-based readers. Their data ports are
-done, but obtaining the callback-published root addresses through a
-Stealth-owned route remains unresolved; this is active research, not a reason
-to look for an unrelated signature. See
+done, and the root addresses are obtained through the client's own UI frame
+array rather than the source's callback; both are live-verified open and closed.
+The hook-based route was not built, and is not needed for these two. See
 [`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md).
 
 ## Migration checklist
@@ -418,31 +418,31 @@ parity is recorded in
 - [~] `CharContext` external read-only slice (lifecycle API remains)
 - [~] `GameContext` / base context pointer surface (verified root slice; no total context parity)
 - [~] `PreGameContext` declaration parity complete; external read path verified;
-  callback registration remains externally unavailable
+  callback registration is not ported
 - [~] `Cinematic` declaration parity complete; external pointer/read path
-  verified; callback registration remains externally unavailable
+  verified; callback registration is not ported
 - [~] `GameplayContext` declaration parity complete; external pointer/read path
-  verified; callback registration remains externally unavailable
+  verified; callback registration is not ported
 - [~] `ServerRegion` declaration parity complete; external value-address/read
-  path verified; callback registration remains externally unavailable
+  path verified; callback registration is not ported
 - [~] `InstanceInfo` declaration parity complete; external root/nested read
-  path verified; callback registration remains externally unavailable
+  path verified; callback registration is not ported
 - [~] `TextParser` declaration parity complete; external root/slot/cache read
-  path verified; callback and string-table trigger remain externally unavailable
+  path verified; the callback and the string-table trigger are not ported
 - [~] `AvailableCharacterArray` declaration parity complete; external roster
-  resolver/read path verified; callback registration remains unavailable
+  resolver/read path verified; callback registration is not ported
 - [~] `PartyContext` declaration parity complete; external root, member/search,
-  list, and helper reads verified; callback registration remains unavailable
+  list, and helper reads verified; callback registration is not ported
 - [~] `GuildContext` declaration parity complete; external root, guild,
   alliance, history, roster, and helper reads verified; callback registration
-  remains unavailable
+  is not ported
 - [~] `AccAgentContext` declaration parity complete; root, summary, movement,
-  and source-array reads verified; callback registration unavailable; the
+  and source-array reads verified; callback registration not ported; the
   separate native `AgentInfoArray` pointer source is unresolved
-- [~] `Camera` declaration parity complete; read facade verified; game-thread
-  actions unavailable to the external reader
+- [~] `Camera` declaration parity complete; read facade verified; the source's
+  game-thread actions are declared and refuse
 - [~] `FriendList` declaration parity complete; read-only records verified;
-  game-thread mutations declared but unavailable externally
+  game-thread mutations are declared and refuse
 - [~] `ChatBuffer` declaration parity complete; raw encoded ring verified;
   decoded `PyPlayer.GetChatHistory` is a separate API
 - [~] `AccountContext` native root/nested structs match source names/order and
@@ -484,10 +484,11 @@ parity is recorded in
 - [x] `WorldMapContext`: complete source structure and supplied-address root
   reader are ported and offline-tested.
 
-Only obtaining and live-verifying their callback-published root addresses
-remains unresolved; this does not leave their context data ports incomplete.
-The unavailable callback registration is an external runtime limitation, not
-a reason to omit the context structures or readers.
+Both roots are obtained and live-verified through the client's UI frame array,
+which publishes the same addresses the source's callback does, so their context
+data ports and their pointer watch both stand.
+The unbuilt callback registration is not a reason to omit the context structures
+or readers.
 
 `GwDxContext` is a native render-state record and is not part of the required
 in-game context migration.
@@ -500,7 +501,7 @@ No pending moderate context is currently selected.
 
 - [~] `MapContext` root, pathing arrays/links, props, snapshots, travel
   portals, facade helpers, and PID-scoped caches are implemented; automatic
-  callback registration remains unavailable. See
+  callback registration is not ported. See
   [`PATHING_MIGRATION_PLAN.md`](PATHING_MIGRATION_PLAN.md).
 - [~] `AgentContext` / `AgentArray`: native root is already covered by
   `AccAgentContext`; the global array and external record reader are live
@@ -508,8 +509,8 @@ No pending moderate context is currently selected.
   dataclasses, snapshot conversions, and `AgentArrayStruct` helper names are
   now ported. Its context gate reads the corresponding external context
   readers; its agent cache uses remote reads rather than Reforged's in-process
-  pointers. Declaration parity is certified; callback registration remains an
-  external-runtime limitation. The wider `Agent.py` helpers are a separate,
+  pointers. Declaration parity is certified; callback registration is not
+  ported. The wider `Agent.py` helpers are a separate,
   unaudited surface. See the certification record for exact scope.
 
 `AgentArray.read()` has a live-verified bounded external view: pointer-table

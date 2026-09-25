@@ -53,8 +53,8 @@ The classification each wrapper method needs is:
 | --- | --- | --- |
 | `context` | a structure Stealth already reads | implementable now |
 | `computed` | pure calculation over other values | implementable now |
-| `capture` | in-process cache filled by a hook, callback, or async reply | **needs target-side machinery even to read** |
-| `action` | a game call, UI click, packet, queue, or memory write | Phase 5, not implemented |
+| `capture` | in-process cache filled by a hook, callback, or async reply | **needs target-side machinery** — the hook and callback layer exists in `py4gw/game_thread/`, but no wrapper member is wired to it |
+| `action` | a game call, UI click, packet, queue, or memory write | **mechanism partly exists** (a game-thread call and a UI message); no wrapper member is ported onto it |
 
 `capture` is the dangerous one, because it is invisible in the Python layer: the
 wrapper looks read-only and the cost only appears when the native binding is
@@ -107,16 +107,18 @@ Native binding usage across the library: `PyCallback` 70, `PySystem` 70,
 ## How actions actually reach the game
 
 Traced from the Python wrappers into the bindings. **Five mechanisms exist, and
-all five require code executing inside `Gw.exe`.** None is reachable from an
-external read-only process.
+all five require code executing inside `Gw.exe`.** When this was written none was
+reachable from Stealth; the position has since changed for the first and third,
+because `py4gw/game_thread/` can now run code inside the client. The table records
+what each mechanism needs and what Stealth has of it today.
 
-| Mechanism | Example | Path | Portable? |
+| Mechanism | Example | Path | Mechanically reachable? |
 | --- | --- | --- | --- |
-| **A** game function via a game-thread queue | `Player.Move`, `DepositFaction`, `SkipCinematic` | `NativeFunction` (pattern-scanned address) -> `PyGameThread.enqueue` -> `ctypes` call | **no** |
-| **B** native binding call | `SkillBar.UseSkill`, `Inventory.SalvageItem`, `Trading.BuyItem` | `PySkillbar.Skillbar().UseSkill(...)`, `PyInventory.PyInventory().Salvage(...)` | **no** |
-| **C** UI-message dispatch | chat, travel, target, dialog | `UIManager.SendUIMessage` -> `PyUIManager` -> game's own message handler, which emits the CtoS packet | **no** |
-| **D** frame click | `Frame.click()`, `SalvageOptionsWindow.SelectOption` | `PyUIManager.UIManager.button_click(frame_id)` | **no** |
-| **E** memory write | guild-hall key copy, `Frame.set_text` | writes into the game struct, or a native binding that writes it | **no** |
+| **A** game function via a game-thread queue | `Player.Move`, `DepositFaction`, `SkipCinematic` | `NativeFunction` (pattern-scanned address) -> `PyGameThread.enqueue` -> `ctypes` call | **yes, mechanism exists** — the emitted dispatcher calls a registered game function on the client's own thread, live-verified with `agent.change_target_func`. No wrapper member is ported onto it yet |
+| **B** native binding call | `SkillBar.UseSkill`, `Inventory.SalvageItem`, `Trading.BuyItem` | `PySkillbar.Skillbar().UseSkill(...)`, `PyInventory.PyInventory().Salvage(...)` | **no** — the binding is Reforged's own DLL code, not a game function we can resolve |
+| **C** UI-message dispatch | chat, travel, target, dialog | `UIManager.SendUIMessage` -> `PyUIManager` -> game's own message handler, which emits the CtoS packet | **yes, mechanism exists** — the `UI_MESSAGE` call form reaches the client's own `send_ui_message_func`, live-verified |
+| **D** frame click | `Frame.click()`, `SalvageOptionsWindow.SelectOption` | `PyUIManager.UIManager.button_click(frame_id)` | **not established** — it is a call into the engine's frame/mouse handler, so the same call mechanism would apply, but its address and ABI have not been resolved or verified |
+| **E** memory write | guild-hall key copy, `Frame.set_text` | writes into the game struct, or a native binding that writes it | **transport exists, nothing ported** — `py4gw/win32/write_access.py` writes; no ported member writes through it |
 
 ### The frame click is not simulated input
 
@@ -128,13 +130,14 @@ This is worth stating separately because it closes a path that looks open.
 in-process call into the engine's frame/mouse handler.
 
 So UI automation cannot be reproduced externally by synthesising Windows input,
-and `UIManager`, `GWUI`, and the salvage-dialog helpers are not reachable by any
-external means.
+and `UIManager`, `GWUI`, and the salvage-dialog helpers are not reachable that
+way.
 
 Consequence for the four-class table above: a wrapper method is only
-implementable now when it is `context` or `computed`. Every `action` method is
-Phase 5 work at best, and `capture` methods cannot be implemented at all
-without target-side machinery to obtain the data they return.
+implementable now when it is `context` or `computed`. An `action` method needs a
+call vocabulary entry for its exact function and argument form, and a `capture`
+method needs its source mechanism ported onto the hook and callback layer. Neither
+has happened for any wrapper member yet, which is why they refuse.
 
 ## Caching: the `frame_cache` decorator and `FrameCache`
 
@@ -199,28 +202,39 @@ invalidation, no size bound and no lock.** Correctness comes entirely from the
 per-frame wipe, and the cost model assumes an in-process frame loop where a read
 is expensive and a tick is free.
 
-### What Stealth would need
+### Decision: the decorator is dropped, not adapted
 
-The dictionary, the key normalisation and the decorator are a direct port with
-no dependency — the only in-process coupling in the whole file is the
-invalidation trigger, `PyCallback.Phase.PreUpdate`. Stealth has no frame
-callback and cannot get one read-only, so **the tick has to come from
-somewhere else**. That is the entire design question:
+**Resolved. This section previously listed candidate designs for "what supplies
+the tick". The answer is none of them and the question is closed.** The rule is
+in [`PORTING_RULES.md`](PORTING_RULES.md); the contract is in `AGENTS.md`.
 
-| Option | Shape |
-| --- | --- |
-| caller-driven | `cache.reset()` or a `with py4gw.frame():` block that wipes on entry |
-| time-based | wipe when the oldest entry is older than a configured interval |
-| read-driven | wipe at the start of a caller's refresh cycle |
+The dictionary, the key normalisation and the decorator would be a direct port
+with no dependency — the only in-process coupling in the file is the invalidation
+trigger, `PyCallback.Phase.PreUpdate`. That coupling is decisive:
 
-Keeping the same `frame_cache(...)`-style decorator and a cache singleton with
-`reset()` preserves the source API while being honest that there is no game
-frame to hang it on. A size bound is also worth adding, because Stealth has no
-automatic wipe to bound growth if the caller forgets.
+- Stealth is **not run every frame** and is **not throttled**. It reads the client
+  **on demand**, at the call site.
+- A ported `FrameCache` would **never be cleared**: the `PreUpdate` callback cannot
+  be registered read-only, so no tick would ever fire.
+- An uncleared memo of a map-scoped read is a stale-data bug, not a performance
+  win. It would also silently defeat the `Map.IsMapReady()` gating, which is
+  re-evaluated per read precisely so that a map change is noticed by re-asking the
+  client rather than by a timer expiring.
+
+So ported members carry **no** `@frame_cache`, and no substitute tick — no TTL, no
+throttle, no refresh timer, no `with py4gw.frame():` block, no caller-driven
+`cache.reset()`. Caching is still permitted for large structures whose contents
+are expensive to re-read; what is forbidden is caching *as a frame-throttle*.
+
+Recorded in three places on purpose, because this is the question most likely to
+be asked again: `AGENTS.md` (the contract), [`PORTING_RULES.md`](PORTING_RULES.md)
+(the rule), and here (the assessment and its history).
 
 ## Caching inventory (other layers)
 
-Recorded for later design; the owner will supply the intended Stealth model.
+Recorded as reference. The intended Stealth model is now decided: **none of these
+layers is ported** — see the decision above. The table is kept because it explains
+what each layer was compensating for.
 
 | Layer | File | Shape |
 | --- | --- | --- |
@@ -244,13 +258,20 @@ This matters for the "simpler approach" and is easy to mistake for one system.
 | **2. `GLOBAL_CACHE.*`** | `GlobalCache/*.py` | per-domain **mirrors** of the same wrappers (`CameraCache`, `ItemCache`, `InventoryCache`, `PartyCache`, `QuestCache`, `SkillCache`, `SkillbarCache`, `TradingCache`, `EffectsCache`) with their own throttled refresh at 75-150 ms, and actions routed through `ActionQueueManager` |
 
 Layer 2 is roughly 4,600 lines that re-implement layer 1's API surface plus
-throttling and queueing. Stealth does not need it: the mirror exists to batch
-in-process reads behind a game-frame tick, and Stealth has no frame loop to
-batch against. **Layer 1 alone gives the source-visible behaviour** — the value
-is memoised for the duration of one caller-defined frame and then re-read.
+throttling and queueing. The mirror exists to batch in-process reads behind a
+game-frame tick, and Stealth has no frame loop to batch against.
 
-So the port surface for caching is the 165-line `FrameCache` plus a decision
-about what supplies the tick, not the whole `GlobalCache` tree.
+**Neither layer is ported.** Layer 2 is out because it is a throttled mirror of
+layer 1, and layer 1 is out because its only invalidation is the frame tick (see
+the decision above). The port surface for caching is therefore **nothing** — the
+members read on demand. Neither the 4,600-line `GlobalCache` tree nor the 165-line
+`FrameCache` is needed.
+
+Note the framing this replaces: an earlier draft of this document concluded that
+"layer 1 alone gives the source-visible behaviour — the value is memoised for the
+duration of one caller-defined frame and then re-read". That assumed a
+caller-defined frame existed to hang the memo on. It does not, and a memo with no
+invalidation boundary is not the source's behaviour.
 
 ## Player: the pilot candidate
 
@@ -321,8 +342,8 @@ makes them candidates after Player:
 `docs/DESIGN.md` fixes the migration contract, and the context work followed
 it: **declared parity** and **runtime availability** are separate. Every source
 class, property, helper and method must exist with its source name; operations
-that cannot execute externally stay declared and report an explicit
-unavailability. Nothing is silently dropped.
+whose mechanism is not ported stay declared and report what they need
+instead of returning a value. Nothing is silently dropped.
 
 That contract applies to wrappers unchanged, so a wrapper is migrated when its
 whole surface is declared, its `context` and `computed` methods work, and its
@@ -348,9 +369,11 @@ whole surface is declared, its `context` and `computed` methods work, and its
 
 1. **Scope**: does the wrapper layer become in scope now, and how is that
    recorded in `SCOPE.md`?
-2. **Caching**: the owner will supply the intended caching and refresh design.
-   `GlobalCache/*` is ~4,600 lines with no Stealth counterpart, and this is a
-   design decision rather than a port.
+2. **Caching**: **answered** — neither `FrameCache` nor `GlobalCache/*` is
+   ported; see the decision above and
+   [`PORTING_RULES.md`](PORTING_RULES.md). `GlobalCache/*` is ~4,600 lines with no
+   Stealth counterpart, and it is a throttled mirror of a layer that is itself
+   not ported.
 3. **`capture` methods**: should they be declared with an explicit unavailable
    status (the current contract), or does the owner want some of them to wait
    for the Phase 5 payload work?

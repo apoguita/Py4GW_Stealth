@@ -4,8 +4,10 @@ This document contains the detailed research history and source comparisons
 that were intentionally kept out of the GitHub front page. It is not the
 project's short description or installation guide.
 
-Status: current active research project; read-only process discovery and the
-reusable scanner slice implemented
+Status: current active research project. The library reads, and since 2026-09-24
+`py4gw/game_thread/` writes: two entry hooks, an emitted dispatcher that makes typed
+calls on the client's own thread, and a callback listener. `py4gw.connect()` installs
+that layer and `disconnect()` removes it and frees what it placed.
 Scope: establish what an external Guild Wars controller can read, write, execute, and observe before expanding capabilities.
 Authority: inspected current Py4GW Reforged and Py4GW Reforged Native sources; inspected the GwAu3 source checkout; and verified multiple external read slices against a live client. The exact per-context source comparison and remaining gaps are in [`CONTEXT_PARITY_AUDIT.md`](CONTEXT_PARITY_AUDIT.md). Do not treat these live slices as full parity.
 
@@ -14,8 +16,9 @@ Authority: inspected current Py4GW Reforged and Py4GW Reforged Native sources; i
 Py4GW Stealth is an independent external-host project intended to recreate
 selected useful Guild Wars data capabilities. It must be self-sufficient: the
 Reforged DLL, embedded Python runtime, and Reforged-owned shared-memory block
-are source references, not runtime dependencies. The current implementation
-is read-only, but the final project is not required to remain pure external.
+are source references, not runtime dependencies. The reads are read-only; the
+capability layer writes, so the project is no longer pure external and does not
+claim to be.
 
 The project is capability-by-capability research. It does not assume that
 every in-process Reforged feature can be reproduced externally, and it does
@@ -27,9 +30,10 @@ external Stealth controller will install Stealth-owned payload/patch code in
 `Gw.exe` where Native requires callbacks or game-thread execution. No
 conventional injected DLL or Reforged runtime is part of this design. This is
 payload injection, not pure-external operation; “no DLL” does not mean the
-target is unmodified or that the payload is undetectable. The first target is
-the WorldMap callback pointer. The implementation is still read-only today;
-the selected payload is not yet built or tested. See
+target is unmodified or that the payload is undetectable. The payload is **built
+and live-verified** in `py4gw/game_thread/` and installed by `py4gw.connect()`;
+the WorldMap callback pointer it was first aimed at turned out to be reachable
+through the client's UI frame array without a hook. See
 [`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md) and
 [`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md).
 
@@ -57,22 +61,63 @@ immediately):
 | `PROCESS_CREATE_THREAD` (0x0002) | **denied, error 5** | **allowed** |
 | `PROCESS_SUSPEND_RESUME` (0x0800) | **denied, error 5** | **allowed** |
 
-**Correction to an earlier reading of this finding.** This was first recorded
-here as a deliberate client-side protection filter. That was wrong. The cause
-is ordinary Windows UAC token splitting: `DESKTOP-DURJ7N0\Apo` is in the
-Administrators group, but an unelevated process carries a filtered token with
-the Administrators SID disabled. Both tokens are **Medium** integrity and share
-an **identical** `GetProcessMitigationPolicy`, which is exactly why an
-integrity- or mitigation-based check concluded "not elevated, therefore
-filtered". It was not filtered; the controller simply lacked the privilege.
-Relaunching the same unchanged controller elevated grants every right above.
-The control experiment (a 32-bit child accepting the full mask) showed only
-that the *unelevated* denial was client-specific, which is also what UAC token
-splitting predicts, so it did not distinguish the two explanations.
+### What actually denies those rights (measured 2026-09-24)
+
+The table above is right: unelevated, four rights are refused with error 5, and
+elevating the same controller grants them. **The explanation recorded under it was
+wrong**, and it was wrong in a way worth writing down, because it named the wrong
+mechanism and stopped the question.
+
+Measured directly, all read-only:
+
+```text
+client process owner        = S-1-5-21-2318337067-689748385-3951430353-1001   (our own user)
+client DACL                 = 3 ALLOW ACEs, no DENY ACE
+    ALLOW  PROCESS_ALL_ACCESS        -> our own user SID
+    ALLOW  PROCESS_ALL_ACCESS        -> S-1-5-18 (SYSTEM)
+    ALLOW  TERMINATE,VM_READ,QUERY*  -> S-1-5-5-1-2886058493 (logon session)
+client token                = Medium integrity (S-1-16-8192), elevation type 3 (Limited)
+controller token            = Medium integrity (S-1-16-8192), elevation type 3 (Limited)
+
+unelevated rights on pid 15380
+    granted  PROCESS_TERMINATE, PROCESS_VM_READ, PROCESS_QUERY_INFORMATION,
+             PROCESS_QUERY_LIMITED_INFORMATION, READ_CONTROL, SYNCHRONIZE
+    error 5  PROCESS_VM_WRITE, PROCESS_VM_OPERATION, PROCESS_CREATE_THREAD,
+             PROCESS_SUSPEND_RESUME, WRITE_DAC, WRITE_OWNER
+```
+
+So the client's DACL **grants our own user SID `PROCESS_ALL_ACCESS`**, including
+`VM_WRITE`, and both tokens are the same integrity level. Neither the DACL nor
+mandatory integrity control can explain the refusal: an access check against that
+DACL succeeds for the token we hold. `WRITE_DAC` and `WRITE_OWNER` are refused too,
+so there is no unelevated way to change the answer — the DACL cannot be rewritten
+and the object cannot be taken over.
+
+What distinguishes the two runs is not a Windows policy. `RTCore64.sys` — RivaTuner
+Statistics Server's kernel driver — is loaded (enumerated with `EnumDeviceDrivers`,
+which needs no elevation), and the earlier live record on this machine lists
+`RTSSHooks.dll` among the client's 99 loaded modules. RTSS registers an
+object-handle filter to protect the processes it hooks, and a filter of that kind
+refuses write-class rights to callers it does not trust while leaving reads alone,
+which is also why an elevated caller is accepted. That is **inferred**, not proven:
+it is the only explanation left that fits every measurement, but the driver itself
+was not inspected.
+
+**What this changes.** Not the operational rule — target-side work on this client
+needs an elevated controller, measured both ways. What changes is why, and what
+would make it untrue: the elevation requirement is *this machine's filter*, not a
+property of `Gw.exe`. On a machine without RTSS, the DACL above says an unelevated
+controller would be granted `VM_WRITE`, and the bridge would not need elevation at
+all. **Unresolved:** whether stopping RTSS and re-probing lifts the denial. That is
+the experiment that settles it, and it has not been run.
+
+The earlier note here said "ordinary UAC token splitting". It described the
+observable behaviour correctly and the mechanism incorrectly: the two tokens do
+differ, but not in anything the client's DACL checks.
 
 Consequence for the project: target-side work on this client requires an
-elevated controller. That is a real operational constraint and a change in the
-trust boundary — the controller holds administrator rights over the machine,
+elevated controller today. That is a real operational constraint and a change in
+the trust boundary — the controller holds administrator rights over the machine,
 not merely over the game.
 
 ### Live verification (elevated controller)
@@ -145,11 +190,153 @@ the fix installed the hook on the first attempt.
   client and the game thread serviced the queue.
 - **Call to a real Guild Wars function — verified live.** `agent.move_to_func`
   called on the game thread with the source-backed argument layout.
-- **Callbacks — not implemented.** No registration or event surface exists;
-  only the one queue serviced at a single hook point.
+- **Callbacks — verified live** (added after this section was written). A registry
+  keyed by event kind, `py4gw/game_thread/callbacks.py`, and an `EventListener`
+  thread that reads the event region and delivers each event as it arrives; a
+  handler fired from a real client message with no `pump()` call. What is thin is
+  the number of kinds — one per hooked function.
 
 See [`DEFERRED_INJECTION.md`](DEFERRED_INJECTION.md) and
 [`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md).
+
+## Live observation: the first writes from this project (2026-09-24)
+
+Separate from the reference bridge above: this is Stealth's **own** code — the
+installer its own hooks will be built with — exercised against the live client
+for the first time.
+
+**Target.** `F:\GW\GW1\Gw.exe`, PID 15380, SHA-256
+`44FBD68767A8D02B5DD4FB1A8A09B684A86B24716731327EE64905DD698FE124`, 10493120
+bytes (`0xA01CC0`), file version `1, 0, 0, 1`, product "Guild Wars", main window
+"Guild Wars Reforged". The file is byte-identical to the one in the game-thread
+bridge record above; only the PID and the load base (`0x00610000`, ASLR) differ.
+
+**Input.** `python -m unittest tests.test_write_access -v`, from an elevated shell.
+Unelevated, the same suite skips itself with its reason recorded — `Windows
+denied write access to pid 15380 with error 5` — which was observed first.
+
+**Changed since that run.** `py4gw.connect()` now asserts elevation itself, once,
+through `Win32.is_elevated()` (the documented `TokenElevation` query on this
+process's own token), and raises a `RuntimeError` naming the pid, the four denied
+rights and what to do about it. So the refusal above is no longer something a
+caller meets on its first write: it is what connecting reports. The read-only
+check in that run used `Win32` and `ProcessMemoryReader` directly rather than
+`connect`, which is why it still passed unelevated at the time.
+
+**Expected.** The suite drives the transport and the fail-closed patch sequence:
+open the process with the invasive rights, allocate inside it, write, read back,
+overwrite, confirm the allocation lies outside the client module, enumerate the
+client's threads, read a thread's instruction pointer, patch and restore those
+bytes, then refuse a second patch and refuse a restore whose bytes are no longer
+ours.
+
+**Observed.** `Ran 10 tests ... OK`. The client was suspended and resumed
+repeatedly, its threads were enumerated, a thread context was read, page
+protection was changed and restored, and every byte written read back identical.
+
+**Scope of the writes.** Every write targeted memory this test allocated with
+`VirtualAllocEx`, asserted to lie outside the client module. Nothing was written
+to the client's own code or data; no hook was installed; no remote thread was
+created. Each allocation was freed in a `finally` and the transport closed.
+
+**Cleanup verified.** The client was still `Responding=True` on the same PID
+afterwards, no temporary files were left behind, the offline suite is 409 tests
+green, and `pyright` reports no errors.
+
+**A finding for the module-bound trust anchor.** The same module reports two
+different sizes depending on which API answers:
+
+| Source | `Gw.exe` size |
+| --- | --- |
+| Toolhelp `MODULEENTRY32W.modBaseSize` — the preferred path, elevated only | `0x0F48000` |
+| PSAPI `GetModuleInformation().SizeOfImage` — the unelevated fallback | `0x0F49000` |
+| PE header `SizeOfImage`, read from the live image | `0x0F49000` |
+
+`CreateToolhelp32Snapshot(TH32CS_SNAPMODULE)` returns `-1` / error 5 to an
+unelevated controller (measured directly), so `Win32.get_main_module`
+(`py4gw/win32/win32.py:222-266`) falls back to PSAPI — meaning **which number it
+returns depends on whether the controller is elevated**, and every target-side
+operation requires elevation. Toolhelp's figure is one page short of both the PE
+header and PSAPI. The failure mode is in the safe direction: a trust anchor built
+from the smaller number can only refuse a legitimate target inside that last page,
+never accept an illegitimate one. Which field should carry `module_size` across
+the wire is **unresolved**; it is recorded in
+[`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md).
+
+## Live observation: the hook, the payload and the queue (2026-09-24)
+
+Stealth's own hook, its own emitted dispatcher and its own host-side queue, run
+together against the live client. This is the first time this project has placed
+code in `Gw.exe`, and the first time a command published by this process was run
+by the client's own game thread. Everything above this section is read-only work;
+this one is not, and it is `payload injection` by the definition in `AGENTS.md`.
+
+**Target.** `F:\GW\GW1\Gw.exe`, PID 15380, SHA-256
+`44FBD68767A8D02B5DD4FB1A8A09B684A86B24716731327EE64905DD698FE124`, module base
+`0x00610000`, size `0x0F49000`.
+
+**Input.** `python -m unittest tests.test_live_bridge`, from an elevated shell. A
+read-only preflight ran first, confirming the resolver and the entry bytes before
+anything was written.
+
+**Resolved first, read-only:**
+
+```text
+game_thread.leave_game_thread_func = 0x00845880
+entry bytes                        = 55 8b ec 81 ec 20 02 00 00
+bytes after them                   = a1 80 74 e0 00 33 c5   (mov eax,[0x00E07480]; xor eax,esp)
+```
+
+The nine bytes the test declares as displaced end exactly where that next
+instruction begins, so the cut is at an instruction boundary and not through the
+middle of one. The offset inside the module is `0x235880`, which is the same offset
+the earlier bridge record resolved on a different load base (`0x011F5880` with base
+`0x00FC0000`). Two independent runs, two ASLR bases, the same function.
+
+**Expected.** The hook is placed on that function, with its entry bytes checked
+against the declared ones before anything is written; it fires on the client's
+timeline; work published by this process is taken and completed by the game thread;
+the completion event comes back; the original bytes are restored at the end.
+
+**Observed.** `Ran 10 tests ... OK`.
+
+```text
+leave_game_thread_func     = 0x00845880
+displaced entry bytes      = 55 8b ec 81 ec 20 02 00 00
+hook hits                  = 2
+entry after remove         = 55 8b ec 81 ec 20 02 00 00
+code section before        = 33984c4c6a98d23ec43b00798f9f2a11... (5473792 bytes)
+code section after         = 33984c4c6a98d23ec43b00798f9f2a11... (5473792 bytes)
+left mapped (on purpose)   = block 0x09540000, dispatcher 0x09550000
+```
+
+- `PING` completed `DONE` with `0xC0DEC0DE`; `ECHO_U32` returned its argument;
+  `ADD_U32` returned the sum; `NOP` completed with no result; and an operation the
+  payload does not know completed `FAILED` with `-100`. Every one of those was
+  computed **inside the client, on the client's own thread**.
+- The completion event arrived carrying the command's sequence, operation, terminal
+  state and result.
+- The command ring was driven past its depth — 17 commands in one test, across a
+  lap boundary — with every command completing and nothing left outstanding.
+- The hooked function kept running after the round trips: the hit counter advanced
+  again, which is the trampoline replaying the displaced prologue and the client
+  carrying on with its own work.
+- The client stayed alive and responsive on the same PID for the whole run.
+
+**Cleanup verified, and this is the strongest statement the project can make about
+its own writes.** The entry bytes read back as the original nine. Beyond that, the
+client's whole `.text` section — 5,473,792 bytes — was hashed before the hook was
+installed and after it was removed, and the two digests are identical
+(`33984c4c...`). The entry patch is the only client code this project writes, so
+that is evidence rather than assertion: the client's code section came back exactly
+as it was found.
+
+**What is deliberately left mapped.** The block and the dispatcher stay allocated
+inside the client, about 3 KB per run, because a thread can be inside the stub at
+the moment of removal and about to call the dispatcher. That is the same reasoning
+the hooker already records for the stub itself, and it is the concrete cost behind
+the owner-loss question in the plan. The runs so far have left three such pairs;
+the client reclaims them when it exits.
 
 
 The Native project remains the source authority for pointer ownership and
@@ -175,6 +362,281 @@ native root accessors, the Reforged Python modules, their many-to-one mapping,
 and which surfaces Stealth has actually implemented. That inventory is
 comparative source evidence; it is not evidence that every context has been
 externally validated.
+
+## Live result: the effect asserted from the client's own report (2026-09-24)
+
+The target cannot be read from a context — checked in both projects, not assumed:
+
+```cpp
+// Py4GW_Reforged/Py4GWCoreLib/Player.py:229-235
+return Player.player_instance().target_id;
+
+// Py4GW_Reforged_Native/src/GW/player/player_bindings.cpp:159   (what fills it)
+target_id = static_cast<int>(GW::agent::GetTargetId());
+
+// src/GW/agent/agent_methods.cpp:65-66
+uint32_t GetTargetId() { return g_current_target_id; }
+
+// src/GW/agent/agent.cpp:60 and 161-165   (the only writer)
+uint32_t g_current_target_id = 0;
+case ui::UIMessage::kChangeTarget:
+    g_current_target_id = msg ? msg->manual_target_id : 0;
+```
+
+`ChangeTargetUIMsg` and `ChangeTargetPacket` (`include/GW/context/ui.h:78-85, 198-205`)
+are message payloads, not contexts. So the target is **only** available the way
+Reforged gets it: by listening to the client's own `kChangeTarget` message. Nothing
+else holds it, which is why `Player.GetTargetID` refuses here as a port.
+
+**So this project now listens too.** `tests/test_live_call.py` installs a second
+hook on `ui.send_ui_message_func` (resolved as `0x008441A0`), with a watch list of
+one message id (`kChangeTarget = 0x10000020`), and the observer records a matching
+call as an event carrying the packet's first four words. Then it asserts the effect
+rather than trusting a completion:
+
+```text
+change_target_func         = 0x009F6F60
+ui.send_ui_message_func    = 0x008441A0
+watch list                 = 0x0AFA0000 [kChangeTarget 0x10000020]
+observer code              = 0x0AFB0000
+game-thread entry after    = 55 8b ec 81 ec 20 02 00 00
+message entry after        = 55 8b ec 8b 45 08 83 f8 56
+code section before        = 33984c4c6a98d23ec43b00798f9f2a11...
+code section after         = 33984c4c6a98d23ec43b00798f9f2a11...
+```
+
+`Ran 4 tests ... OK`: the target was set to another agent, and the id that came back
+out of the client's own notice was **that agent**. Clearing it reported zero. Only
+the watched message was recorded — the client sends a great many others on the same
+function — and both entry patches were restored with the code section unchanged.
+
+**Two things measured that the tests now depend on.**
+
+- **The client reports changes, not requests.** Setting the target it already has
+  produces no notice at all. This failed two runs before it was understood: the
+  first because the same target was set twice, the second because an earlier test
+  had already set it. The tests now ask for the opposite target first and discard
+  that notice, so they do not depend on the order they run in.
+- **Setting the target to the player's own agent produced no notice** in this build.
+  Recorded rather than asserted: one run cannot separate "the client ignores
+  self-selection" from "it was slower than the two-second wait". The assertion uses
+  another living agent instead.
+
+**The entry cut is eight bytes, not ten.** The first ten bytes of
+`ui.send_ui_message_func` are `push ebp; mov ebp,esp; mov eax,[ebp+8]; cmp eax,0x56;
+jae +0x16` — and the `jae` is a **relative branch**. The trampoline replays the
+displaced bytes verbatim at a different address, so displacing a branch would send
+it somewhere else entirely. Eight bytes ends on a whole instruction before it. This
+is the sharpest edge the hooker's "the caller declares the displaced bytes" rule
+exists for: the bytes match either way, and only the *cut* is wrong.
+
+**What this unlocks.** `Player.GetTargetID` can now be implemented the way Reforged
+implements it — from the client's own notification, maintained by the host — instead
+of refusing. And any future action can be verified the same way: call the function,
+watch the client say what it did.
+
+## Live result: the target changed, and why the message did not (2026-09-24)
+
+The first live call was on the wrong side of the mechanism, and both source projects
+say so once you follow the path end to end.
+
+**Reforged Python's path** (`Py4GWCoreLib/Player.py:705-715` →
+`native_src/methods/PlayerMethods.py:102-111`):
+
+```python
+Player.ChangeTarget(agent_id)
+    -> ActionQueueManager().AddAction("ACTION", _do_action)      # game thread
+    -> Player.player_instance().ChangeTarget(agent_id)
+    -> PyGameThread.enqueue(_action)                            # game thread again
+    -> UIManager.SendUIMessage(UIMessage.kSendChangeTarget, [target.agent_id])
+```
+
+So the action, in Reforged, is **sending a message** — which is why sending one
+looked like the right move. But nothing in the client acts on `kSendChangeTarget`:
+what acts on it is Reforged's own injected handler (`agent.cpp:143-155`), which sees
+the message and calls the real function:
+
+```cpp
+case ui::UIMessage::kSendChangeTarget:
+    if (g_change_target_original) {
+        const auto* packet = static_cast<ui::packet::kSendChangeTarget*>(wparam);
+        g_change_target_original(packet->target_id, packet->auto_target_id);
+    }
+```
+
+`g_change_target_original` is the original code of the function Native resolved
+(`agent.change_target_func`, hooked at `agent.cpp:230-236`). **The message is how
+Reforged's own runtime is told; the function is what changes the target.** With no
+runtime inside the client, our message had no listener, and the target did not move.
+
+**Called the function instead, and it moved.** `tests/probe_live_target.py`
+resolved `agent.change_target_func` to `0x009F6F60` and alternated
+`(player_agent_id, 0)` with `(0, 0)` — target self, then clear, which is what
+Native's `ManagerCanFindAgent` documents id `0` as doing (`agent.cpp:119`). Observed
+by the person at the keyboard: **the target ring appeared and cleared, repeatedly**.
+That is the first time this project has changed the state of a running game.
+
+**A mistake in the probe, recorded so it is not repeated.** It was run with 20
+rounds, holding the target for about a minute. That was far more than the question
+needed and it was uncomfortable to watch. The defaults are now 3 rounds — six target
+changes, about nine seconds — with a ceiling on the arguments and a "finished" line
+at the end, because an operator watching a live client needs to know it will stop.
+
+**The client was left clean**, checked afterwards rather than assumed:
+
+```text
+python processes        = none
+entry @ 0x00845880      = 55 8b ec 81 ec 20 02 00 00   (its own bytes, not a patch)
+.text sha256            = 33984c4c6a98d23e...          identical to the baseline
+```
+
+**What this changes for the port.** A Native action is not one thing but two: the
+message the runtime broadcasts and the function the runtime calls in response. Only
+the second is ours to make. That is the rule for porting any action from here —
+follow the message to the handler, and call what the handler calls.
+
+**And the limit that remained, and how it was closed.** The effect is real and
+observable by a person, but at the time it was not readable by this process: the
+current target is `g_current_target_id`, fed from the `kChangeTarget` message
+(`agent.cpp:161-165`), and no context holds it — which is why `Player.GetTargetID`
+refuses. Both directions were then built. Observing the notification is the
+observer hook in `py4gw/game_thread/`: `client.watch(message)` records a message id
+in the client's own watch list and the listener delivers it to a registered
+handler. Reading the value is `offsets/gwau3_leads.json`, a copied GwAu3 lead whose
+resolver lands on the address operand at `0x0129A174`; it was confirmed
+differentially rather than assumed — the target was set to the player's own agent,
+a gadget and two living agents of different allegiances, and the address followed
+every one, each checked against the client's own change notice. `Player.GetTargetID`
+still refuses: the value is reachable, the member has not been ported onto that
+route yet.
+
+## Live observation: the first call into the client (2026-09-24)
+
+This project made a Guild Wars client **do** something for the first time. Until
+now every live run either read the client or ran our own code inside it; this one
+called one of the client's own functions, on the client's own thread, with
+arguments this process chose.
+
+**Target.** `F:\GW\GW1\Gw.exe`, PID 15380, module `0x00610000 + 0xF49000`.
+
+**Input.** `python -m unittest tests.test_live_call`, from an elevated shell, in a
+map.
+
+**Resolved first, read-only, through the pattern catalog:**
+
+```text
+game_thread.leave_game_thread_func = 0x00845880   55 8b ec 81 ec 20 02 00 00 a1 80 74 ...
+ui.send_ui_message_func            = 0x008441a0   55 8b ec 8b 45 08 83 f8 56 73 16 68 ...
+```
+
+The second one is worth reading as a contract check, not just an address:
+
+```asm
+55            push ebp
+8b ec         mov  ebp, esp
+8b 45 08      mov  eax, [ebp+8]     ; the first argument, a cdecl argument
+83 f8 56      cmp  eax, 0x56        ; bounded against the message-id count
+73 16         jae  +0x16
+68 ...        push <something>      ; then dispatch
+```
+
+A function that reads its first argument from `[ebp+8]` and bounds-checks it
+against `0x56` is a `void __cdecl(uint32 message_id, ...)` dispatcher, which is
+what `SendUIMessageFn` says it is (`ui_patterns.cpp:31`). The ABI was checked
+against the client before a single byte was written.
+
+**The call.** `ui::SendUIMessage(kSendChangeTarget, &packet{agent_id, 0}, nullptr)`,
+resolved to `0x008441A0` and named by call-table slot 0, with the player's own
+agent id (38) as the target. That is `agent_methods.cpp:132-135`'s call, made from
+outside the process.
+
+**Observed.** `Ran 6 tests ... OK`:
+
+```text
+leave_game_thread_func     = 0x00845880
+ui.send_ui_message_func    = 0x008441A0
+module range               = 0x00610000 + 0xF49000
+call table                 = 0x03690000
+target agent               = 38
+hook hits                  = 2
+entry after remove         = 55 8b ec 81 ec 20 02 00 00
+code section before        = 33984c4c6a98d23ec43b00798f9f2a11... (5473792 bytes)
+code section after         = 33984c4c6a98d23ec43b00798f9f2a11... (5473792 bytes)
+```
+
+- The call completed `DONE` — taken off the queue by the game thread and run there,
+  while the client kept running its own frame. The hook fired again afterwards,
+  which is the trampoline still replaying the prologue.
+- **Two refusals were exercised live, inside the client**, not in a fake target: a
+  slot naming `0x1000`, outside the module, came back `RESULT_BAD_TARGET` (−102)
+  without being called, and a slot past the end of the table came back
+  `RESULT_BAD_DESCRIPTOR` (−104). That is the "no arbitrary remote call" rule
+  answering in the only place it counts.
+- The completion event arrived carrying the operation and the terminal state.
+- The client stayed alive and responsive on the same PID.
+- The entry bytes were restored, and the client's whole `.text` section hashed
+  identically before and after (`33984c4c...`), so the only code written was the
+  nine-byte entry patch.
+
+**What it does not prove.** That the game changed *in this run*. The player's
+current target is `g_current_target_id`, which Native maintains from a
+`kChangeTarget` UI-message hook (`agent.cpp:60,143-145`) and which no readable
+context holds — the reason `Player.GetTargetID` refuses in this library. This run
+proves the call reached the client's own function on the client's thread and the
+client survived it. The effect itself was shown separately, by calling
+`agent.change_target_func` directly from a probe and watching the target ring
+appear and clear, and it is now also readable through the current-target resolver
+recorded above.
+
+## The call vocabulary as the sources define it (2026-09-24)
+
+Read before writing any of it, because what the sources say changed what the first
+slice had to be.
+
+`Py4GW_Reforged_Native` declares each call's ABI as a typedef next to the code that
+uses it (`src/GW/agent/agent_methods.cpp:18-22`):
+
+```cpp
+using SendDialogFn    = void(__cdecl*)(uint32_t dialog_id);
+using ChangeTargetFn  = void(__cdecl*)(uint32_t agent_id, uint32_t auto_target_id);
+using CallTargetFn    = void(__cdecl*)(Constants::CallTargetType type, uint32_t agent_id);
+using MoveToFn        = void(__cdecl*)(float* pos);
+using DoWorldActionFn = void(__cdecl*)(Constants::WorldActionId action_id, uint32_t agent_id, bool suppress_call_target);
+```
+
+But the actions barely use those. Almost everything routes through **one**
+function, declared in `ui_patterns.cpp:31` and `ui_methods.cpp:19`:
+
+```cpp
+using SendUIMessageFn = void(__cdecl*)(UIMessage message_id, void* wparam, void* lparam);
+```
+
+`agent.ChangeTarget` (`agent_methods.cpp:132-135`) sends `kSendChangeTarget` with a
+two-word packet; `InteractAgent` sends `kSendWorldAction`; `CallTarget` sends
+`kSendCallTarget`; the party-search, tick, invite, travel, difficulty and
+hero add/kick paths are the same shape. The packet contract is documented in
+`ui_bindings.cpp:60-74`: a **zeroed sixteen-word POD**, values packed into the
+front, passed as `wparam`, `lparam` null.
+
+Two consequences for this project:
+
+1. **The first callable operation is that one function**, not a per-action
+   function. One form covers a family, which is why the first slice is a form and
+   not an operation per action.
+2. **Its address is already in our catalog.** Native resolves it with
+   `PY4GW::Patterns::Resolve("ui.send_ui_message_func", ...)` (`ui.cpp:722`), and
+   our copied `offsets/ui.json` carries `send_ui_message_func` with the same
+   `send_ui_message` pattern and a `to_function_start` step — one of the 29 offset
+   files that are byte-identical to Native's. Nothing new was needed to resolve a
+   callable target.
+
+**A refusal this explains.** `Player.GetTargetID` refuses because the current
+target is `g_current_target_id`, which Native maintains from a `kChangeTarget`
+UI-message **hook** (`agent.cpp:60` and `143-145`), not from any context, so the
+source's own accessor cannot be ported as written. Both halves of that gap now have
+a route in Stealth — the notification through the observer hook, and the value
+through the current-target resolver — but the member is still declared and refusing,
+because porting it onto either route has not been done.
 
 ## Terminology
 
@@ -405,7 +867,9 @@ The first read-only runtime exists in the `py4gw` package. It lists Windows
 processes, finds `Gw.exe` candidates by executable filename, opens a selected
 process for query/VM-read access, and scans validated x86 module sections.
 The root NiceGUI window is only a test and presentation surface over process
-discovery; it does not own the memory path or modify any process.
+discovery; it does not own the memory path, and its own client-list refresh does
+not modify any process. A selected connection installs the game-thread layer
+unless it is asked not to with `game_thread=False`.
 
 Claims about GwAu3 and Reforged behavior are source-based. The Stealth
 CharContext, GameContext, PreGameContext, Cinematic, GameplayContext,
@@ -427,19 +891,22 @@ surface that can:
 The implemented part is generic Windows process handling, a bounded memory
 reader, PE section discovery, a reusable pattern scanner, an offsets resolver,
 and selected Guild Wars structure readers. Their exact parity and pointer
-availability are recorded in `CONTEXT_PARITY_AUDIT.md`. Callback-owned
-contexts have supplied-address readers, but Stealth still needs its own
-callback/hook route to obtain those addresses. Command paths and behavior
-interpretation are not implemented. The root UI exposes current read-only
-surfaces without adding a second process layer.
+availability are recorded in `CONTEXT_PARITY_AUDIT.md`. The callback-owned map
+contexts are read through their own readers, and Stealth reaches their root
+addresses through the client's UI frame array rather than a hook. Command paths and behavior
+interpretation are not implemented. The root UI exposes the read surfaces without
+adding a second process layer.
 
-The current implementation remains read-only. The payload architecture and
-WorldMap callback target are selected, but no payload, hook, patch, remote
-execution, or write has been implemented yet. Memory scanning is read-only
+Those readers remain read-only. The payload architecture and its WorldMap callback
+target were selected early, and the payload has since been built, extended and
+verified on a live client in `py4gw/game_thread/` — entry hooks, an emitted
+dispatcher that runs typed calls on the client's own thread, and an observer that
+reports the client's messages to registered callbacks, all installed by
+`py4gw.connect()` and removed by `py4gw.disconnect()`. Memory scanning is read-only
 and is part of the implemented foundation. See
 [`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md) and
 [`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md) for the implementation
-and user-present live-test plan.
+record.
 
 ### Design order for this deliverable
 
@@ -537,10 +1004,12 @@ required surface against documented Windows behavior. If a later change
 deliberately borrows actual MemLib source, preserve its MIT license notice and
 record exact file-level provenance in the project documentation.
 
-The current local implementation is pure external and read-only. The selected
-next target-side work is the WorldMap callback payload; implementation and
-live verification remain incomplete. See
-[`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md).
+The read surface described above is pure external and read-only. Target-side work
+started with the WorldMap callback payload, and that plan was superseded: the same
+pointer is reached read-only through the frame array. What was built instead is the
+game-thread layer in `py4gw/game_thread/`, live-verified. See
+[`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md) and
+[`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md).
 
 ## Native scanner migration plan
 
@@ -827,14 +1296,15 @@ The live test resolved `PartyContext` at `0x00A07388`, observed one party,
 68 party-search entries, and a party-leader state. These values and the address
 are observations for one client build. The focused parity tests also verify all
 source field offsets, fixed sizes, flag/text properties, record aliases, and
-the declared facade cache. Callback registration remains externally unavailable
-because it requires the injected runtime.
+the declared facade cache. Callback registration is not ported: the source
+registers an in-process callback, and nothing consumes Stealth's own callback
+layer yet.
 
 At the time of this observation, `WorldMapContext` had not yet been ported.
 Its source-matched structure and supplied-address reader have since been added
-and offline-checked. The native implementation receives its root pointer from
-an injected UI callback and publishes it through Reforged shared memory, so no
-live read is claimed and no guessed pattern is added.
+and offline-checked, and its root is now live-verified through the client's UI
+frame array rather than the source's injected UI callback, so no guessed pattern
+was added.
 
 ## Live Observation: Gw.exe Discovery
 

@@ -9,6 +9,15 @@ They contain no argument parsing, no error handling, and no UI.
 python examples/context/camera_context.py
 ```
 
+Run them from an **elevated shell**: `py4gw.connect(...)` refuses to connect
+without one, with a message naming the pid and the rights Windows withheld.
+
+These scripts read, but `connect(...)` writes: it installs `py4gw/game_thread/` —
+two entry hooks on the client's own functions, an emitted dispatcher and an
+observer — and removes them again at `py4gw.disconnect()`. That is the default, so
+the examples exercise the same connection a caller gets by default. Pass
+`game_thread=False` for a connection that only reads and patches nothing.
+
 Every script has the same shape, with the field lines chosen for that context:
 
 ```python

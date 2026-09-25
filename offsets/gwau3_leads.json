@@ -1,0 +1,39 @@
+{
+  "namespace": "gwau3_leads",
+  "_note": "Leads taken from the GwAu3 checkout under external/, revalidated here before use. They are not part of the copied Py4GW_Reforged_Native catalog, which is why they live in their own file: the provenance of every entry stays readable.",
+  "patterns": {
+    "current_target_anchor": {
+      "_note": "GwAu3 API/Core/GwAu3_Core.au3:115 names this 'CurrentTarget' and scans it with an offset of -0xE and a result type of 'Ptr'. Match here is the epilogue 83 C4 08 5F 8B E5 5D C3 followed by 0xCC padding and the next function's 55.",
+      "pattern": "\\x83\\xC4\\x08\\x5F\\x8B\\xE5\\x5D\\xC3\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\x55",
+      "mask": "xxxxxxxxxxxxxxxxxxxxxxxx",
+      "offset": "-0xF",
+      "section": "text"
+    }
+  },
+  "resolvers": {
+    "current_target_addr": {
+      "_note": "GwAu3 scans the anchor with an offset of -0xE and a result type of 'Ptr'; their scanner decodes the instruction it lands on and reads its address operand. Ours does not decode, so the offset points straight at the operand instead: at this build match-0xF begins the four bytes 74 A1 29 01, the address operand of the push dword at match-0x11, and reading them gives 0x0129A174. That address was confirmed independently, not assumed: a differential test set the target to the player's own agent, a gadget, and two living agents of different allegiances, and 0x0129A174 (with 0x0129A17C eight bytes later) followed every one of them, each verified against the client's own change notice. The section check stays, because the exact distance from the anchor to that instruction is a property of this build: a build that differs resolves to some other address, and an address outside .data is refused instead of being read as a target.",
+      "steps": [
+        {
+          "name": "scan_anchor",
+          "op": "scan",
+          "pattern": "current_target_anchor",
+          "out": "scan"
+        },
+        {
+          "name": "read_operand",
+          "op": "read_uint32",
+          "in": "scan",
+          "out": "address"
+        },
+        {
+          "name": "validate_address",
+          "op": "validate_section",
+          "in": "address",
+          "section": "data",
+          "out": "final"
+        }
+      ]
+    }
+  }
+}

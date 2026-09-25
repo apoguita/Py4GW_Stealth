@@ -1147,7 +1147,7 @@ class MainWindow:
         character = None
         is_connected = False
         try:
-            connection = ConnectedClient(process, self._win32)
+            connection = ConnectedClient(process, self._win32, game_thread=False)
             try:
                 snapshot = self._read_context_timed(connection)
                 if snapshot is None:

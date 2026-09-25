@@ -20,11 +20,13 @@ Runtime availability is tracked separately:
 
 - `externally verified`: the operation was exercised through the external
   reader;
-- `externally unavailable`: the declaration exists, but it requires target
-  execution, injection, a callback, or a write that is not currently enabled;
+- `declared, not ported`: the declaration exists, and the operation needs a
+  mechanism that has not been ported into that member — a game-thread call, a
+  callback, or a write. Stealth has a layer for all three in
+  `py4gw/game_thread/`; a member in this state is not wired to it;
 - `unresolved`: the source behavior or pointer path has not yet been proven.
 
-An externally unavailable member is still required in the port. It must not be
+A member in the second state is still required in the port. It must not be
 deleted because it cannot currently execute.
 
 ## Required comparison sources
@@ -85,7 +87,7 @@ Do not start the next context until the current context has a signed result.
 - [ ] Add bounded pointer/array failure tests.
 - [ ] Add a live read test where an external pointer path exists.
 - [ ] Record client build, timestamp, selected PID, addresses, and result.
-- [ ] Record each externally unavailable operation and the exact required
+- [ ] Record each operation that is declared but not ported and the exact required
       mechanism.
 - [ ] Run the full test suite and Pyright.
 
@@ -102,7 +104,7 @@ The certification record must contain:
 Context:
 Source files and revision:
 Declaration result: PASS / FAIL
-Runtime availability: externally verified / externally unavailable / unresolved
+Runtime availability: externally verified / declared, not ported / unresolved
 Missing or changed declarations:
 Transport-only adaptations:
 Live evidence:
@@ -150,30 +152,30 @@ change a row to `PASS` or `FAIL`.
 
 | Context | Declaration parity | Runtime availability | Certificate |
 | --- | --- | --- | --- |
-| `CharContext` | PASS | Read path verified; callback registration unavailable externally | PASS — declaration parity; runtime limitation recorded |
+| `CharContext` | PASS | Read path verified; callback registration not ported | PASS — declaration parity; runtime limitation recorded |
 | `GameContext` | PASS | External resolver/read path verified; no injection-only member | PASS |
-| `PreGameContext` | PASS | Read path verified; callback registration unavailable externally | PASS — declaration parity; runtime limitation recorded |
-| `Cinematic` | PASS | Read path verified; callback registration unavailable externally | PASS — declaration parity; runtime limitation recorded |
-| `GameplayContext` | PASS | Read path verified; callback registration unavailable externally | PASS — declaration parity; runtime limitation recorded |
-| `ServerRegion` | PASS | Read path verified; callback registration unavailable externally | PASS — declaration parity; runtime limitation recorded |
-| `InstanceInfo` | PASS | Read path verified; callback registration unavailable externally | PASS — declaration parity; runtime limitation recorded |
-| `TextParser` | PASS | Read path verified; callback/string-table trigger unavailable externally | PASS — declaration parity; runtime limitation recorded |
-| `AvailableCharacterArray` | PASS | Read path verified; callback registration unavailable externally | PASS — declaration parity; runtime limitation recorded |
-| `PartyContext` | PASS | Read path verified; callback registration unavailable externally | PASS — declaration parity; runtime limitation recorded |
-| `GuildContext` | PASS | Read path verified; callback registration unavailable externally | PASS — declaration parity; runtime limitation recorded |
-| `AccAgentContext` | PASS | Root and nested read path verified; callback registration unavailable externally | PASS — declaration parity; native-only AgentInfo pointer path unresolved |
-| `AgentContext` / `AgentArray` | PASS — source declarations represented; Python/native layout differences explicitly represented | Bounded live read path verified; injected callback lifecycle unavailable externally | PASS — declaration parity; runtime limitation recorded |
-| `Camera` | PASS — native structure and Reforged Python facade declarations represented | Read-only resolver/getters verified; game-thread actions unavailable externally | PASS — declaration parity; runtime limitation recorded |
-| `FriendList` | PASS — native structure and PyFriendList declarations represented | Read-only root/records verified; game-thread actions unavailable externally | PASS — declaration parity; runtime limitation recorded |
+| `PreGameContext` | PASS | Read path verified; callback registration not ported | PASS — declaration parity; runtime limitation recorded |
+| `Cinematic` | PASS | Read path verified; callback registration not ported | PASS — declaration parity; runtime limitation recorded |
+| `GameplayContext` | PASS | Read path verified; callback registration not ported | PASS — declaration parity; runtime limitation recorded |
+| `ServerRegion` | PASS | Read path verified; callback registration not ported | PASS — declaration parity; runtime limitation recorded |
+| `InstanceInfo` | PASS | Read path verified; callback registration not ported | PASS — declaration parity; runtime limitation recorded |
+| `TextParser` | PASS | Read path verified; callback/string-table trigger not ported | PASS — declaration parity; runtime limitation recorded |
+| `AvailableCharacterArray` | PASS | Read path verified; callback registration not ported | PASS — declaration parity; runtime limitation recorded |
+| `PartyContext` | PASS | Read path verified; callback registration not ported | PASS — declaration parity; runtime limitation recorded |
+| `GuildContext` | PASS | Read path verified; callback registration not ported | PASS — declaration parity; runtime limitation recorded |
+| `AccAgentContext` | PASS | Root and nested read path verified; callback registration not ported | PASS — declaration parity; native-only AgentInfo pointer path unresolved |
+| `AgentContext` / `AgentArray` | PASS — source declarations represented; Python/native layout differences explicitly represented | Bounded live read path verified; injected callback lifecycle not ported | PASS — declaration parity; runtime limitation recorded |
+| `Camera` | PASS — native structure and Reforged Python facade declarations represented | Read-only resolver/getters verified; game-thread actions declared but not ported | PASS — declaration parity; runtime limitation recorded |
+| `FriendList` | PASS — native structure and PyFriendList declarations represented | Read-only root/records verified; game-thread actions declared but not ported | PASS — declaration parity; runtime limitation recorded |
 | `ChatBuffer` | PASS — native structures and pointer APIs represented | Read-only ring and typing reads verified | PASS — declaration parity |
-| `WorldContext` | **STRUCTS AND SOURCE MEMBER NAMES REPRESENTED** — 30 source classes and every `_fields_` name/order matched; no source property/method name was missing in the member inventory; native root size and checked offsets match. Value types, empty-array return values, source buffer shape, `GetPlayerById`, `PlayerStruct.name_enc_str`, and the runtime `vanquished_areas` behavior match the inspected Python source. The source `.pyi` disagrees by declaring `list[int] | None`; the runtime method returns `None` unconditionally. | Latest live test accessed all 61 root properties and 188 properties across 44 sampled child records; each implemented source array accessor matched its advertised count, including arrays larger than the former caps. An offline test preserves the `vanquished_areas` runtime behavior. Offline tests cover string lengths above the former cap | Callback registration is unavailable externally; reads above the explicit 16 MiB array or 32,768-character string ceilings fail; live values are not compared field-by-field against an injected Reforged runtime. Not full context/API certification |
+| `WorldContext` | **STRUCTS AND SOURCE MEMBER NAMES REPRESENTED** — 30 source classes and every `_fields_` name/order matched; no source property/method name was missing in the member inventory; native root size and checked offsets match. Value types, empty-array return values, source buffer shape, `GetPlayerById`, `PlayerStruct.name_enc_str`, and the runtime `vanquished_areas` behavior match the inspected Python source. The source `.pyi` disagrees by declaring `list[int] | None`; the runtime method returns `None` unconditionally. | Latest live test accessed all 61 root properties and 188 properties across 44 sampled child records; each implemented source array accessor matched its advertised count, including arrays larger than the former caps. An offline test preserves the `vanquished_areas` runtime behavior. Offline tests cover string lengths above the former cap | Callback registration is not ported; reads above the explicit 16 MiB array or 32,768-character string ceilings fail; live values are not compared field-by-field against an injected Reforged runtime. Not full context/API certification |
 | `TradeContext` | **NATIVE FIELDS, CONSTANTS, AND HELPERS REPRESENTED** — record field order and x86 sizes match; all four native state constants and three flag helpers are represented; no direct Reforged Python context module exists in the inspected source tree | Live root read was previously verified; offline tests now verify full offer-array traversal beyond the former 64-item truncation and explicit failure for an over-limit request | Array materialization is an external-reader adaptation with a 16 MiB explicit ceiling; trade mutations are not enabled |
 | `ItemContext` | **LAYOUTS AND `Item`/`Bag` HELPER NAMES REPRESENTED** — native item/context fields and x86 sizes/offsets match; native methods are callable, bag search misses return `npos`, and `IsOfferedInTrade` uses the external TradeContext reader. No direct Reforged Python context-structure module exists | Live ItemContext and modifier reads pass; offline tests verify callable methods, full `GetModifier` lookup beyond 64 entries, offered/not-offered cases, and dye-aware bag search | `GetModifier` materializes a value copy and explicit array limits remain; Reforged wrapper and mutating-feature parity is not certified |
 | `AccountContext` | **STRUCTS PASS** — native account root and nested records matched by names/order and x86 sizes/offsets; no same-named Reforged Python context module exists | Read path verified; nested account arrays are bounded | Struct declaration pass only; no broader Reforged wrapper/API parity claim |
 | `GadgetContext` | **STRUCTS PASS** — both native records match names/order and x86 sizes; no same-named Reforged Python context module exists | Latest live test read all 9,500/9,500 advertised records through the direct GameContext pointer; offline tests verify full traversal beyond 256 and failure above the 16 MiB ceiling | Only APIs present in the native context source are claimed; no data beyond the explicit external-read ceiling is materialized |
-| `MapContext` | STRUCTS PASS — Reforged declarations and native pathing/props records are present with checked x86 sizes, source field order, and key offsets; source SinkNode helper declarations are represented | Root, arrays, links, props, snapshots, source facade helpers, PID-scoped caches, and travel portals verified; SinkNode helper logic is offline-tested but unused by the current source snapshot, which leaves `sink_nodes` empty | The tested client stores direct pointers into trapezoid arrays, unlike the unused source helper's pointer-to-pointer interpretation. Reforged `.pyi` pointer annotations differ from runtime `.py`/C++. This is recorded but does not block active reads. Callback registration is unavailable externally |
+| `MapContext` | STRUCTS PASS — Reforged declarations and native pathing/props records are present with checked x86 sizes, source field order, and key offsets; source SinkNode helper declarations are represented | Root, arrays, links, props, snapshots, source facade helpers, PID-scoped caches, and travel portals verified; SinkNode helper logic is offline-tested but unused by the current source snapshot, which leaves `sink_nodes` empty | The tested client stores direct pointers into trapezoid arrays, unlike the unused source helper's pointer-to-pointer interpretation. Reforged `.pyi` pointer annotations differ from runtime `.py`/C++. This is recorded but does not block active reads. Callback registration is not ported |
 | `MissionMapContext` | SOURCE DATA STRUCTURES AND READERS PORTED — all three structures, `read_at(reader, address)`, `ConnectedClient.read_mission_map_context(address)`, `subcontexts`/`subcontext2`, and source data properties are offline-tested | **LIVE READ VERIFIED** via the read-only frame-array route: frame 1591 published `0x26404750`, the `frame_id` cross-check passed, and root plus child values were internally consistent | In-process callback registration remains unavailable; the frame-array route is the read-only substitute |
-| `WorldMapContext` | SOURCE DATA STRUCTURE AND READER PORTED — source fields/order, `read_at(reader, address)`, and `ConnectedClient.read_world_map_context(address)` are offline-tested | **LIVE READ VERIFIED** via the read-only frame-array route: frame 3698 published `0x4526A578`, the `frame_id` cross-check passed, and the values read back consistent | In-process callback registration remains unavailable; the frame-array route is the read-only substitute. The world-map frame registers a `jmp` thunk, so the walk also follows near jumps |
+| `WorldMapContext` | SOURCE DATA STRUCTURE AND READER PORTED — source fields/order, `read_at(reader, address)`, and `ConnectedClient.read_world_map_context(address)` are offline-tested | **LIVE READ VERIFIED** via the read-only frame-array route: frame 3698 published `0x4526A578`, the `frame_id` cross-check passed, the values read back consistent, and with the map closed that slot was null and no live frame published the pointer | In-process callback registration is not built and is not needed for this context; the frame-array route is the read-only substitute. The world-map frame registers a `jmp` thunk, so the walk also follows near jumps |
 | `GwDxContext` | OUT OF SCOPE — native render-state record, not a required in-game context migration target | Not required | Existing declaration retained for reference; no render-state pointer work is planned |
 | UI support APIs | Outside context inventory — `ui.h` contains event/data records and accessors, but no `UIContext` structure | NOT AUDITED | Separate UI surface; not part of context-by-context parity |
 | Salvage actions | NOT AUDITED | NOT AUDITED | NOT AUDITED |
@@ -188,9 +190,9 @@ properties, facade methods, signatures, and source `.pyi` surfaces are
 represented. Their external read paths are verified by focused tests and live
 client runs.
 
-The source `enable` operation registers an in-process callback and therefore
-cannot be executed by the current external controller. It remains declared and
-raises an explicit unsupported-operation error. That is a runtime-availability
+The source `enable` operation registers an in-process callback; it is declared and
+raises an explicit unsupported-operation error, because no ported context is wired
+to Stealth's own callback layer yet. That is a runtime-availability
 limitation, not an omitted declaration.
 
 ### CharContext certification record
@@ -201,7 +203,7 @@ Source files and revision: Reforged native_src/context/CharContext.py and .pyi;
   Reforged_Native/include/GW/context/character.h (working-tree sources)
 Declaration result: PASS
 Runtime availability: read path externally verified when a client is running;
-  enable callback externally unavailable; disable clears external cache
+  enable callback not ported; disable clears external cache
 Missing or changed declarations: none found in the source surface
 Transport-only adaptations: target pointers use uint32 addresses; fixed-width
   wide-character arrays use uint16 storage to preserve the x86 target layout
@@ -222,7 +224,7 @@ Source files and revision: Reforged native_src/context/PreGameContext.py and
   (working-tree sources)
 Declaration result: PASS
 Runtime availability: external resolver and complete structure read verified;
-  enable callback registration externally unavailable; disable clears the
+  enable callback registration not ported; disable clears the
   external facade cache
 Missing or changed declarations: none found in the source surface
 Transport-only adaptations: target pointers use uint32 addresses; the source
@@ -246,7 +248,7 @@ Source files and revision: Reforged native_src/context/CinematicContext.py and
   (working-tree sources)
 Declaration result: PASS
 Runtime availability: external GameContext pointer path and structure read
-  verified; enable callback registration externally unavailable; disable clears
+  verified; enable callback registration not ported; disable clears
   the external facade cache
 Missing or changed declarations: none found in the source surface
 Transport-only adaptations: target uint32 fields remain fixed-width x86 values
@@ -270,7 +272,7 @@ Source files and revision: Reforged native_src/context/GameplayContext.py and
   (working-tree sources)
 Declaration result: PASS
 Runtime availability: external resolver and complete structure read verified;
-  enable callback registration externally unavailable; disable clears the
+  enable callback registration not ported; disable clears the
   external facade cache
 Missing or changed declarations: none found in the source surface
 Transport-only adaptations: the fixed x86 uint32 arrays are read externally;
@@ -294,7 +296,7 @@ Source files and revision: Reforged native_src/context/ServerRegionContext.py
   context_methods.cpp (working-tree sources)
 Declaration result: PASS
 Runtime availability: external resolver and signed value read verified;
-  enable callback registration externally unavailable; disable clears the
+  enable callback registration not ported; disable clears the
   external facade cache
 Missing or changed declarations: none found in the source surface
 Transport-only adaptations: the source c_int32 value is read as the same
@@ -318,7 +320,7 @@ Source files and revision: Reforged native_src/context/InstanceInfoContext.py
 Declaration result: PASS
 Runtime availability: external resolver, complete root read, nested terrain
   reads, and current-map metadata read verified; enable callback registration
-  externally unavailable; disable clears the external facade cache
+  not ported; disable clears the external facade cache
 Missing or changed declarations: none found in the source surface
 Transport-only adaptations: source pointer fields use fixed-width uint32 target
   addresses and nested properties read through the bound external reader;
@@ -343,7 +345,7 @@ Declaration result: PASS
 Runtime availability: external GameContext +0x18 pointer path, complete root
   read, bounded language/file-slot reads, cache/sub-structure reads, and file
   hash decoding verified; callback registration and in-process string-table
-  trigger externally unavailable; disable clears the external facade cache
+  trigger not ported; disable clears the external facade cache
 Missing or changed declarations: none found in the source structure or facade
   surface
 Transport-only adaptations: source inline `_cache_header` remains one 0x34-byte
@@ -369,7 +371,7 @@ Source files and revision: Reforged native_src/context/AvailableCharacterContext
 Declaration result: PASS
 Runtime availability: external roster resolver, complete array header, bounded
   entry reads, packed properties, and name decoding verified; enable callback
-  registration externally unavailable; disable clears the external facade cache
+  registration not ported; disable clears the external facade cache
 Missing or changed declarations: none found in the source surface
 Transport-only adaptations: source c_wchar[20] uses uint16 storage for the x86
   target layout; the source GW_Array value view follows target entries through
@@ -394,7 +396,7 @@ Source files and revision: Reforged native_src/context/PartyContext.py and
 Declaration result: PASS
 Runtime availability: external GameContext.party pointer and complete root,
   nested party/member records, party-search records, and bounded list/array
-  reads verified; callback registration externally unavailable; disable clears
+  reads verified; callback registration not ported; disable clears
   the external facade cache
 Missing or changed declarations: none found in the selected source surface
 Transport-only adaptations: source pointers use uint32 target addresses;
@@ -420,7 +422,7 @@ Source files and revision: Reforged native_src/context/GuildContext.py and
 Declaration result: PASS
 Runtime availability: external GameContext.guild pointer and complete root,
   guild, alliance, history, and roster records verified; callback registration
-  externally unavailable; disable clears the external facade cache
+  not ported; disable clears the external facade cache
 Missing or changed declarations: none in the selected source surface
 Transport-only adaptations: target pointers use uint32 addresses; source
   c_wchar arrays use uint16 storage; GHKey exposes the Reforged four-byte
@@ -676,10 +678,11 @@ Runtime limitation: native `map.cpp` captures the root from a UI interaction
   shared memory republishes it. Stealth acquires the same pointer read-only by
   walking the client's UI frame array to the frame that registered the
   world-map callback (`py4gw/ui/`), cross-checking the context's stored
-  `frame_id` against that frame's index. That route is offline-tested but not
-  yet confirmed live, so no live read is claimed. `_update_ptr` and `enable`
+  `frame_id` against that frame's index. That route is confirmed live with the
+  map open and closed — frame 3698 published the root while open, and its slot was
+  null with no live publisher after close. `_update_ptr` and `enable`
   still explicitly raise NotImplementedError because registering an in-process
-  callback remains unavailable.
+  callback is not ported.
 Offline evidence: tests/test_world_map_context_offline.py (6 passed; root read
   from a supplied address, public ConnectedClient reader, field order/offsets,
   address bounds, and callback-facade limitation);

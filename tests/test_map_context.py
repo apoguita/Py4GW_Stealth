@@ -72,6 +72,11 @@ class LiveMapContextTests(unittest.TestCase):
     def test_source_facade_and_pathing_caches(self) -> None:
         """Exercise the source-named facade against the selected live client."""
 
+        if not self.win32.is_elevated():
+            self.skipTest(
+                "This test connects to the client, and connecting requires an "
+                "elevated controller. Run it from an elevated shell."
+            )
         client = connect(self.pid)
         try:
             MapContext._update_ptr()

@@ -385,7 +385,8 @@ index of the frame that published it. A rejected candidate reports why, so
 All of these are read-only: no hook, no payload, no patch, no remote
 allocation, no remote thread, and no input sent to the client. Nothing is
 modified, so there is nothing to roll back. The operator opens and closes the
-in-game surface; the scripts never do.
+in-game surface; the scripts never do. **This describes these scripts, not the
+project**: `py4gw.connect()` does hook the client, and says so.
 
 ### Three routes at once
 
@@ -436,15 +437,17 @@ primitive's caching and rejection behavior.
 
 ## What comes next
 
-1. Run the live tests with the surfaces open and record the builds, PIDs,
-   transitions, and results in [`RESEARCH.md`](RESEARCH.md).
+1. The live tests have been run with the surfaces open and closed; the builds,
+   PIDs, transitions, and results are recorded in [`RESEARCH.md`](RESEARCH.md) and
+   below.
 2. `GwDxContext` is the only remaining pointer that needs a hook
    (`src/GW/render/render.cpp:75-111`, an `EndScene`/`Reset` detour). It is not
    a frame callback and this route does not reach it, so it stays deferred
-   with the game-thread and action work.
+   with the game-thread and action work. The hook mechanism it needs now exists
+   in `py4gw/game_thread/`.
 3. `FrameTree.root` derives the root from the first parentless frame. The
-   native `ui.get_root_frame_func` resolver yields a *function*, which an
-   external controller cannot call without target-side execution, so the
+   native `ui.get_root_frame_func` resolver yields a *function*, which this
+   project cannot call without target-side execution, so the
    derived root is the read-only equivalent rather than a temporary shortcut.
 4. The sibling `FrameRelation.siblings` list is read through `GWList`, but
    `children_of` scans the array because that is what the native code does.

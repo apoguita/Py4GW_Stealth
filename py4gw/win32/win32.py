@@ -22,6 +22,8 @@ class Win32:
     _QUERY_LIMITED_INFORMATION = 0x00001000
     _QUERY_INFORMATION = 0x00000400
     _PROCESS_VM_READ = 0x00000010
+    _TOKEN_QUERY = 0x0008
+    _TOKEN_ELEVATION = 20
     _ERROR_NO_MORE_FILES = 18
     _ERROR_ACCESS_DENIED = 5
     _ERROR_INSUFFICIENT_BUFFER = 122
@@ -70,6 +72,11 @@ class Win32:
             ("EntryPoint", ctypes.c_void_p),
         ]
 
+    class _token_elevation(ctypes.Structure):
+        """The structure ``GetTokenInformation`` fills for ``TokenElevation``."""
+
+        _fields_ = [("TokenIsElevated", wintypes.DWORD)]
+
     def __init__(self) -> None:
         """Load Kernel32 and prepare the functions used by this class."""
 
@@ -77,6 +84,7 @@ class Win32:
             raise OSError("Win32 is available only on Windows.")
         self._kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         self._psapi = ctypes.WinDLL("psapi", use_last_error=True)
+        self._advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
         self._set_function_signatures()
 
     def list_processes(self) -> list[dict[str, Any]]:
@@ -138,6 +146,42 @@ class Win32:
                 }
             )
         return matches
+
+    def is_elevated(self) -> bool:
+        """Return whether this controller runs with an elevated token.
+
+        Windows hands an unelevated administrator a *filtered* token with the
+        Administrators SID disabled. That token is denied ``PROCESS_VM_WRITE``,
+        ``PROCESS_VM_OPERATION``, ``PROCESS_CREATE_THREAD`` and
+        ``PROCESS_SUSPEND_RESUME`` with error 5, which is what every target-side
+        operation needs, so this is checked before a connection is made rather
+        than discovered later as a bare ``error 5`` on the first write.
+
+        The check reads this process's own token; it touches no other process.
+        """
+
+        token = wintypes.HANDLE()
+        if not self._advapi32.OpenProcessToken(
+            self._kernel32.GetCurrentProcess(),
+            self._TOKEN_QUERY,
+            ctypes.byref(token),
+        ):
+            self._raise_last_error("OpenProcessToken")
+
+        try:
+            elevation = self._token_elevation()
+            returned = wintypes.DWORD()
+            if not self._advapi32.GetTokenInformation(
+                token,
+                self._TOKEN_ELEVATION,
+                ctypes.byref(elevation),
+                ctypes.sizeof(elevation),
+                ctypes.byref(returned),
+            ):
+                self._raise_last_error("GetTokenInformation")
+            return bool(elevation.TokenIsElevated)
+        finally:
+            self._close_handle(token)
 
     def format_processes(self, processes: list[dict[str, Any]]) -> str:
         """Turn process records into a simple table for a console or log."""
@@ -398,6 +442,22 @@ class Win32:
         self._kernel32.Module32FirstW.restype = wintypes.BOOL
         self._kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
         self._kernel32.CloseHandle.restype = wintypes.BOOL
+        self._kernel32.GetCurrentProcess.argtypes = []
+        self._kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        self._advapi32.OpenProcessToken.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.HANDLE),
+        ]
+        self._advapi32.OpenProcessToken.restype = wintypes.BOOL
+        self._advapi32.GetTokenInformation.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        self._advapi32.GetTokenInformation.restype = wintypes.BOOL
         self._psapi.EnumProcessModulesEx.argtypes = [
             wintypes.HANDLE,
             ctypes.POINTER(wintypes.HMODULE),

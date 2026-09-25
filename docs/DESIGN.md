@@ -118,7 +118,8 @@ visible in the code and stubs.
 
 ## Current capability
 
-The current read-only library surface is deliberately small:
+The current library surface is deliberately small, and only part of it is
+read-only:
 
 1. ask Windows for the running process list;
 2. find processes named `Gw.exe`, case-insensitively;
@@ -128,9 +129,15 @@ The current read-only library surface is deliberately small:
 5. parse its x86 PE section ranges and scan them with masked patterns; and
 6. load the copied `offsets/` definitions and execute their resolver steps.
 
-The library does not change a process, inject anything, or run code in a
-process. The first target-specific structure readers were migrated in this
-order: `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
+The read half of the library does not change a process, inject anything, or run code
+in a process. On top of it, and separately from it, `py4gw/game_thread/` does all
+three: `py4gw.connect()` installs two entry hooks, a dispatcher emitted as machine
+code from Python, an observer and the shared block the two sides exchange through,
+and `py4gw.disconnect()` puts both functions' original bytes back and frees
+everything it placed. Connecting is therefore a write; `connect(...,
+game_thread=False)` is the read-only connection, and every reader below is reached
+the same way on either. The first target-specific structure readers were migrated in
+this order: `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
 `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
 `AvailableCharacterArray`, `PartyContext`, `GuildContext`, `AccAgentContext`,
 `Camera`, `FriendList`, `ChatBuffer`, `WorldContext`, `TradeContext`,
@@ -140,11 +147,11 @@ the current capability.
 A `Gw.exe` result is a candidate found by filename, and a scanner result is
 only an address selected by a pattern or resolver.
 
-The `MailboxRecord` type validates the proposed fixed-width record format for
-the future WorldMap callback pointer handoff. It only converts and validates
+The `MailboxRecord` type validates a proposed fixed-width record format for a
+WorldMap callback pointer handoff. It only converts and validates
 local byte strings; it does not allocate memory in, write to, or execute code
-inside a process. The callback target has been resolved and read on one live
-client, but no callback hook or payload is implemented.
+inside a process. Nothing uses it: the frame-array route reaches the same pointer
+without a hook, so the hook-based handoff it was written for was not built.
 
 `py4gw/ui/` is the separate package for user-interface engine primitives. It
 holds the `Frame` and callback layouts, the read-only frame-array reader, the
@@ -246,9 +253,13 @@ allowed to be inactive while the client is in-game; in that state it reports
 that no selection-menu context is currently available. Additional contexts
 will be added as additional subtabs under this tab.
 
-The UI catches `OSError` from the library and displays the diagnostic message.
-It closes temporary inspection handles and keeps only the explicitly selected
-connection open. It does not write memory or execute target code.
+The UI catches `OSError` and `RuntimeError` from the library and displays the
+diagnostic message — including the elevation refusal, which is what an unelevated
+launch now produces when a client is selected. It closes temporary inspection
+handles and keeps only the explicitly selected
+connection open. The client-list inspection opens read-only
+(`game_thread=False`), so refreshing the list never patches anything; a selected
+connection installs the game-thread layer and takes it back out on disconnect.
 
 ## External memory architecture
 
@@ -373,6 +384,11 @@ it per read, which is what the native runtime does and why a null slot reads as
 `Map.IsMapReady()`, which is re-evaluated per read rather than cached, so no
 time-to-live window exists.
 
+Where a ported source member carries `@frame_cache`, the decorator is **dropped**,
+not adapted: Reforged invalidates it from a per-frame in-process callback, and
+Stealth has no frame tick. The reasoning and the rule are in
+[`PORTING_RULES.md`](PORTING_RULES.md).
+
 `PerfCounter` is the port of Reforged Native's `PyProfiler`: named stopwatches
 over a 600-sample rolling history, reported as
 `(min, avg, p50, p95, p99, max)`. One averaged sample is stored every six
@@ -407,8 +423,10 @@ matching bottleneck. If that ever happens, a small compiled helper can be
 considered without changing the offsets or scanner contract.
 
 Assembly, remote code, hooks, and function execution are not part of the
-scanner implementation. They would add a different capability boundary and
-are outside the current read-only design.
+scanner implementation. The scanner reads bytes and resolves addresses; the code
+this project places in the client lives in `py4gw/game_thread/` and nowhere else.
+Keeping them apart is deliberate: a scan never patches anything, so no read path
+carries the risk of a write path.
 
 NiceGUI is a presentation dependency, not part of the Win32 library API. UI
 callbacks may call public `Win32` methods and format returned records for
@@ -500,24 +518,34 @@ the same interpreter where the project dependencies are installed.
 
 ## Evidence and boundary
 
-The current implementation is pure external and read-only. It can read
-validated target ranges but does not modify any process. A `Gw.exe` result or
+The ported read surface is pure external and read-only: it reads validated target
+ranges and does not modify any process. A `Gw.exe` result or
 scanner address is not proof of a supported Guild Wars build.
 
-Future game-thread execution requires code inside the target process; it
-cannot be achieved through the current external reader alone. The selected
-architecture for that work is a Stealth-owned payload/patch installed by the
-external host, without a conventional injected DLL. It is still injection, and
-no such payload or hook is implemented yet. “No DLL” describes the delivery
-approach; it does not mean the target is unmodified or that the payload is
-undetectable.
+**The project as a whole is no longer pure external.** The game-thread layer places
+code inside the target process, which the external reader alone cannot do, so it is
+built as a Stealth-owned payload and patch installed by the external host, without a
+conventional injected DLL. It is still injection. `py4gw.connect()` installs it —
+two entry patches, a dispatcher emitted as machine code from Python, an observer, and
+the shared block the two sides exchange through — and `py4gw.disconnect()` restores
+both functions' own bytes and frees everything it placed. The mechanism is
+live-verified: work published by the controller ran on the client's own thread, a
+source-backed function call changed the client's state, callbacks were delivered as
+they arrived, and the client's code section hashed identical before and after.
+`connect(..., game_thread=False)` is the connection that only reads. “No DLL”
+describes the delivery approach; it does not mean the target is unmodified or that
+the payload is undetectable. See
+[`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md) for the phased record.
 
 The first pointer that appeared to require that payload, `WorldMapContext`, is
-now acquired read-only through the UI frame array instead. That route is
-implemented and offline-verified but not yet confirmed on a live client; see
-[`UI_FRAME_TREE.md`](UI_FRAME_TREE.md). The callback plan in
+acquired read-only through the UI frame array instead. That route is now confirmed
+on a live client for both map contexts: with the surface open, the frame that
+registered the callback published the root, the `frame_id` cross-check passed and the
+values read back consistent; with it closed, that frame's slot was null, no live
+frame registered or published the pointer, and the independent visibility flag
+flipped. See [`UI_FRAME_TREE.md`](UI_FRAME_TREE.md). The callback plan in
 [`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md) remains the
-fallback if the read-only route does not confirm.
+fallback if the read-only route does not hold on another build.
 
 The user-provided live observation recorded in `RESEARCH.md` found PID `39212`
 at `F:\GW\GW1\Gw.exe` with the client open and no candidates after the client

@@ -14,21 +14,28 @@ proof that Stealth has implemented them or that they have been tested in a
 live client.
 
 Stealth's host remains external and does not depend on Reforged's DLL/runtime.
-The selected architecture for Native's callback-owned pointers and
-game-thread operations is a small Stealth-owned payload or patch in the client,
-without loading a conventional DLL. This still modifies the process and is
+Native's callback-owned pointers and
+game-thread operations are reproduced by a small Stealth-owned payload and patch in
+the client,
+without loading a conventional DLL. This modifies the process and is
 injection. The no-DLL choice describes the delivery approach; it does not mean
-the target is unmodified or that the payload is undetectable. The current
-Stealth implementation remains read-only; no payload, patch, remote thread,
-or target-side call has been implemented or tested as part of this inventory.
+the target is unmodified or that the payload is undetectable.
+
+**Read this together with the component plan below and the Phase 5 status.** The
+component plan is built and part of the library, not a standalone package:
+`py4gw.connect()` installs the hooks, the block, the emitted dispatcher and the
+callback listener on the game thread's own function and on the client's message
+sender, and `py4gw.disconnect()` restores both functions' own bytes and frees
+everything it placed. The reference implementations stay under the gitignored
+`external/` tree as the worked design they were.
 
 The first pointer the payload was planned for, the WorldMap context in
 [`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md), now has a
 read-only route through the client's UI frame array; it is implemented and
-offline-verified, but not yet confirmed on a live client. See
-[`UI_FRAME_TREE.md`](UI_FRAME_TREE.md). The payload remains the fallback for
-that pointer and the mechanism for the work that genuinely needs target-side
-code.
+**confirmed on a live client, open and closed**. See
+[`UI_FRAME_TREE.md`](UI_FRAME_TREE.md). That particular hook was therefore not
+built; the payload is the mechanism for the work that genuinely needs target-side
+code, and it now exists.
 
 ## What Native actually uses
 
@@ -102,6 +109,255 @@ mechanism is already known:
 
 This makes later additions possible while keeping the initial system limited
 to mechanisms and parameter forms actually required by Reforged Native.
+
+## Component plan
+
+The layers in dependency order. "Native" is what the source project has;
+"Stealth" is what we need, which differs only where Python sits *outside* the
+process instead of inside it. State records what has been **proven to work** in
+the reference packages under `external/` — not code this project has adopted.
+See "Inherit the invariants, design the shape" below.
+
+| # | Layer | Native | Stealth | State |
+| --- | --- | --- | --- | --- |
+| 0 | Resolver | `Patterns::Resolve` | `PatternCatalog` + the tracked `offsets/` catalog | **done** — 233 resolvers, byte-identical to Native's |
+| 1 | Transport | not needed; the queue is a `std::vector` in its own address space | one allocation inside the client plus a layout both sides agree on | **done** — header, module-bound trust anchor, command region, and the event region the listener reads |
+| 2 | Installer | MinHook, in-process | ours: suspend, verify, write, protect, restore, roll back | **done, live-verified** |
+| 3 | Payload | compiled into the DLL | a position-independent, import-free x86 blob | **done, live-verified** |
+| 4 | Pump | `CallFunctions()` inside the `LeaveGameThread` detour | the same hook, installed from outside | **done, live-verified** |
+| 5 | Action queue | `game_thread::Enqueue` | command ring + completion | **done, live-verified** |
+| 6 | Callbacks | twelve typed per-feature registries | **one** registry keyed by event type, over an event ring | **done, live-verified** — a handler fired from a real client message with no `pump()` call |
+| 7 | Call vocabulary | `NativeFunction` + `Prototypes` (17 ctypes signatures) | descriptor table + generated call stubs | **partly built** — the descriptor table and two typed forms are live-verified; breadth is the remaining work |
+
+Why one registry and not twelve: Native needs a typed registry per feature because
+each hook has its own signature. Every event *we* deliver arrives as the same
+fixed-size record, so a single registry keyed by event type covers all of them —
+and a new callback kind then costs one hook and one event id, not a new mechanism.
+
+### The call vocabulary
+
+Follow-up 1 from Phase 5, and the answer to extensibility rule 4.
+
+Native describes a callable game function as **an address plus a prototype**, where
+a prototype is a ctypes signature (`restype`, `argtypes`, convention) drawn from a
+table of 17 reusable shapes. `prototype.build()(address)` returns a real callable
+and ctypes handles the marshalling. Nothing about any individual function is
+written down: the pattern finds the address, the prototype says how to call it.
+
+That works in-process and cannot work for us — `ctypes.CFUNCTYPE(...)(address)`
+builds its trampoline in *our* address space, and a `Gw.exe` internal function is
+not callable from there.
+
+**The adaptation:** keep the prototype table and let it drive code generation
+instead of ctypes. From `(restype, argtypes, convention)` we know exactly how to
+write the call, so the host emits a short stub per signature and places it in the
+client. The payload then needs one generic command — *run the stub for descriptor
+N with these argument words* — and never grows.
+
+This also satisfies rule 5, which forbids "calling an arbitrary address with an
+untyped argument blob". Today `arg3` carries an address. The contract-shaped form
+is a **controller-populated descriptor table** with `OP_CALL_DESC <index>`, so no
+address crosses the wire and every call shape is declared, reviewed and typed. The
+v2 hardening bounded `arg3` to the client module; the descriptor table removes it.
+
+Pointer parameters are the one real cost. A scalar is just a 32-bit word; a pointer
+(`float*`, `wchar_t*`) must point into the client's address space, so the host
+allocates a small scratch buffer in the target, writes the data there, and passes
+that address. Native never pays this, because it can pass a pointer into its own
+memory.
+
+### Decisions this plan depends on
+
+These are the user's to make, not assumptions to build on:
+
+1. **Where the code lives.** The bridge is neither Reforged nor Native, so
+   [`PORTING_RULES.md`](PORTING_RULES.md) does not cover it. Integrated into
+   `py4gw/` it becomes Stealth-owned infrastructure beside `py4gw/scanner` and
+   `py4gw/memory`; kept under `external/`, the library stays read-only.
+2. **Which base to continue from — DECIDED: neither, in the sense of inheritance.**
+   The packages under `external/` prove the mechanism works and are the reference
+   for *invariants*; they are **not** a codebase to inherit. The implementation is
+   tailored to this project and does not adopt their module split, object model,
+   naming, sizes or ABI. Three of their modules are duplicate capability we already
+   own and would not be re-created: `selfscan.py` for `RemoteScanner` +
+   `PatternCatalog`, `modules.py` for `Win32.get_main_module` /
+   `list_processes`, and their process reader for `ProcessMemoryReader`.
+3. **Whether to verify the reference live first**, before writing our own. It
+   injects, so it needs explicit scope — and it would not be our code doing it.
+
+### Inherit the invariants, design the shape
+
+The distinction to hold onto, because it is easy to lose:
+
+**Invariants — properties any correct implementation needs, taken from the
+reference as findings rather than as code:**
+
+- the producer writes the whole record, then publishes the index **last**;
+- the consumer copies pending records and advances its read index **before**
+  running callbacks, so a slow callback cannot pin slots;
+- the game thread never waits for the host — overflow increments a counter and
+  drops, it does not block;
+- patching is fail-closed: verify, suspend, refuse on an implausible state,
+  re-read, restore protection, and roll back on failure;
+- the payload is position-independent and import-free;
+- no raw address crosses the wire — a descriptor index does;
+- the map-ready check is applied twice: when work is published, and again on the
+  game thread, because the map can change in the gap.
+
+**Shape — ours to design, not theirs to dictate:**
+
+- module split, naming and object model, following this project's existing
+  module style rather than one large orchestrator object;
+- the wire records, following the house style already set by
+  `py4gw/memory/mailbox.py`: magic, version, size, session id, and a sequence
+  used for stable reads, with every mismatch rejected explicitly;
+- ring depths and record sizes, chosen for our needs rather than inherited;
+- how it attaches to the library — through `ConnectedClient` and the existing
+  readiness discipline, like every other reader here;
+- what it refuses. The reference's own defects are recorded in
+  [`DEFERRED_INJECTION.md`](DEFERRED_INJECTION.md) and are not inherited: the
+  permanent wedge on a command timeout, `close()` freeing code after a refused
+  restore, the broken reinstall path, the over-narrow executable-region fallback,
+  and `watch_value`'s encoder ordering.
+
+### Checklist
+
+The first unchecked item is the resume point.
+
+**Proven in the reference packages under `external/` — not our code**
+
+These record that the mechanism is possible. None of it is in this library.
+
+- [x] Resolver catalog present and identical to Native's
+- [x] Transport layout: header, module-bound trust anchor, command ring
+- [x] Installer: fail-closed patch discipline, refusal paths, rollback
+- [x] Payload: relocation-free, with a build-time relocation gate
+- [x] Pump: entry hook on `leave_game_thread_func`, live-verified
+- [x] Action queue: publish, completion, timeout behaviour, live-verified
+- [x] Offline harness that links the real dispatcher object
+- [x] Callback transport designed and documented (v3 reference, not live-verified)
+
+**Stealth implementation — our own, in the library**
+
+- [x] **Step 1 — the shared block.** `py4gw/game_thread/shared_block.py` plus
+  `tests/test_shared_block_offline.py`. Layout, records, their vocabularies,
+  validation and queue arithmetic. 36 tests, no client involved, no writes. See
+  the resume record.
+- [x] **Step 2 — the installer.** `py4gw/win32/write_access.py` (the invasive
+  Win32 surface) and `py4gw/game_thread/patcher.py` (the fail-closed patch
+  sequence), plus `tests/test_patcher_offline.py` (19 tests, fake target) and
+  `tests/test_write_access.py` (**10 tests, live, elevated, all passing**). The
+  Win32 surface is now proven against the real client: threads suspended and
+  resumed, instruction pointers read, page protection changed, bytes written and
+  restored. Every write in that run targeted memory the test allocated itself,
+  outside the client module; nothing was written to the client's own code or
+  data, and the client was left healthy on the same PID.
+- [x] **Step 3 — the hooker.** `py4gw/game_thread/hooker.py` plus
+  `tests/test_hooker_offline.py`. Entry patch, trampoline, entry stub, and
+  install / enable / disable / hits / remove. 33 tests against a fake target.
+  **The hooker's own generated bytes have still never executed** — that is the
+  first item under Still open, and it is now the only offline gap left.
+- [x] **Step 4 — the payload.** `py4gw/game_thread/payload.py` plus
+  `tests/test_payload_offline.py`: the dispatcher the stub calls — validate the
+  block header, take at most one command, run it, publish the result and the
+  completion event. **330 bytes of machine code, emitted from Python**, not
+  written in C and compiled. The harness places those bytes in this process's own
+  executable memory and calls them against a fake block, so the bytes that run are
+  the bytes the installer would write. 21 tests, no compiler, no client.
+- [x] **Step 5 — the queue.** `py4gw/game_thread/bridge.py`: publish a command,
+  wait for its result, read the events back. Plus `tests/test_bridge_offline.py`
+  (25 tests against a fake target) and **`tests/test_live_bridge.py`, which runs
+  the whole chain in the live client** — 10 tests, elevated, all passing. The
+  client's code section is hashed before and after and comes back identical. See
+  the resume record.
+- [x] **Step 6 — callbacks: the registry and the listener.**
+  `py4gw/game_thread/callbacks.py`: handlers keyed by event kind
+  (`register`/`unregister`/`kinds`), a one-shot `pump()`, and **`EventListener`** —
+  a thread that reads the block and dispatches records **as they arrive**, which is
+  what makes a callback a callback rather than a queue you drain. 22 offline tests
+  and two live ones: one pumps and sees the handler run, the other starts the
+  listener, causes a real target change through the call path, and is delivered
+  **with nothing calling `pump()`**.
+
+  Reading happens in one place — the event counter has exactly one consumer — and
+  the command side has its own counter and its own writer, so a listener and a
+  publisher need no lock between them. That is the block's design paying off.
+
+  Two costs, recorded rather than designed away: **handlers run on the listener's
+  thread**, alongside whatever the caller's main thread is doing; and **a handler
+  that blocks slows the drain**, because the payload drops an event when the client's
+  event region is full rather than making the game wait.
+- [ ] **More callback kinds.** The registry is in place and two kinds flow through
+  it (`COMMAND_COMPLETE`, `UI_MESSAGE`); each further kind is one watch-list entry
+  and one hook, per the inventory.
+
+**The call vocabulary — started, ahead of Step 6**
+
+Chosen over Step 6 because of what the refusals actually need. Counted from the
+refusal messages themselves: of 188 refusing members, **104 are plain porting
+gaps** (a context field not ported yet), **52 need the client to do something**
+("it asks the client to travel", "dispatches a tick UI message", "add a hero"),
+6 name the callback runtime, and 6 need in-client UI or the geometry kernel. The
+52 are the largest portable chunk left, and the 6 callback ones are the
+`enable()` members that want a per-frame refresh this project refuses by design.
+So the call path buys the port; callbacks (Step 6) buy a new event surface.
+
+- [x] **Descriptor table addressed by index**, so no raw address crosses the wire.
+  It lives in the client, is filled by the host from the pattern catalog, and a
+  command names a slot. The dispatcher is emitted with its address and with the
+  module bounds it checks before calling anything.
+- [x] **A typed call form**: `ui::SendUIMessage(message_id, wparam, lparam)` —
+  the shape nearly every Native action goes through — with the command's words
+  packed into a zeroed sixteen-word payload. Proven by execution, not inspection.
+- [ ] Prototype table in the host — Native's 17 shapes plus whatever we need
+- [ ] Stub generator per signature, with a cache, placed in the client
+- [ ] Scratch-buffer allocation and marshalling for pointer parameters, so
+  `Void_FloatPtr` and `wchar_t*` calls work
+
+**Settled — elevation is a precondition, not a step.** `py4gw.connect()` asserts
+elevation and refuses without it, and **a process cannot elevate itself**: the token
+is fixed when the process is created and no API raises it, so `AdjustTokenPrivileges`
+cannot help (it only enables privileges already present, and a filtered token's
+Administrators SID stays deny-only). Spawning a second elevated process is the only
+thing UAC can authorize, and the process that asked still holds no rights. So
+"elevate on demand" was evaluated and rejected as having no useful meaning here, and
+a broker or a self-relaunch is not planned. The shell is elevated before the script
+starts, every time. `Win32.is_elevated()` is the one check; see `AGENTS.md`.
+
+**Still open**
+
+- [ ] **Execute the stub, offline, the way the dispatcher now is.** The payload's
+  bytes have run, and the live test shows the stub works, but no offline test has
+  executed it. The same harness can prove the whole chain with no client — write an
+  entry patch over a fake function in this process, call it, and check that the
+  dispatcher ran and the original body still ran afterwards through the trampoline.
+- [ ] Whether to verify the reference live before writing our own
+- [ ] Re-entrancy guard and an "am I inside the hook" query
+- [ ] **Owner-loss policy**, now with a measured cost. `disconnect()` frees
+  everything *it* placed — two connect/disconnect cycles reused the same block and
+  watch-list addresses, which is what proves the free path ran. What is still
+  unreclaimed is an **orphan**: a controller killed while patched leaves its entry
+  patch and its allocations behind (about 3 KB per attach, because a thread can be
+  inside the stub at the moment of removal). Reconnect repairs the stale patch and
+  counts suspended threads, but nothing frees the orphan's memory; the live suites
+  that remove without freeing (`remove(free_code=False)`) have left pairs behind on
+  purpose. Decide what reclaims an orphan, and whether a removal path should free
+  the allocations after a bounded wait.
+- [x] Offline harness coverage for the call path: `tests/test_payload_offline.py`
+  emits a target function as machine code and runs the real dispatcher over a real
+  call table, including the refusals.
+- [x] Live validation of the call path, elevated, on a real client:
+  `tests/test_live_call.py`, and `tests/probe_live_target.py` for the observable
+  effect.
+- [ ] Offline harness coverage for the callback masks.
+- [ ] **Which module size becomes the trust anchor.** `Win32.get_main_module`
+  prefers Toolhelp and falls back to PSAPI when Toolhelp is denied, and the two
+  disagree by one page for `Gw.exe` (`0x0F48000` vs `0x0F49000`; the PE header
+  agrees with PSAPI). Since Toolhelp is only available to an elevated controller —
+  and elevation is required for all target-side work — the number that reaches
+  the bridge depends on how it was launched. Measuring a re-run is needed before
+  `module_base`/`module_size` is treated as settled. Evidence in
+  [`RESEARCH.md`](RESEARCH.md).
 
 ## Resumable plan
 
@@ -224,9 +480,10 @@ Two deliberate follow-ups, not yet done:
    The one operational constraint: the controller must run **elevated**. An
    unelevated controller is denied `PROCESS_VM_WRITE`,
    `PROCESS_VM_OPERATION`, `PROCESS_CREATE_THREAD`, and
-   `PROCESS_SUSPEND_RESUME` by ordinary UAC token splitting — not by any client
-   protection. An earlier note in this plan called it a client blocker; that was
-   wrong. See [`RESEARCH.md`](RESEARCH.md).
+   `PROCESS_SUSPEND_RESUME` with error 5. Two earlier notes here were wrong about
+   why: it is not a client protection, and it is not UAC token splitting either —
+   the client's own DACL grants our user SID `PROCESS_ALL_ACCESS`, so no access
+   check explains it. See the measurement in [`RESEARCH.md`](RESEARCH.md).
 
    Still open from the questions above: whether the mover needs additional
    client state (loading screen, character select, dead/knocked-down), the
@@ -248,12 +505,479 @@ Two deliberate follow-ups, not yet done:
 
 ## Resume record
 
-Current resume point: **Phase 5, the game-thread bridge.** Phases 1-4 are
-complete. The first pointer-acquisition problem that motivated this plan —
-three contexts captured only through UI callbacks — was resolved without any
-target-side code: both map contexts are live-verified read-only through the
-client's UI frame array, open and closed, and the third (`SalvageSessionInfo`)
-is unused by both reference projects. See
+**Resume point: the call vocabulary's remaining forms.** The objective's three legs
+are all live-verified now — hooks, execution, and callbacks — so what is left is
+depth rather than capability: pointer arguments (`Move(float*)`), the prototype
+table, and per-signature stubs, which is what turns one typed form into the
+vocabulary the refused action members need. Then the members themselves, one at a
+time, each with its effect asserted rather than its completion trusted.
+
+### How the payload is produced — corrected
+
+An earlier draft of Step 4 said the payload would be written as C and compiled,
+with the compiled bytes checked in. **That was wrong, and it was wrong because it
+copied the reference package's approach rather than thinking about this project.**
+
+The reference ships `dispatcher.c`, `build_payload.ps1` and a 604-byte
+`dispatcher_x86.bin`. None of that is required. The hooker already emits the entry
+patch, the trampoline and the 34-byte stub as raw bytes from Python. The dispatcher
+is the same technique at a larger size, and the consequence of emitting it is that
+this project gains **no C source, no build script, no toolchain dependency and no
+binary blob in the repository**. The machine code is described by Python that a
+reviewer can read, not checked in as an opaque artifact.
+
+What made this decidable rather than a matter of taste: **Python can execute the
+code it emits, in this process, so the harness needs no compiler and no client.**
+Verified on this machine, 32-bit Python 3.13:
+
+```text
+emitted 6 bytes at 0x11e0000 -> call returns 42
+cdecl pointer arg   -> 42          (argument at [esp+4])
+stdcall pointer arg -> 0xc0dec0de  (callee pops: ret 4)
+two stack args      -> 42
+bitness: 32
+```
+
+So the harness allocates executable memory with `VirtualAlloc`, copies the emitted
+bytes in, and calls them with a pointer to a fake block. Both calling conventions
+that matter are testable the same way: `__cdecl` for the game functions the payload
+calls, and `__stdcall` for the payload itself, which the stub calls and which pops
+its own argument.
+
+The honest cost: hand-emitting a dispatcher in Python is more work than writing C
+and compiling it, and the dispatcher is more complex than the stub. The mitigation
+is to keep it minimal and grow it in small, separately tested steps.
+
+Asked and answered: *"why not write everything in C++ then?"* Because the value of
+this project is a controller written in Python that can be read, run and changed
+without a build step. Exactly one part has to be machine code — the part that
+executes inside the client — and emitting that from Python keeps it small and
+keeps every other line of the project readable.
+
+### Call vocabulary, first slice — built, not yet called live
+
+Built: `Operation.CALL` and `CallForm` in `shared_block.py`, the `Descriptor`
+record and the call table, the CALL path in `payload.py` (354 bytes without a
+table, 558 with one), and the host side in `bridge.py`. Offline suite 475 tests
+green, `pyright` reports no errors.
+
+**What the sources said, before anything was written.** `Py4GW_Reforged_Native`
+declares its call ABIs as typedefs beside the code that uses them
+(`src/GW/agent/agent_methods.cpp:18-22`), and almost every action it takes on the
+player's behalf goes through one function:
+
+```cpp
+using SendUIMessageFn = void(__cdecl*)(UIMessage message_id, void* wparam, void* lparam);
+```
+
+`ChangeTarget`, `InteractAgent`, `CallTarget`, the party-search and tick and
+invite messages, travel, difficulty, add/kick hero — all of them build a small
+packet and call that. `ui_bindings.cpp:60-74` documents the packet contract: a
+**zeroed sixteen-word POD** with the values packed into the front, passed as
+`wparam`, with `lparam` null.
+
+**And the address is already resolvable.** Native resolves it with
+`PY4GW::Patterns::Resolve("ui.send_ui_message_func", ...)` (`ui.cpp`), and our
+copied `offsets/ui.json` carries that exact resolver — `send_ui_message` pattern,
+`to_function_start`. No new resolution machinery was needed for any of this.
+
+**What was built, and what each piece refuses.**
+
+| Piece | What it does |
+| --- | --- |
+| call table in the client | 16 slots of `{target, form}`. The host fills it from the pattern catalog. A slot the host did not fill stays zero and names nothing. |
+| `Operation.CALL` | The command carries a **slot**, never an address: `arg0` is the index, `arg1`–`arg3` are the form's words. |
+| module guard in the payload | Before calling: a zero target is `RESULT_NO_TARGET`, a target outside `module_base`/`module_size` is `RESULT_BAD_TARGET`, and neither is called. The host resolved the address, so it is inside the module by construction; the payload refuses anyway, because that is the rule the call path has to hold on its own. |
+| `CallForm.UI_MESSAGE` | Zeroes sixteen words in its own frame, packs the command's two words into the front, and calls `void __cdecl(message_id, payload, nullptr)` — arguments right to left, caller releases them. |
+| an unknown form | `RESULT_UNKNOWN_FORM`, never guessed at. A form the payload does not know is not called with the words it happens to have. |
+
+**How it is proven.** `tests/test_payload_offline.py` emits a **target function**
+as machine code as well, and that target writes down what it was handed: the
+three arguments and the first four words behind `wparam`, plus a canary so "never
+called" is distinguishable from "called with zeroes". Eight tests run the real
+dispatcher over a real call table and check by execution that the message id
+arrives first, that `wparam` points at a payload holding the command's words,
+that `lparam` is null, that the words the command did not set are zero, and that
+each of the four refusals above leaves the target **not called**.
+
+**What is not proven yet.** ~~No call has been made in a live client.~~ **Called
+live on 2026-09-24** — `tests/test_live_call.py`, 6 tests, elevated, in a map:
+`ui::SendUIMessage(kSendChangeTarget, {agent_id, 0}, nullptr)` resolved to
+`0x008441A0` and reached through call-table slot 0, completing `DONE` on the game
+thread while the client ran its own frame. The two refusals were exercised **in the
+client** as well: a slot naming an out-of-module address came back
+`RESULT_BAD_TARGET` without being called, and a slot past the table came back
+`RESULT_BAD_DESCRIPTOR`. Entry bytes restored, code section hash unchanged. See
+[`RESEARCH.md`](RESEARCH.md) for the full record.
+
+**What the live runs prove now.** On 2026-09-24 the call path was exercised in the
+client twice, and the second time it *did* something: `tests/probe_live_target.py`
+called `agent.change_target_func(player_agent_id, 0)` and then `(0, 0)`, and the
+person watching saw the target ring appear and clear. **A Native action is two
+things, not one** — the message the runtime broadcasts and the function it calls in
+response — and only the second is part of a port; see
+[`RESEARCH.md`](RESEARCH.md) for the chain that shows it. The message-sending form
+(`UI_MESSAGE`) stays, because messages the *client* handles are still messages; what
+changed is knowing that for the `kSend*` family the actor is the runtime, not the
+client.
+
+**What is still missing** is nothing, for the mechanism: the observation side was
+built on 2026-09-24. `tests/test_live_call.py` hooks `ui.send_ui_message_func`,
+watches `kChangeTarget`, and asserts the target id that comes back from the
+client's own notice — 4 tests, elevated, all passing. The observer is
+`payload.py`'s `build_observer`, the watch list lives in the client like the call
+table, and the stub forwards the hooked function's arguments
+(`hooker.build_stub(..., forwarded_arguments=2)`). See
+[`RESEARCH.md`](RESEARCH.md) for the run, and for the two measured behaviours the
+tests depend on: the client reports changes rather than requests, and the entry cut
+must not include a relative branch.
+
+**The first live call, as it stands.** `ui::SendUIMessage` with
+`UIMessage::kSendChangeTarget` (`0x3000000B`, `constants/ui.h:186`) and a
+two-word packet `{target_id, auto_target_id}`, which is exactly
+`agent.cpp:94-95`'s own call. The call ran and the client survived it; the message
+alone changes nothing, because what acts on it is the runtime's own handler. Two
+routes to the effect were then built: the other side of the same hook, which is
+built above (`test_live_call.py` watches `kChangeTarget` and asserts the target id
+from the client's own notice), and a read-only resolver for the current-target
+global — `offsets/gwau3_leads.json`, landing on `0x0129A174` and confirmed
+differentially against the client's own reports. `Player.GetTargetID` is still
+refused: Native keeps the value in `g_current_target_id`, a global its
+`kChangeTarget` UI-message *hook* maintains (`agent.cpp:60,143-145`) and no context
+holds, and the member has not been ported onto either route.
+
+### The lifecycle: connect sets it up, disconnect takes it down
+
+`py4gw.connect()` now installs the whole capability layer and `disconnect()` removes
+it, so the pieces above are not something a caller assembles by hand:
+
+- connect resolves `game_thread.leave_game_thread_func` and
+  `ui.send_ui_message_func` from the catalog, **checks both entry byte sequences
+  before writing anything**, opens the write transport, installs the bridge (command
+  hook, observer hook, module bounds, empty call table and watch list), creates the
+  registry and **starts the listener thread**;
+- `client.callbacks` registers handlers, `client.watch(message_id)` and
+  `client.unwatch(message_id)` change what the observer records at runtime — the
+  list lives in the client and is re-read on every call, so no reinstall is needed;
+- `client.bridge` is the queue and the hooks, for anything deeper;
+- `disconnect()` stops the listener first (it is the only reader of the event
+  region), restores both functions, **frees every allocation it placed**, and closes
+  the handle — a handler that raised is re-raised last, after the client is back.
+
+**Two recoveries for a controller that died**, because a crash-resistant install
+that cannot clean up after a crash is half a feature:
+
+- **A stale patch of ours is repaired.** The patch is a relative jump; if the entry
+  bytes are one whose destination is *outside* the client's module, it is ours from
+  a controller that died, and the known original bytes go back through the patcher.
+  Anything else is refused — this does not guess at another tool's patch.
+- **Suspended threads are counted and reported** (`client.suspended_threads`), with
+  `resume_suspended_threads()` for the one case that freezes a client: a controller
+  killed inside the window where the installer had the client's threads suspended.
+  Resuming is explicit rather than automatic, because a thread can be suspended for
+  the client's own reasons and guessing wrong is worse than reporting.
+
+**Verified live.** Two connect/disconnect cycles allocated the block at the same
+address both times (`0x01C90000`, watch list `0x09350000`), which is what proves the
+free path ran; both hooked functions read back as their original bytes; the
+connect-based live suites (`test_map`, `test_agent_array`) pass with the hooks being
+installed and removed inside them.
+
+### Step 5 complete — the queue, and the whole chain live
+
+Built: `py4gw/game_thread/bridge.py` (the host side), `tests/test_bridge_offline.py`
+(25 tests against a fake target) and `tests/test_live_bridge.py` (10 tests, live,
+elevated, all passing). Offline suite 460 tests green, `pyright` reports no errors.
+
+**What the bridge owns.** Three things in one client — the block, the dispatcher
+and the hook — and it places them in that order, with the entry patch **last**, so
+a failure at any earlier step releases what it made. It does not own the transport:
+the caller opened it and the caller closes it.
+
+**The round trip.** `publish(operation, arg0..arg3)` reads the header, refuses when
+all 16 slots are outstanding, fills the slot at `command_written`, then advances
+that counter — record first, counter second, so a payload reading below the counter
+can never see a half-written command. A command's sequence number *is* that
+counter, which is why its slot is the sequence's low bits. `wait(sequence)` reads
+the record until it is terminal, and requires the record's own sequence to match: a
+slot is reused every lap, and returning another command's answer would be worse
+than returning nothing. `events()` reads what the payload published and advances
+the host's `event_taken`, which is the only counter the host owns in that region.
+
+**No readiness gate, and that is deliberate.** The step above says "gated on the
+readiness discipline like every other read here", and the honest answer is that the
+queue itself has nothing to gate: the payload's only precondition is the block
+header, and the operations it knows are pure computation. Reforged gates game-thread
+work with `Map.IsMapReady()` because *its* queued work touches map state. When the
+call vocabulary arrives, that check belongs to the operation that needs it, applied
+per operation the way the source applies it — not bolted onto publish, where it
+would be a guard the source does not have.
+
+**The live run.** `tests/test_live_bridge.py` resolves
+`game_thread.leave_game_thread_func` read-only, checks the declared nine entry bytes
+against the live ones, installs the hook, publishes work, and restores the original
+bytes.
+
+```text
+leave_game_thread_func     = 0x00845880
+displaced entry bytes      = 55 8b ec 81 ec 20 02 00 00
+hook hits                  = 2
+entry after remove         = 55 8b ec 81 ec 20 02 00 00
+code section before        = 33984c4c6a98d23ec43b00798f9f2a11... (5473792 bytes)
+code section after         = 33984c4c6a98d23ec43b00798f9f2a11... (5473792 bytes)
+left mapped (on purpose)   = block 0x09540000, dispatcher 0x09550000
+```
+
+Everything the payload can do, it did **inside the client**: `PING` returned
+`0xC0DEC0DE`, `ECHO_U32` its argument, `ADD_U32` the sum, `NOP` no result, and an
+unknown operation `FAILED` with `-100`. The completion event arrived with the
+sequence, operation, terminal state and result. The ring was driven past its depth
+(17 commands across a lap boundary) with nothing left outstanding. The hooked
+function kept running afterwards, which is the trampoline replaying the displaced
+prologue. The client stayed alive and responsive on the same PID.
+
+**Cleanup is verified, not asserted.** The entry bytes read back as the original
+nine, and the client's whole `.text` section — 5,473,792 bytes — was hashed before
+the hook was installed and after it was removed: same digest. Since the entry patch
+is the only client code this project writes, the client's code came back exactly as
+it was found. That check is part of the test, not a one-off.
+
+**Two things the test itself decides**, so a rerun is not a coin flip:
+
+- if the declared entry bytes do not match the live ones, it **fails** and names
+  both — that means the build changed or the resolver moved, and nothing is written;
+- if the hook is placed and verified but the function never runs within 5 s, it
+  **skips**, saying the placement was verified and the game thread is not running
+  that function (a menu rather than a map) — and it removes the hook before it does.
+
+**What is left mapped on purpose.** The block and the dispatcher — about 3 KB —
+because a thread can be inside the stub at the moment of removal and about to call
+the dispatcher. The same reasoning the hooker already records for the stub. This is
+now the concrete cost behind the owner-loss question under Still open.
+
+**Dead end avoided.** The reference package's bridge has `selfscan.py`,
+`modules.py`, its own process reader, `events.py`, `hook.py` and 29 KB of
+`bridge.py` around the same idea. None of it was adopted: the scanner, the module
+lookup and the pattern catalog already existed here, and the rest would have been a
+second implementation of what the four small modules in `game_thread` now do.
+
+### Step 4 complete — the payload
+
+Built: `py4gw/game_thread/payload.py` (the emitter) and
+`tests/test_payload_offline.py` (21 tests). `build_dispatcher()` returns **330
+bytes**; `dispatcher_size()` returns its length so it can be allocated before it
+is built. Offline suite 432 tests green, `pyright` reports no errors. **Nothing is
+compiled and nothing is checked in as a binary**: the dispatcher is x86 described
+by the Python that writes it.
+
+**What the code does**, in the order it does it: save the registers, read the
+block address from the stack argument, refuse a null block, check the five header
+fields that decide how everything else is read, compare the host's
+`command_written` against its own `command_taken`, compute the slot of the next
+command as `taken`'s low bits, refuse a record that is not `READY`, run the
+operation, write the result and the terminal state, advance `command_taken`, then
+write a completion event and advance `event_written`.
+
+**The four decisions worth keeping on resume:**
+
+| Decision | Why |
+| --- | --- |
+| One command per call | It runs on the game's thread, inside somebody else's function. The work per call is bounded on purpose. |
+| A record that is not `READY` is left alone | The payload only owns records the host has published; anything else in that slot is not a command waiting for it. |
+| The result and the terminal state land before the counter moves | A host that sees a record taken is entitled to read it as a finished one. |
+| A full event region drops the event and still completes the command | The command record already carries state and result, so the event is a notification. A host that never reads events must not be able to stall the payload. |
+
+**Operations.** `NOP`, `PING`, `ADD_U32` and `ECHO_U32` — the four that need no
+call into the client, numbered as the earlier bridge design numbered them, so a
+command written for either is read the same way. An operation the payload does not
+know completes as `FAILED` with `RESULT_UNKNOWN_OPERATION`; that includes any
+call-based operation, which waits for the call vocabulary rather than being
+approximated.
+
+**No addresses.** The dispatcher takes the block as an argument and jumps only to
+its own labels, so there is not one absolute address in it. It needs no relocation
+step, and the harness proves the point by placing the same bytes at two different
+addresses and getting the same results from both.
+
+**The calling convention is a contract with the stub**, and both halves are now
+pinned: the stub pushes the block and calls through `eax`; the dispatcher is
+`__stdcall`, saves every register it touches, and ends `popad` / `ret 4`. The
+harness calls it through `WINFUNCTYPE`, which is the same convention, so a wrong
+`ret` would be visible rather than silently tolerated.
+
+**What the harness runs.** The emitted bytes are copied into memory this process
+allocated with `VirtualAlloc(PAGE_EXECUTE_READWRITE)` and called against a fake
+block that sits inside a larger buffer with 256 untouched bytes on either side.
+Proven by execution: header checks for all five fields, a null block, an empty
+queue, a record that is not `READY`, each operation's result, an unknown
+operation, one command per call, order of service, both rings wrapping, the
+completion event's fields, a full event region, no write outside the block,
+position independence, and 200 calls in a row without the stack moving.
+
+**What it does not prove.** The stub's bytes still have not executed — the entry
+jump, the enabled/disabled branch, the register save and the `E9` into this
+dispatcher are verified as bytes and not as behaviour. That is now the only
+offline gap left, it is recorded under Still open, and the same harness can close
+it. Nothing here has run in a client either.
+
+**Two things the work turned up**, both recorded where they belong rather than
+worked around:
+
+- `CommandRecord.result` is signed and `EventRecord.arg2` is unsigned, so the same
+  32 bits read as `-1059143458` in one and `3235823838` in the other. `PING_RESULT`
+  is defined as what a reader gets from the record, because the constant is
+  compared against the record in every caller; the test masks it explicitly when
+  it checks the event. A silent mix-up here would have read as a passing
+  comparison in one place and a failure in the other.
+- The emitter refuses a constant that does not fit a one-byte immediate. Those
+  forms sign-extend, so `cmp edx, 128` would have become `cmp edx, -128` inside
+  the client. `EVENT_DEPTH` is 64 and fits today; the check is what makes raising
+  it a build-time error instead of a wrong comparison.
+
+### Step 3 complete — the hooker
+
+Built: `py4gw/game_thread/hooker.py`, `tests/test_hooker_offline.py` (33 tests).
+Full offline suite 409 tests green, `pyright` reports no errors.
+
+A hook is three pieces of generated code plus one byte patch:
+
+```text
+entry patch   E9 rel32 to the stub, padded with nops to the displaced length
+stub          pushfd/pushad, inc [state+4] (hits), test [state] (enabled), then
+              push <block>; mov eax, <dispatcher>; call eax; popad/popfd;
+              E9 rel32 to the trampoline
+trampoline    the displaced bytes, then E9 rel32 back to target + length
+```
+
+`install(name, target, displaced)` allocates a 16-byte state word
+(`enabled`, `hits`), the trampoline and the stub, then patches the entry **last**.
+That ordering is the safety property: nothing can reach the stub before it exists,
+so a failure at any earlier step frees everything it made. The entry patch is the
+only step that can leave the target modified, and it is verified before it lands
+by the patcher.
+
+The state word means `disable` does not unpatch. The stub still runs, `hits` still
+counts, and only the dispatch is skipped, so a hook can be quiesced without
+touching code.
+
+Two deliberate choices, both recorded in the module docstring:
+
+- **No instruction decoding.** The hooker does not work out how many bytes a jump
+  needs. The caller states the displaced bytes, so the call site owns the
+  knowledge of where a whole number of instructions ends, and the hooker only
+  checks that the bytes there match what was declared.
+- **`remove` does not free the generated code.** A thread can be inside the stub at
+  that moment, and unmapping code an instruction pointer is heading into crashes
+  the client. A hits/active counter cannot close that hole: a thread that has taken
+  the entry jump but not yet incremented is invisible. A few hundred bytes per
+  hook are left mapped, once.
+
+**What is not proven.** The stub's own bytes have never executed. The entry jump
+into it, the enabled/disabled branch, the register save and restore, and the `E9`
+into the dispatcher are verified as *bytes* and not as *behaviour*.
+
+Step 4 has since executed the **other** half of that contract: the dispatcher now
+exists, and its side is proven by running it — including the `__stdcall` epilogue
+the stub depends on. What the stub does on the way in is still unexecuted, and
+closing that is the first item under Still open.
+
+### Step 2 complete — the installer
+
+Built: `py4gw/win32/write_access.py`, `py4gw/game_thread/patcher.py`,
+`tests/test_patcher_offline.py` (19 tests). Full offline suite 376 tests green,
+`pyright` reports no errors.
+
+Two files, on purpose. `Win32` documents itself as never requesting permission to
+write or execute code in another process, and that guarantee is worth keeping, so
+the invasive surface lives beside it rather than inside it. `WriteAccess` opens one
+process with `PROCESS_CREATE_THREAD | VM_OPERATION | VM_READ | VM_WRITE |
+QUERY_INFORMATION` and provides allocate, write, free, protect, flush, plus thread
+enumeration, suspend, context (EIP), resume and close. It refuses to open a
+transport to `os.getpid()`, because suspending the controller's own threads would
+hang it.
+
+`Patcher` performs no Win32 calls of its own — it takes an object providing them,
+so the sequence and every refusal are testable with no client. The sequence:
+
+1. read the bytes and confirm they are what is expected, before touching anything;
+2. suspend every thread of the target;
+3. read each thread's EIP and refuse if any is inside the range about to be
+   overwritten — release, wait 2 ms, retry, and time out rather than write;
+4. re-read and re-confirm, because the bytes could have changed while suspending;
+5. protect writable, write, flush the instruction cache, restore protection;
+6. release every thread and close every handle, on success, refusal and timeout.
+
+Restoring is conditional: if the bytes there are no longer the ones this installer
+wrote, it refuses and leaves the target alone rather than putting stale bytes back.
+
+One deliberate divergence from the reference: it treated an EIP outside a known
+executable region as implausible and refused. A thread parked in a system DLL is
+ordinary, so that test refused legitimate patches. Here only a zero instruction
+pointer is treated as untrustworthy, which is what an unfilled context reads back
+as.
+
+**Verified live.** `tests/test_write_access.py`, run from an elevated shell against
+`Gw.exe` PID 15380 (Guild Wars Reforged): **10 tests, all passing.** The sequence
+that had only ever run against a fake target has now run against the real process —
+client threads suspended and resumed, their instruction pointers read, page
+protection changed, the write landed, the instruction cache flushed, and the
+original bytes restored. The read-only transport was checked in the same run and
+still works, so the boundary between the two is measured rather than assumed.
+
+Scope of that run: **every write targeted memory the test allocated itself with
+`VirtualAllocEx`.** The client's own memory — its code and its data — was not
+modified, and the allocation is asserted to lie outside the client module. Every
+allocation was released, the transport was closed, and the client was left running
+and responsive on the same PID.
+
+Unelevated, the same suite skips with that reason recorded: Windows denies
+`PROCESS_VM_WRITE`, `PROCESS_VM_OPERATION` and `PROCESS_CREATE_THREAD` with error 5.
+That was confirmed live as well, before the elevated run.
+
+The recorded run, target, expected and observed behaviour, and the cleanup check
+are in [`RESEARCH.md`](RESEARCH.md), including a module-size discrepancy the run
+turned up that the trust anchor has to settle.
+
+### Step 1 complete — the shared block
+
+Built: `py4gw/game_thread/shared_block.py`, `py4gw/game_thread/__init__.py`, and
+`tests/test_shared_block_offline.py` (34 tests, no client, no writes). The full
+offline suite is green and `pyright` reports no errors.
+
+What it is: the layout and the queue rules for the block of memory inside the
+client that both the host and the payload read. Stealth's own infrastructure —
+Reforged has no counterpart, because its queue is a `std::vector` in its own
+address space.
+
+The design decisions taken, so they are not re-litigated on resume:
+
+| Decision | Choice | Why |
+| --- | --- | --- |
+| Regions | two, one per direction | each then has exactly one writer, so no shared mutable state |
+| Counters | `written` and `taken` per region, one writer each | two single-writer counters remove the "sacrifice a slot" trick the reference needed to tell full from empty, and waste nothing |
+| Torn records | producer fills the record, then advances its counter; consumer reads only below it | no per-record marker, one store per record, and a partial record is unreadable by construction |
+| Record size | fixed | variable means trusting a length off the wire and bounds-checking it |
+| Stale region | magic, version, header size, depths and a per-attach session id, all validated | every mismatch fails closed |
+| Command state | `READY` written by the host; `RUNNING` and a terminal state written by the payload only | lets the host see completion per record without a second queue |
+
+Layout: 64-byte header, then 16 command records of 32 bytes at offset 64, then 64
+event records of 32 bytes at offset 576. Total 2624 bytes. The constants live in
+the module and are validated on decode, so a payload and a host that disagree
+fail rather than misread each other.
+
+What it deliberately is not: it does not adopt the reference package's module
+split, object model or record layout. Three of that package's modules duplicate
+capability we already own — `selfscan.py` for `RemoteScanner` + `PatternCatalog`,
+`modules.py` for `Win32.get_main_module`, and its process reader for
+`ProcessMemoryReader` — and are not re-created here.
+
+### Originating plan
+
+Phases 1-4 are complete. The first pointer-acquisition problem that motivated this
+plan — three contexts captured only through UI callbacks — was resolved without
+any target-side code: both map contexts are live-verified read-only through the
+client's UI frame array, open and closed, and the third (`SalvageSessionInfo`) is
+unused by both reference projects. See
 [`UI_FRAME_TREE.md`](UI_FRAME_TREE.md) and the live records in
 [`RESEARCH.md`](RESEARCH.md).
 
@@ -264,9 +988,9 @@ the source project — the two map contexts, `g_salvage_context`
 third is not a consumed surface, and the fourth is outside the required
 in-game context scope.
 
-What remains for target-side code is execution, not acquisition: the
-game-thread bridge, decoded `ChatBuffer` history, and concrete Native
-operations.
+What remains for target-side code is breadth, not the mechanism: decoded
+`ChatBuffer` history, concrete Native operations, and more call forms and callback
+kinds on the layer that already exists.
 
 **Update 2026-09-23.** The game-thread bridge mechanism now exists and is
 verified live: hook installed, fired, restored; queue served on the game
@@ -276,4 +1000,23 @@ an unelevated one is denied the write/allocate/suspend rights by ordinary UAC
 token splitting, which an earlier note here mis-described as a client
 protection. No bytes remain written to any client. See the Phase 5 status above
 and [`RESEARCH.md`](RESEARCH.md).
+
+That update describes the **reference package under `external/`**, which is what
+proved the mechanism was possible. Stealth's own version of it was built in five
+steps afterwards and is live-verified in its own right — see the resume record
+above. The difference that matters: the reference ships a C source, a build script
+and a checked-in 604-byte binary; this project ships none of those, and emits its
+330-byte dispatcher from Python instead.
+
+**Update 2026-09-24.** Steps 1 to 6 of the Stealth implementation are done and the
+chain is live: `tests/test_live_bridge.py` installs our hook on
+`leave_game_thread_func` in the running client, runs our operations on the game
+thread, reads their results and events, and restores the original bytes — with the
+client's whole code section hashed before and after to show it came back identical.
+The call vocabulary is built for two typed forms and is live-verified; callbacks are
+built, registry and listener both. What remains is breadth — more forms, more kinds,
+and porting members onto them. The cost that is now
+measured rather than theoretical: each attach maps about 3 KB in the
+client, and while `disconnect()` frees what it placed, an attach whose controller
+was killed leaves it behind.
 

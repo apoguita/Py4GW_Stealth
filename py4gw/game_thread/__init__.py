@@ -1,0 +1,152 @@
+"""Work that runs inside the client, on the client's own thread.
+
+This package is Stealth's own infrastructure, not a port of Reforged. It exists
+because this project runs *outside* the client, so anything the client has to do
+on our behalf needs a hook, a payload and somewhere for the two sides to meet.
+
+``shared_block`` is the layout and the queue rules; ``patcher`` and ``hooker``
+put the patch and the stubs in, ``payload`` emits the dispatcher, ``bridge``
+owns the install and the queue, and ``callbacks`` delivers what the client
+reports. All of it is live-verified against the running client, and
+``py4gw.connect()`` installs it by default.
+"""
+
+from __future__ import annotations
+
+from .bridge import (
+    HOOK_NAME,
+    Bridge,
+)
+from .callbacks import (
+    Callbacks,
+    EventHandler,
+)
+from .hooker import (
+    MINIMUM_PATCH,
+    STATE_ENABLED_OFFSET,
+    STATE_HITS_OFFSET,
+    STATE_SIZE,
+    Hooker,
+    WritableTarget,
+    build_entry_patch,
+    build_stub,
+    build_trampoline,
+    stub_size,
+)
+from .patcher import (
+    DEFAULT_TIMEOUT_MS,
+    PAGE_EXECUTE_READ,
+    PAGE_EXECUTE_READWRITE,
+    Patcher,
+    TargetAccess,
+)
+from .payload import (
+    build_dispatcher,
+    dispatcher_size,
+)
+from .shared_block import (
+    BLOCK_SIZE,
+    COMMAND_DEPTH,
+    COMMAND_OFFSET,
+    COMMAND_SIZE,
+    DESCRIPTOR_DEPTH,
+    DESCRIPTOR_OFFSET,
+    DESCRIPTOR_SIZE,
+    EVENT_DEPTH,
+    EVENT_OFFSET,
+    EVENT_SIZE,
+    HEADER_OFFSET,
+    MAGIC,
+    PING_RESULT,
+    RESULT_BAD_DESCRIPTOR,
+    RESULT_BAD_TARGET,
+    RESULT_NO_TARGET,
+    RESULT_UNKNOWN_FORM,
+    RESULT_UNKNOWN_OPERATION,
+    TERMINAL_COMMAND_STATES,
+    VERSION,
+    BlockHeader,
+    BlockImage,
+    CallForm,
+    CommandRecord,
+    CommandState,
+    Descriptor,
+    EventKind,
+    EventRecord,
+    Operation,
+    command_offset,
+    descriptor_offset,
+    empty_block,
+    event_offset,
+    free_slots,
+    pending,
+    read_command,
+    read_event,
+    read_header,
+    write_command,
+    write_event,
+)
+
+__all__ = [
+    "BLOCK_SIZE",
+    "COMMAND_DEPTH",
+    "COMMAND_OFFSET",
+    "COMMAND_SIZE",
+    "DEFAULT_TIMEOUT_MS",
+    "DESCRIPTOR_DEPTH",
+    "DESCRIPTOR_OFFSET",
+    "DESCRIPTOR_SIZE",
+    "EVENT_DEPTH",
+    "EVENT_OFFSET",
+    "EVENT_SIZE",
+    "HEADER_OFFSET",
+    "HOOK_NAME",
+    "MAGIC",
+    "MINIMUM_PATCH",
+    "PAGE_EXECUTE_READ",
+    "PAGE_EXECUTE_READWRITE",
+    "PING_RESULT",
+    "RESULT_BAD_DESCRIPTOR",
+    "RESULT_BAD_TARGET",
+    "RESULT_NO_TARGET",
+    "RESULT_UNKNOWN_FORM",
+    "RESULT_UNKNOWN_OPERATION",
+    "STATE_ENABLED_OFFSET",
+    "STATE_HITS_OFFSET",
+    "STATE_SIZE",
+    "TERMINAL_COMMAND_STATES",
+    "VERSION",
+    "BlockHeader",
+    "BlockImage",
+    "Bridge",
+    "CallForm",
+    "Callbacks",
+    "CommandRecord",
+    "CommandState",
+    "Descriptor",
+    "EventKind",
+    "EventHandler",
+    "EventRecord",
+    "Hooker",
+    "Operation",
+    "Patcher",
+    "TargetAccess",
+    "WritableTarget",
+    "build_dispatcher",
+    "build_entry_patch",
+    "build_stub",
+    "build_trampoline",
+    "command_offset",
+    "descriptor_offset",
+    "dispatcher_size",
+    "empty_block",
+    "event_offset",
+    "free_slots",
+    "pending",
+    "read_command",
+    "read_event",
+    "read_header",
+    "stub_size",
+    "write_command",
+    "write_event",
+]

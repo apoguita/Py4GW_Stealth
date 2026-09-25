@@ -36,6 +36,11 @@ class LiveAgentArrayTests(unittest.TestCase):
         clients = win32.find_guild_wars()
         if not clients:
             raise unittest.SkipTest("Start Guild Wars before running this test.")
+        if not win32.is_elevated():
+            raise unittest.SkipTest(
+                "This suite connects to the client, and connecting requires an "
+                "elevated controller. Run it from an elevated shell."
+            )
         cls.connection_perf = PerfCounter()
         cls.client = py4gw.connect(clients[0])
 

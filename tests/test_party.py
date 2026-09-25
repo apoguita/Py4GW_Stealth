@@ -39,6 +39,11 @@ class LivePartyTests(unittest.TestCase):
         clients = py4gw.Win32().find_guild_wars()
         if not clients:
             raise unittest.SkipTest("Start Guild Wars before running this test.")
+        if not py4gw.Win32().is_elevated():
+            raise unittest.SkipTest(
+                "This suite connects to the client, and connecting requires an "
+                "elevated controller. Run it from an elevated shell."
+            )
         cls.client = py4gw.connect(clients[0])
 
         if not Map.IsMapReady():

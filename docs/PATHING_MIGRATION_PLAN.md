@@ -50,7 +50,7 @@ has a similar runtime/stub mismatch; that is a separate source-backed behavior
 and is not changed by the SinkNode finding. Source pathing snapshots (including
 paired-portal indices) and the travel-portal helper remain live-verified. The
 source pathing cache/facade helpers are migrated and live-tested; automatic
-callback registration remains unavailable externally.
+callback registration is not ported.
 
 ## Immediate migration boundary
 

@@ -4,8 +4,11 @@
 
 Py4GW Stealth is an external Windows/Python library intended to recreate
 selected Py4GW Reforged capabilities without placing a runtime inside the
-Guild Wars process. The intended model is pure external operation: no injected
-DLL, executable payload, or code patch in `Gw.exe`.
+Guild Wars process. **That is no longer the whole model.** The read paths are
+external and read-only; on top of them, `py4gw/game_thread/` places code in the
+client when asked, and `py4gw.connect()` installs it by default. There is still no
+DLL and no embedded Python runtime in `Gw.exe`, but a hook and a code patch do
+modify it, and this document does not claim otherwise.
 
 Py4GW Reforged is the current injected automation library: its launcher puts
 `Py4GW.dll` inside `Gw.exe`, where an embedded Python runtime uses `Py*`
@@ -31,19 +34,38 @@ the `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
 `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
 `AvailableCharacterArray`, `PartyContext`, `GuildContext`, and
 `AccAgentContext` readers have also been
-verified against one live client build. Compatibility with other builds is not established. The current
-package does not write to a process, inject code, create remote threads,
-install hooks, or automate Guild Wars.
+verified against one live client build. Compatibility with other builds is not established. No read
+path writes anything, and no ported member calls a Guild Wars function.
+`py4gw/game_thread/` does, and `py4gw.connect()` installs that layer by default:
+two entry hooks, a dispatcher emitted as machine code from Python that runs typed
+calls on the client's own thread, an observer, and a listener thread that delivers
+events to registered callbacks. `tests/test_live_bridge.py` and
+`tests/test_live_call.py` have run it against the live client — hooking,
+executing, delivering a callback, and restoring both functions' own bytes, with
+the client's code section hashed before and after to show it came back identical.
+One module, `py4gw/win32/write_access.py`, is the transport that writes; nothing
+else does. It runs from an elevated shell, because Windows refuses the rights it
+needs to an unelevated caller. **Connecting is therefore a write**;
+`connect(..., game_thread=False)` is the connection that only reads.
 
 ## Requirements
 
 - Windows
 - Python 3.13 32-bit for the current x86-oriented research setup
+- An **elevated shell**: `py4gw.connect(...)` refuses to connect without one
 - NiceGUI with native-window support (installed automatically with the project)
 
 Python 3.12 or another supported Python version may run the process-discovery
 code, but the current remote scanner requires an x86 controller for an x86
 target. Match controller and target bitness when using the memory path.
+
+Elevation is not optional, and it cannot be added later: a process cannot elevate
+itself, so the shell must be elevated before the script starts. The four rights
+this library needs beyond reading (`PROCESS_VM_WRITE`, `PROCESS_VM_OPERATION`,
+`PROCESS_CREATE_THREAD`, `PROCESS_SUSPEND_RESUME`) are refused to an unelevated
+controller with error 5. `connect` checks once and raises a `RuntimeError` that
+names the pid and says to relaunch the shell as administrator, so the failure is
+readable instead of surfacing later as a bare `error 5`.
 
 Check the active interpreter with:
 
@@ -185,8 +207,10 @@ py4gw.disconnect()
 ```
 
 `py4gw.win32.list_processes()` returns only running `Gw.exe` clients.
-`py4gw.connect(...)` selects one client and keeps its read-only handle open.
-Call `py4gw.disconnect()` when the script is finished.
+`py4gw.connect(...)` selects one client and keeps its handle open. Call
+`py4gw.disconnect()` when the script is finished. Run the script from an elevated
+shell: `connect` refuses without one, and `py4gw.Win32().is_elevated()` says whether
+the current shell is elevated.
 
 `CharContext` follows the JSON `context.base_ptr` resolver and the maintained
 Reforged structure offsets. `PatternCatalog.from_directory("offsets")` also
@@ -234,7 +258,8 @@ python main.py
 
 The first tab lists running Guild Wars clients, shows their live character
 names when available, labels clients in the selection menus, and provides PID
-selection plus a read-only Connect button. After connecting, the `Client data`
+selection plus a Connect button. Listing and inspecting a row are read-only
+(`game_thread=False`); connecting installs the game-thread layer. After connecting, the `Client data`
 tab displays the available `CharContext`, `GameContext`, `PreGameContext`,
 `Cinematic`, `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
 `AvailableCharacters`, `PartyContext`, `GuildContext`, and `AccAgentContext`
@@ -265,5 +290,7 @@ contract, resolver caching, and the detailed live timing harness.
 
 The package identifies `Gw.exe` candidates by executable filename and has a
 read-only scanner for validated x86 module ranges. Neither is proof of a
-particular supported game build. New target-specific capabilities must be
-designed and documented before they are added.
+particular supported game build. Capabilities are added one at a time and each is
+documented before it is added: the write path is limited to
+`py4gw/win32/write_access.py` and the layer built on it,
+`py4gw/game_thread/`.
