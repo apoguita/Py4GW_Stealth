@@ -38,29 +38,131 @@ from enum import IntEnum
 MAGIC = 0x4B4C4253
 
 #: Bumped whenever the layout changes. A mismatch must fail closed.
-VERSION = 1
+#:
+#: 2: the command record gained a ``value`` word — the callee's return register, stored by
+#: the emitted call path — so a command is 64 bytes and every offset after the command
+#: region moved.
+#:
+#: 3: the command record gained ``arg4`` and ``arg5``, for the first source declaration that
+#: takes five words (``OpenFileByFileId``, ``gw_dat_reader.h:42``). Both sit with the other
+#: arguments, so every offset after them moved again.
+#:
+#: 4: the block gained the decode region — the strings an asynchronous decode is handed and
+#: the text it produces — so the block is larger, and a host and a payload built from
+#: different versions must refuse to work together rather than write past each other.
+#:
+#: 5: an event record gained a bounded copy of the string the watched message named, and the
+#: watch list an entry's second word says where that string's pointer sits in the packet. The
+#: copy is what makes a dialog button's label readable at all: the pointer the client announces
+#: is a buffer it reuses, so the string has to be read **inside the client's own call** and
+#: carried out with the event (``docs/RESEARCH.md``, 2026-09-25).
+VERSION = 5
 
 HEADER_SIZE = 64
 COMMAND_DEPTH = 16
 EVENT_DEPTH = 64
-COMMAND_SIZE = 32
-EVENT_SIZE = 32
+
+#: A command record's size must stay a power of two: the emitted dispatcher addresses a
+#: record by shifting its slot, which is checked where the shift is derived
+#: (``payload.py``). Eleven words are in use — the eight it always had, ``value``, and the
+#: two the five-word call form added — and the rest of the 64 bytes is unused room rather
+#: than a promise.
+COMMAND_SIZE = 64
 DESCRIPTOR_DEPTH = 16
 DESCRIPTOR_SIZE = 8
 
-#: The watch list: message ids the observer records when they go past. Flat
-#: words, because an entry is one id; a kind that needs to capture a different
-#: shape can grow it when something requires that.
+#: The watch list: what the observer records when a message goes past. An entry is the message
+#: id and the byte offset of the ``wchar_t*`` field that message carries, or zero for a message
+#: that carries no string — ``DialogBodyInfo {uint32 type; uint32 agent_id; wchar_t* message_enc}``
+#: is eight (``ui.h:54-58``), the client's ``DialogButtonInfo {uint32 button_icon; wchar_t*
+#: message; uint32 dialog_id; uint32 skill_id}`` is four (``ui.h:60-65``), and
+#: ``ChangeTargetUIMsg`` names no string (``ui.h:78-84``).
 WATCH_DEPTH = 8
-WATCH_SIZE = 4
+WATCH_SIZE = 8
+
+#: Inside one watch entry: the message id the observer compares, and the byte offset of the
+#: ``wchar_t*`` field whose string it should copy out with the event (zero for none).
+WATCH_ID_OFFSET = 0
+WATCH_STRING_OFFSET = 4
+
+#: How much of a watched message's string an event carries, in wide characters. The copy is
+#: taken by the emitted observer **inside the client's call**, which is the only moment the
+#: string is the client's own; the bound is what stops a string without a terminator from being
+#: read on for ever. Seven times the largest dialog text this project has measured (a 134-byte
+#: table entry, 67 units) — a longer string is reported as unterminated rather than truncated,
+#: because half a string decodes to the wrong text.
+#:
+#: A record's own words end at 40 and its text starts at 64, so the six words between them are
+#: unused room rather than a promise, and the text's 960 bytes bring the record to the 1024 the
+#: observer's shift needs.
+EVENT_TEXT_WORDS = 480
+EVENT_TEXT_STATE_OFFSET = 32
+EVENT_TEXT_LENGTH_OFFSET = 36
+EVENT_TEXT_OFFSET = 64
+EVENT_TEXT_SIZE = EVENT_TEXT_WORDS * 2
+EVENT_SIZE = EVENT_TEXT_OFFSET + EVENT_TEXT_SIZE
 
 COMMAND_REGION_OFFSET = HEADER_SIZE
 EVENT_REGION_OFFSET = COMMAND_REGION_OFFSET + COMMAND_DEPTH * COMMAND_SIZE
-BLOCK_SIZE = EVENT_REGION_OFFSET + EVENT_DEPTH * EVENT_SIZE
+
+#: A scratch region inside the same allocation, for data a call has to be handed a
+#: **pointer** to: a string the client reads as an argument, or a word the client writes a
+#: result into. The source's own callers keep those in their stack frames; this project has
+#: no frame in the client, so it keeps them here, in the client's own address space.
+DATA_REGION_OFFSET = EVENT_REGION_OFFSET + EVENT_DEPTH * EVENT_SIZE
+DATA_SIZE = 4096
+
+#: The decode region: one slot per string being decoded asynchronously, holding the string the
+#: client is handed and the text it writes back.
+#:
+#: The source hands its string to the client's decoder and gets the text back through a
+#: callback into its own address space (``GW::ui::AsyncDecodeStr``, ``ui_methods.cpp:2582``
+#: and ``dialog.cpp:885``). Nothing of this project's runs in that address space, so the two
+#: halves of that transaction need somewhere to meet, and this is it: the host places the
+#: string it wants decoded, the emitted stub the client calls copies the text it was given
+#: into the same slot, and the host reads it back.
+#:
+#: **Each slot has exactly one writer at a time** — the host writes the string before the
+#: call, the client's callback writes the text after it — so, like the two queues above, no
+#: lock is needed. The state word is what orders them, and it is written **last** by whichever
+#: side has finished, so a reader that sees it sees everything before it.
+DECODE_DEPTH = 32
+
+#: A slot's own words: the state, the length of the string the client decoded, and two words
+#: of room that are not a promise.
+DECODE_HEADER_SIZE = 16
+
+#: The string the client is handed, in bytes. A dialog's encoded text is short — the live body
+#: measured 22 code units — and this is room for 512 of them; a longer one is refused rather
+#: than truncated, because half a string decodes to the wrong text.
+DECODE_INPUT_SIZE = 1024
+
+#: The text the client writes back, in wide characters. This is the bound the source does not
+#: have: native's callback copies into a ``std::wstring`` that grows, and a slot here cannot.
+#: A decoded string longer than this is **truncated**, and the slot's length word is the
+#: string's real length, so the host can say so rather than answer with half a sentence.
+DECODE_CAPACITY = 2048
+DECODE_OUTPUT_SIZE = DECODE_CAPACITY * 2
+
+DECODE_SLOT_SIZE = DECODE_HEADER_SIZE + DECODE_INPUT_SIZE + DECODE_OUTPUT_SIZE
+DECODE_REGION_OFFSET = DATA_REGION_OFFSET + DATA_SIZE
+
+#: Where each part of a slot sits **inside** it. The emitted stub is handed a slot's address
+#: and addresses the state, the length, and the text relative to that, so these are the offsets
+#: its machine code is built from — the one place both sides read the shape from.
+DECODE_SLOT_STATE_OFFSET = 0
+DECODE_SLOT_LENGTH_OFFSET = 4
+DECODE_SLOT_INPUT_OFFSET = DECODE_HEADER_SIZE
+DECODE_SLOT_OUTPUT_OFFSET = DECODE_HEADER_SIZE + DECODE_INPUT_SIZE
+
+BLOCK_SIZE = DECODE_REGION_OFFSET + DECODE_DEPTH * DECODE_SLOT_SIZE
 
 _HEADER = struct.Struct("<16I")
-_COMMAND = struct.Struct("<7Ii")
-_EVENT = struct.Struct("<8I")
+#: ``result`` is the one signed field: the call path's refusals are negative codes.
+_COMMAND = struct.Struct("<9IiI")
+#: An event's words, and then its copy of the string the watched message named
+#: (``EVENT_TEXT_OFFSET``), which is code units rather than words and is written separately.
+_EVENT = struct.Struct("<10I")
 _DESCRIPTOR = struct.Struct("<2I")
 
 _COMMAND_FIELDS = (
@@ -70,8 +172,11 @@ _COMMAND_FIELDS = (
     "arg1",
     "arg2",
     "arg3",
+    "arg4",
+    "arg5",
     "state",
     "result",
+    "value",
 )
 
 _EVENT_FIELDS = (
@@ -83,6 +188,8 @@ _EVENT_FIELDS = (
     "arg3",
     "tick",
     "reserved",
+    "text_state",
+    "text_length",
 )
 
 _DESCRIPTOR_FIELDS = (
@@ -185,8 +292,50 @@ class CallForm(IntEnum):
 
     #: ``void __cdecl(uint32_t, uint32_t)``: two words passed straight through.
     #: ``ChangeTargetFn`` is this shape, and so is ``CallTargetFn``
-    #: (``agent_methods.cpp:18-22``).
+    #: (``agent_methods.cpp:19-20``).
     U32_U32 = 2
+
+    #: ``void __cdecl(void)``: no arguments, so nothing is pushed and nothing is
+    #: released. ``RemoveActiveTitleFn`` is this shape
+    #: (``player_methods.cpp:39``).
+    NO_ARGS = 3
+
+    #: ``void __cdecl(uint32_t)``: one word. ``SetActiveTitleFn``
+    #: (``player_methods.cpp:40``) and ``SendDialogFn`` (``agent_methods.cpp:18``)
+    #: are this shape.
+    U32 = 4
+
+    #: ``void __cdecl(uint32_t, uint32_t, uint32_t)``: three words, in the
+    #: source's order. ``DepositFactionFn`` (``player_methods.cpp:41``) and
+    #: ``DoWorldActionFn`` (``agent_methods.cpp:22``) are this shape.
+    U32_U32_U32 = 5
+
+    #: ``void __cdecl(float*)``: one pointer to a four-float array built from the
+    #: command's three words and a zero. ``MoveToFn`` is this shape, and the
+    #: source fills exactly that array — ``{x, y, (float)zplane, 0.0f}``
+    #: (``agent_methods.cpp:21`` and ``149-153``). The fourth float is not spare
+    #: room; it is a value the client reads.
+    FLOAT_PTR = 6
+
+    #: ``RecObj* __cdecl(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*)``: five
+    #: words in the source's order, which is what ``OpenFileByFileId`` declares
+    #: (``gw_dat_reader.h:42``) and what the GW.dat chain's first call takes. The
+    #: pointer argument travels as its word, exactly as the source passes its own
+    #: ``error_out`` — the DAT reader passes null there, and the ``size_out``
+    #: pointer of the call after it is an address inside the block's data region.
+    U32_U32_U32_U32_U32 = 7
+
+
+def float_bits(value: float) -> int:
+    """Return one ``float`` as the ``uint32`` a command word carries.
+
+    A command word is 32 bits and a ``float`` is 32 bits, so a float argument
+    travels as its bit pattern and the target reads it back as a float. The
+    caller does the conversion because the wire record has no float field, and
+    the source's own array is ``float[4]`` regardless of how it is transported.
+    """
+
+    return struct.unpack("<I", struct.pack("<f", float(value)))[0]
 
 
 class EventKind(IntEnum):
@@ -202,7 +351,56 @@ class EventKind(IntEnum):
 
     NONE = 0
     COMMAND_COMPLETE = 2
+    #: A string the client's own decoder produced, and the callback it called with it. Native
+    #: has no such event because the callback is its own function, called inside the client;
+    #: here the stub records it and the host reads it, so it travels the same channel every
+    #: other thing the client tells this project travels — ``UI_MESSAGE``, which is this
+    #: project's own kind in the same way, is the precedent. The slot the text is in travels in
+    #: the record's ``sequence``, its length in ``arg0``, and ``arg1`` says whether the decode
+    #: failed rather than produced an empty string.
+    STRING_DECODED = 3
     UI_MESSAGE = 63
+
+
+class DecodeState(IntEnum):
+    """What has happened to one slot of the decode region.
+
+    ``FREE`` and ``IN_FLIGHT`` are the host's to write — it owns the slot until the client's
+    callback has filled it — and ``DONE`` and ``FAILED`` are the client's, written by the
+    emitted stub. The host takes the text and puts the slot back to ``FREE``.
+
+    There is no ``FAILED`` in the source: native's callback is handed whatever the client's
+    decoder produced, and a decode that could not be made calls back with ``L""``
+    (``ui_methods.cpp:2583-2598``). ``FAILED`` is this side of the boundary being honest about
+    the one case native cannot have — a string with no terminator inside the bound the stub is
+    allowed to scan — so a caller is told the decode did not happen instead of being handed
+    the empty text a real empty string produces.
+    """
+
+    FREE = 0
+    IN_FLIGHT = 1
+    DONE = 2
+    FAILED = 3
+
+
+class EventTextState(IntEnum):
+    """What the observer made of the string a watched message named.
+
+    The source's reading of that string is ``DupWideStringSafe`` (``dialog.cpp:237-252``): a
+    ``wcslen`` inside a ``__try``, no copy at all when the pointer is null, and null when the
+    read faulted. Emitted code here has no ``__try``, so the copy is **bounded** instead, and
+    the three outcomes the source can produce are the three declared here.
+
+    ``ABSENT`` is the source's ``!info->message``; ``COPIED`` is a string copied whole, its
+    terminator included, which is what ``wcslen + 1`` gives native; ``UNTERMINATED`` is a string
+    with no terminator inside :data:`EVENT_TEXT_WORDS`, which native has no equivalent of — its
+    ``wcslen`` would either find one or fault — and which this side reports rather than
+    truncating, because half a string decodes to the wrong text.
+    """
+
+    ABSENT = 0
+    COPIED = 1
+    UNTERMINATED = 2
 
 
 #: What a ``PING`` completes with. Not a value the client can produce, so it can
@@ -231,6 +429,11 @@ def _check_uint32(name: str, value: int) -> None:
         raise ValueError(f"{name} must fit in an unsigned 32-bit value")
 
 
+def _check_uint16(name: str, value: int) -> None:
+    if not 0 <= value <= 0xFFFF:
+        raise ValueError(f"{name} must fit in a wide character")
+
+
 def command_offset(slot: int) -> int:
     """Return the byte offset of one command record in the block."""
 
@@ -247,6 +450,21 @@ def event_offset(slot: int) -> int:
     return EVENT_REGION_OFFSET + slot * EVENT_SIZE
 
 
+def data_offset(offset: int, size: int = 0) -> int:
+    """Return the byte offset of one span inside the block's data region.
+
+    The region is bounded here rather than by the caller: an offset that would run past it
+    is refused, because the alternative is writing over the event ring or past the end of
+    the client's allocation.
+    """
+
+    if offset < 0 or size < 0 or offset + size > DATA_SIZE:
+        raise ValueError(
+            f"data span {offset}..{offset + size} does not fit in {DATA_SIZE} bytes"
+        )
+    return DATA_REGION_OFFSET + offset
+
+
 def descriptor_offset(slot: int) -> int:
     """Return the byte offset of one call descriptor in the call table.
 
@@ -260,12 +478,114 @@ def descriptor_offset(slot: int) -> int:
     return slot * DESCRIPTOR_SIZE
 
 
+def decode_slot_offset(slot: int) -> int:
+    """Return the byte offset of one decode slot in the block."""
+
+    if not 0 <= slot < DECODE_DEPTH:
+        raise ValueError(f"decode slot must be 0..{DECODE_DEPTH - 1}")
+    return DECODE_REGION_OFFSET + slot * DECODE_SLOT_SIZE
+
+
+def decode_input_offset(slot: int) -> int:
+    """Return the byte offset of the string the client is handed for one slot."""
+
+    return decode_slot_offset(slot) + DECODE_SLOT_INPUT_OFFSET
+
+
+def decode_output_offset(slot: int) -> int:
+    """Return the byte offset of the text the client writes back for one slot."""
+
+    return decode_slot_offset(slot) + DECODE_SLOT_OUTPUT_OFFSET
+
+
+def decode_slot_image(slot: int, encoded: bytes) -> bytes:
+    """Return the bytes of one slot carrying a request: the string, then the in-flight state.
+
+    This is what a host writes into a slot before it asks the client to decode, and the shape
+    the state word's ordering is about — everything first, the state last — so a callback that
+    somehow ran early would find the slot still in flight rather than read half a string. The
+    room the string does not use is cleared, so nothing a previous request left in the slot can
+    be read as part of this one.
+    """
+
+    if len(encoded) > DECODE_INPUT_SIZE:
+        raise ValueError(
+            f"the string to decode is {len(encoded)} bytes, and a decode slot holds "
+            f"{DECODE_INPUT_SIZE}. A longer one is refused rather than cut short: half a "
+            f"string decodes to the wrong text."
+        )
+
+    image = bytearray(DECODE_SLOT_SIZE)
+    start = DECODE_SLOT_INPUT_OFFSET
+    image[start : start + len(encoded)] = encoded
+    struct.pack_into("<I", image, DECODE_SLOT_LENGTH_OFFSET, 0)
+    struct.pack_into("<I", image, DECODE_SLOT_STATE_OFFSET, int(DecodeState.IN_FLIGHT))
+    return bytes(image)
+
+
+def write_decode_request(raw: bytearray, slot: int, encoded: bytes) -> None:
+    """Place one encoded string for the client to decode, and mark the slot in flight."""
+
+    if len(raw) < BLOCK_SIZE:
+        raise ValueError(f"block image must be at least {BLOCK_SIZE} bytes")
+    start = decode_slot_offset(slot)
+    raw[start : start + DECODE_SLOT_SIZE] = decode_slot_image(slot, encoded)
+
+
+def decode_state_from_word(value: int) -> DecodeState:
+    """Read a slot's state from its own word, failing closed on a value the format lacks."""
+
+    try:
+        return DecodeState(value)
+    except ValueError as error:
+        raise ValueError(f"unknown decode state: {value}") from error
+
+
+def decode_text_from_bytes(payload: BlockImage, length: int) -> tuple[str, bool]:
+    """Read a decoded string out of the bytes of a slot's output area.
+
+    The length is the decoded string's **real** length — the stub counts past the room it had
+    to store it — so a string longer than the slot reports itself as truncated instead of
+    quietly answering with the part that fitted.
+    """
+
+    stored = min(int(length), DECODE_CAPACITY)
+    return payload[: stored * 2].decode("utf-16-le", "replace"), int(length) > DECODE_CAPACITY
+
+
+def read_decode_state(raw: BlockImage, slot: int) -> DecodeState:
+    """Read one slot's state out of a whole block image."""
+
+    (value,) = struct.unpack_from("<I", raw, decode_slot_offset(slot))
+    return decode_state_from_word(value)
+
+
+def read_decode_result(raw: BlockImage, slot: int) -> tuple[str, bool]:
+    """Read the text the client decoded into one slot of a whole block image."""
+
+    if read_decode_state(raw, slot) is not DecodeState.DONE:
+        return "", False
+    (length,) = struct.unpack_from(
+        "<I", raw, decode_slot_offset(slot) + DECODE_SLOT_LENGTH_OFFSET
+    )
+    start = decode_output_offset(slot)
+    return decode_text_from_bytes(
+        raw[start : start + DECODE_OUTPUT_SIZE], length
+    )
+
+
+def clear_decode_slot(raw: bytearray, slot: int) -> None:
+    """Put one decode slot back to free, once its text has been read."""
+
+    start = decode_slot_offset(slot)
+    struct.pack_into("<I", raw, start + DECODE_SLOT_LENGTH_OFFSET, 0)
+    struct.pack_into("<I", raw, start + DECODE_SLOT_STATE_OFFSET, int(DecodeState.FREE))
+
+
 def pending(written: int, taken: int) -> int:
     """Return how many records a consumer has not taken yet."""
 
     return (written - taken) & _UINT32_MAX
-
-
 def free_slots(written: int, taken: int, depth: int) -> int:
     """Return how many records a producer may still publish.
 
@@ -375,8 +695,12 @@ class BlockHeader:
 class CommandRecord:
     """One unit of work for the payload to run on the game thread.
 
-    ``operation`` selects what to do; ``arg0``..``arg3`` are the arguments.
-    ``state`` and ``result`` belong to the payload.
+    ``operation`` selects what to do; ``arg0``..``arg5`` are the arguments. The first of them
+    is the call table slot for a ``CALL``, so a call carries five words. ``state``, ``result``
+    and ``value`` belong to the payload: ``result`` is the status code, and ``value`` is the
+    callee's return register for a ``CALL`` — the port of the return type the source's own
+    prototype table carries. A target declared ``void`` leaves whatever the callee left in
+    that register, so ``value`` is read only for a target whose return the caller wants.
     """
 
     sequence: int
@@ -385,13 +709,26 @@ class CommandRecord:
     arg1: int = 0
     arg2: int = 0
     arg3: int = 0
+    arg4: int = 0
+    arg5: int = 0
     state: CommandState = CommandState.READY
     result: int = 0
+    value: int = 0
 
     def __post_init__(self) -> None:
         """Reject anything the record cannot carry."""
 
-        for name in ("sequence", "operation", "arg0", "arg1", "arg2", "arg3"):
+        for name in (
+            "sequence",
+            "operation",
+            "arg0",
+            "arg1",
+            "arg2",
+            "arg3",
+            "arg4",
+            "arg5",
+            "value",
+        ):
             _check_uint32(name, getattr(self, name))
         if not -(2**31) <= self.result < 2**31:
             raise ValueError("result must fit in a signed 32-bit value")
@@ -401,7 +738,12 @@ class CommandRecord:
             raise ValueError("a ready command cannot carry a result")
 
     def to_bytes(self) -> bytes:
-        """Return the record in its fixed 32-byte form."""
+        """Return the record in its fixed-width form, padded to the slot.
+
+        The fields are eleven words and the slot is 64 bytes, so the rest of the record is
+        written as zeros: the payload addresses records by slot, and a slot is one record's
+        worth of bytes.
+        """
 
         return _COMMAND.pack(
             self.sequence,
@@ -410,9 +752,12 @@ class CommandRecord:
             self.arg1,
             self.arg2,
             self.arg3,
+            self.arg4,
+            self.arg5,
             int(self.state),
             self.result,
-        )
+            self.value,
+        ) + bytes(COMMAND_SIZE - _COMMAND.size)
 
     @classmethod
     def from_bytes(cls, raw: BlockImage) -> CommandRecord:
@@ -421,9 +766,19 @@ class CommandRecord:
         if len(raw) != COMMAND_SIZE:
             raise ValueError(f"command record must be exactly {COMMAND_SIZE} bytes")
 
-        sequence, operation, arg0, arg1, arg2, arg3, state_value, result = (
-            _COMMAND.unpack(raw)
-        )
+        (
+            sequence,
+            operation,
+            arg0,
+            arg1,
+            arg2,
+            arg3,
+            arg4,
+            arg5,
+            state_value,
+            result,
+            value,
+        ) = _COMMAND.unpack_from(raw, 0)
         try:
             state = CommandState(state_value)
         except ValueError as error:
@@ -436,14 +791,25 @@ class CommandRecord:
             arg1=arg1,
             arg2=arg2,
             arg3=arg3,
+            arg4=arg4,
+            arg5=arg5,
             state=state,
             result=result,
+            value=value,
         )
 
 
 @dataclass(frozen=True)
 class EventRecord:
-    """Something the payload observed and wants the host to know about."""
+    """Something the payload observed and wants the host to know about.
+
+    ``text`` is the copy the observer took of the string a watched message named — the wide
+    characters as the client had them, terminator included, which is what native's
+    ``DupWideStringSafe`` hands its own callers (``dialog.cpp:237-252``). It is empty when the
+    message names no string or names a null one, and ``text_state`` says which of the three
+    outcomes it was (:class:`EventTextState`); a caller that needs the difference between "no
+    string" and "a string with no terminator inside the bound" reads that word.
+    """
 
     kind: int
     sequence: int = 0
@@ -452,17 +818,30 @@ class EventRecord:
     arg2: int = 0
     arg3: int = 0
     tick: int = 0
+    text_state: int = EventTextState.ABSENT
+    text: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         """Reject anything the record cannot carry."""
 
         for name in ("kind", "sequence", "arg0", "arg1", "arg2", "arg3", "tick"):
             _check_uint32(name, getattr(self, name))
+        if self.text_state not in tuple(EventTextState):
+            raise ValueError(f"event text_state {self.text_state} is not a state")
+        if len(self.text) > EVENT_TEXT_WORDS:
+            raise ValueError(
+                f"an event carries at most {EVENT_TEXT_WORDS} code units; "
+                f"{len(self.text)} were given"
+            )
+        for unit in self.text:
+            _check_uint16("text unit", unit)
+        if self.text_state is EventTextState.ABSENT and self.text:
+            raise ValueError("an event with no string cannot carry text")
 
     def to_bytes(self) -> bytes:
-        """Return the record in its fixed 32-byte form."""
+        """Return the record in its fixed ``EVENT_SIZE``-byte form."""
 
-        return _EVENT.pack(
+        words = _EVENT.pack(
             self.kind,
             self.sequence,
             self.arg0,
@@ -471,6 +850,15 @@ class EventRecord:
             self.arg3,
             self.tick,
             0,
+            int(self.text_state),
+            len(self.text),
+        )
+        text = b"".join(struct.pack("<H", unit) for unit in self.text)
+        return (
+            words
+            + bytes(EVENT_TEXT_OFFSET - _EVENT.size)
+            + text
+            + bytes(EVENT_TEXT_SIZE - len(text))
         )
 
     @classmethod
@@ -480,10 +868,30 @@ class EventRecord:
         if len(raw) != EVENT_SIZE:
             raise ValueError(f"event record must be exactly {EVENT_SIZE} bytes")
 
-        kind, sequence, arg0, arg1, arg2, arg3, tick, reserved = _EVENT.unpack(raw)
+        (
+            kind,
+            sequence,
+            arg0,
+            arg1,
+            arg2,
+            arg3,
+            tick,
+            reserved,
+            text_state,
+            text_length,
+        ) = _EVENT.unpack(raw[: _EVENT.size])
         if reserved != 0:
             raise ValueError("event reserved field must be zero")
+        if text_length > EVENT_TEXT_WORDS:
+            raise ValueError(
+                f"event text length {text_length} is past the {EVENT_TEXT_WORDS} "
+                "code units a record carries"
+            )
 
+        text = tuple(
+            struct.unpack_from("<H", raw, EVENT_TEXT_OFFSET + index * 2)[0]
+            for index in range(text_length)
+        )
         return cls(
             kind=kind,
             sequence=sequence,
@@ -492,6 +900,8 @@ class EventRecord:
             arg2=arg2,
             arg3=arg3,
             tick=tick,
+            text_state=text_state,
+            text=text,
         )
 
 

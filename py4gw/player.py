@@ -28,20 +28,32 @@ Three groups exist, and each member says which one it is in its docstring:
     Reforged's route needs something this project does not read. Each case is
     documented at the member and listed in ``docs/PLAYER_PORT.md``.
 
-None of the disabled members are implemented by writing to ``Gw.exe``; the
-project's read-only boundary is unchanged by this module.
+Some implemented members **act** rather than read: they change the game, and they
+do it by calling the client's own function on the client's own thread through
+``py4gw/game_thread``. That needs a connection with the capability layer —
+``py4gw.connect()`` installs it by default — so a read-only connection
+(``game_thread=False``) refuses them with the connection's own error rather than
+calling anything. Which function each one calls, and why that function is the
+action rather than the UI message the source sends, is recorded at each member and
+in ``docs/PLAYER_PORT.md``.
 """
 
 from __future__ import annotations
+
+import time
 
 from enum import IntEnum
 from functools import wraps
 from typing import Any, Callable, TypeVar
 
 from .client import ConnectedClient, require_client
-from .context.agent_array import AgentStruct
+from .context.agent_array import AgentAllegiance, AgentStruct
 from .context.char_context import CharContextStruct
 from .context.world_context import PlayerStruct, TitleStruct, WorldContextStruct
+from .game_thread.shared_block import CallForm, DecodeState, float_bits
+from . import dialog
+from . import chat
+from .py4gwcorelib_src.utils import Utils
 
 _T = TypeVar("_T")
 
@@ -99,41 +111,122 @@ class PlayerStatus(IntEnum):
         return self.name.lower()
 
 
-class ChatChannel(IntEnum):
-    """Native chat channel identifiers.
+#: Reforged's Python reaches the channel values as ``Player.ChatChannel``
+#: (``enums_src/UI_enums.py:35-55``) while Native declares them in ``GW::chat``
+#: (``common/constants/chat.h``), so the class is declared in :mod:`py4gw.chat` and re-exported
+#: here: one declaration, both names.
+ChatChannel = chat.ChatChannel
 
-    Only the disabled chat senders use these; the enum is ported in full so the
-    signatures match Reforged.
+
+def _unported(member: str, requirement: str) -> NotImplementedError:
+    """Build the error raised by a member this port has not built yet.
+
+    The source's member is complete and working — Reforged is an in-production library — so the
+    message never describes the source: it names the work item this port still owes, and the raise
+    is what keeps a caller from receiving a plausible wrong value while that work is outstanding.
     """
 
-    CHANNEL_ALLIANCE = 0
-    CHANNEL_ALLIES = 1
-    CHANNEL_GWCA1 = 2
-    CHANNEL_ALL = 3
-    CHANNEL_GWCA2 = 4
-    CHANNEL_MODERATOR = 5
-    CHANNEL_EMOTE = 6
-    CHANNEL_WARNING = 7
-    CHANNEL_GWCA3 = 8
-    CHANNEL_GUILD = 9
-    CHANNEL_GLOBAL = 10
-    CHANNEL_GROUP = 11
-    CHANNEL_TRADE = 12
-    CHANNEL_ADVISORY = 13
-    CHANNEL_WHISPER = 14
-    CHANNEL_COUNT = 15
-    CHANNEL_COMMAND = 16
-    CHANNEL_UNKNOWN = -1
-
-
-def _disabled(member: str, requirement: str) -> NotImplementedError:
-    """Build the error raised by a member that needs code inside the client."""
-
     return NotImplementedError(
-        f"Player.{member} is not available from an external reader: {requirement}. "
-        "It exists for source parity so a ported script fails at the call site "
-        "and names the missing mechanism instead of returning a wrong value."
+        f"Player.{member} is declared but not built here yet: it needs {requirement}. "
+        "The source's member works; this port raises at the call site and names the work "
+        "item instead of returning a wrong value."
     )
+
+
+#: ``static std::vector<std::string> g_chat_history;`` (``player_bindings.cpp:273``): the decoded
+#: chat history ``GetChatHistory`` answers with. The source keeps it beside the bindings, which is
+#: this module for the ported ``Player``.
+_chat_history: list[str] = []
+
+#: ``static bool g_chat_ready = false;`` (``player_bindings.cpp:274``): whether a request has
+#: finished. It starts false and ``RequestChatHistory`` clears it again on every call.
+_chat_ready: bool = False
+
+#: ``decoded_chat[i] = L"[ERROR: Timeout]"`` (``player_bindings.cpp:306``): what an entry the
+#: client did not answer in time becomes. The text is the source's, character for character.
+_CHAT_HISTORY_TIMEOUT = "[ERROR: Timeout]"
+
+#: ``>= 500`` milliseconds from the request's own start (``player_bindings.cpp:292`, `305``), and
+#: the source's 5 ms poll between looks (``player_bindings.cpp:303``).
+_CHAT_HISTORY_TIMEOUT_S = 0.5
+_CHAT_HISTORY_POLL_S = 0.005
+
+
+def _decode_chat_message(message: str, start_time: float) -> str:
+    """Decode one chat-log line through the client's decoder (``player_bindings.cpp:294-310``).
+
+    ``message`` is the encoded wide line as the log holds it, which is exactly what native hands
+    ``AsyncDecodeStr`` (``temp_chat_log[i].c_str()``). The decode is the port's: the string is
+    placed for the client (``begin_string_decode``), the client's own decoder is called on its own
+    thread (``async_decode_str``), and the emitted stub copies the text into the slot the host
+    reads — the same three pieces ``Dialog``'s text uses.
+
+    Two source behaviours are kept exactly. The wait is bounded by **one** deadline taken from the
+    request's start, not per entry, so a slow client spends a shared budget the way
+    ``player_bindings.cpp:292-309`` spends it. And an **empty** answer is not an answer: native's
+    loop condition is ``while (decoded_chat[i].empty())``, so a decoder that answers with nothing
+    keeps the entry waiting until the deadline and then gets the timeout text — which is what this
+    does too, rather than treating empty as complete.
+    """
+
+    from .ui.async_decode import async_decode_str, begin_string_decode, decoded_text
+
+    encoded = message.encode("utf-16-le", errors="surrogatepass") + b"\x00\x00"
+    slot = begin_string_decode(encoded)
+    started = async_decode_str(encoded, slot)
+
+    text = ""
+    if started:
+        while True:
+            if require_client().bridge.decode_state(slot) is DecodeState.DONE:
+                text, _ = decoded_text(slot)
+                break
+            if time.monotonic() >= start_time + _CHAT_HISTORY_TIMEOUT_S:
+                # The client never answered: the slot would otherwise stay in flight for the life
+                # of the connection (``DECODE_DEPTH`` of them would exhaust the decoder), so it is
+                # given back here. Native has no slot to leak — its callback writes a string.
+                require_client().bridge.release_decode(slot)
+                break
+            time.sleep(_CHAT_HISTORY_POLL_S)
+
+    while not text and time.monotonic() < start_time + _CHAT_HISTORY_TIMEOUT_S:
+        time.sleep(_CHAT_HISTORY_POLL_S)
+    if not text:
+        return _CHAT_HISTORY_TIMEOUT
+    return text
+
+
+class WorldActionId(IntEnum):
+    """The world actions the client's own action function takes.
+
+    ``native_src/methods/PlayerMethods.py:12-18`` declares this class in the same
+    file as the player methods, and native declares the same enum as
+    ``Constants::WorldActionId`` (``include/GW/common/constants/agent.h:7-14``).
+    Both agree, including that ``InteractEnemy`` is ``0`` — the value a
+    ``kSendWorldAction`` packet carries by default.
+    """
+
+    INTERACT_ENEMY = 0
+    INTERACT_PLAYER_OR_OTHER = 1
+    INTERACT_NPC = 2
+    INTERACT_ITEM = 3
+    INTERACT_TRADE = 4
+    INTERACT_GADGET = 5
+
+
+class CallTargetType(IntEnum):
+    """The kind of call-target alert.
+
+    Native ``Constants::CallTargetType``
+    (``include/GW/common/constants/agent.h:16-21``). It has no Reforged Python
+    counterpart: Reforged's ``Player.CallTarget`` reaches the native binding,
+    which passes ``AttackingOrTargetting`` (``agent_methods.cpp:212-215``).
+    """
+
+    FOLLOWING = 0x3
+    MORALE = 0x7
+    ATTACKING_OR_TARGETTING = 0xA
+    NONE = 0xFF
 
 
 #: The value the native ``PickHighest`` treats as "not read".
@@ -253,16 +346,23 @@ class Player:
 
     @staticmethod
     def player_instance() -> Any:
-        """Disabled: Reforged returns a ``PyPlayer`` native binding object.
+        """Obsolete port artifact: it returned Reforged's in-process ``PyPlayer`` object.
 
-        The binding is constructed inside the client; there is nothing to
-        construct externally.
+        Reforged's Python reaches every value through ``Player.player_instance().X()``; that object
+        is a binding the injected runtime owns in-process, and **this project has no player object
+        and does not need one** — every member of this class answers the same data directly from the
+        contexts and the capture layer, which is why nothing else here calls it.
+
+        It is kept only because the class surface is the source's, and it raises rather than
+        returning a stand-in. It is not a work item: there is nothing to port, because the thing it
+        returns no longer has a counterpart or a purpose here.
         """
 
-        raise _disabled(
-            "player_instance",
-            "it returns a PyPlayer native binding object, which only exists "
-            "inside the client",
+        raise NotImplementedError(
+            "Player.player_instance is a port artifact that is no longer valid: it returned "
+            "Reforged's in-process PyPlayer binding object, and this project has no player object. "
+            "Every value that object provided is answered by this class's own members — read them "
+            "directly instead of through an instance."
         )
 
     # ── core identity (context) ────────────────────────────────────────────
@@ -490,19 +590,22 @@ class Player:
 
     @staticmethod
     def GetTargetID() -> int:
-        """Disabled: the target id is DLL-owned state.
+        """Return the player's current target id, or ``0`` for none.
 
-        Native ``GetTargetId()`` returns ``g_current_target_id``, a global the
-        runtime maintains from a ``kChangeTarget`` UI-message hook
-        (``agent.cpp:60,163``). The client does not keep the current target in a
-        readable context, so no honest external value exists.
+        Native ``GetTargetId()`` returns ``g_current_target_id``
+        (``agent_methods.cpp:65-67``), which the runtime's ``kChangeTarget`` handler
+        sets from the client's own notice of the change (``agent.cpp:161-165``). The
+        client keeps that value nowhere a reader can reach — it is a message payload
+        and nothing else holds it — so this project listens to the same message, and
+        the connection keeps the id for the member to read.
+
+        The client reports **changes**, so this is the last target it announced: ``0``
+        before the first change and after the target is cleared, which is what the
+        source's global holds in both cases. Setting the target it already has
+        produces no notice, so the value does not change then either.
         """
 
-        raise _disabled(
-            "GetTargetID",
-            "the current target id is a DLL global set by a UI-message hook and "
-            "is not stored in any readable context",
-        )
+        return require_client().target_id
 
     # ── account and progression (context) ─────────────────────────────────
 
@@ -571,20 +674,17 @@ class Player:
 
     @staticmethod
     def GetInstanceUptime() -> int:
-        """Disabled: the uptime needs the client's frame limit.
+        """Retrieve the player's instance uptime (``Player.py:322-329``).
 
-        Reforged computes ``agent.timer / UIManager.GetFPSLimit() * 1000``. The
-        timer is a context field, but ``GW::ui::GetFrameLimit`` resolves the
-        limit through a client function pointer and the graphics-option state, so
-        the divisor cannot be obtained by reading memory.
+        The source's whole body is ``Agent.GetInstanceUptime(Player.GetAgentID())``, and both halves
+        are ported now: the agent record is read from the ported context and the frame limit the
+        conversion divides by is native's own ``GW::ui::GetFrameLimit``
+        (``py4gw/ui/preferences.py``, reached through ``Agent.GetInstanceUptime``).
         """
 
-        raise _disabled(
-            "GetInstanceUptime",
-            "converting the instance timer to milliseconds needs the client's "
-            "frame limit, which is read through a client function pointer "
-            "(GW::ui::GetFrameLimit)",
-        )
+        from .agent import Agent
+
+        return Agent.GetInstanceUptime(Player.GetAgentID())
 
     @staticmethod
     def GetRankData() -> tuple[int, int, int, int, int]:
@@ -859,6 +959,13 @@ class Player:
 
         The player record stores a *tier index*; Reforged finds the title whose
         ``current_title_tier_index`` matches it and returns that title's index.
+
+        A tier index of ``0`` means **no title is active**, and the source returns
+        ``None`` for it before it looks at the title array at all
+        (``player_methods.cpp:159-161``). That check is not decoration: without it
+        the search matches the first title whose tier index is also ``0`` and
+        reports a title the player is not displaying. This port had that bug, and a
+        live run is what found it — after ``RemoveActiveTitle()`` the tier is ``0``.
         """
 
         client = require_client()
@@ -866,8 +973,10 @@ class Player:
         if player is None:
             return 0
         active_tier = player.active_title_tier
+        if not active_tier:
+            return 0
         titles = Player.GetTitleArrayRaw()
-        if active_tier is None or not titles:
+        if not titles:
             return 0
         for index, title in enumerate(titles):
             if int(title.current_title_tier_index) == int(active_tier):
@@ -979,223 +1088,497 @@ class Player:
 
     @staticmethod
     def SetPlayerStatus(status: PlayerStatus | int | str) -> bool:
-        """Disabled: changing the status sends a CtoS packet.
+        """Set the player's friend-list status.
 
-        Reforged queues ``PlayerMethods.SetPlayerStatus``, which calls the
-        client's own setter from the game thread. An external controller cannot
-        make the client emit that packet without code inside it.
+        ``0`` offline, ``1`` online, ``2`` do-not-disturb, ``3`` away. Reforged
+        validates the value first — ``PlayerStatus.from_value`` returns ``None``
+        for anything else and the member reports ``False`` — then queues
+        ``PlayerMethods.SetPlayerStatus``, which refuses a value above ``Away``
+        and calls ``PyPlayer.SetPlayerStatus``. Native's binding
+        (``player_bindings.cpp:338``) ends at
+        ``GW::friend_list::SetFriendListStatus``, which is a call to
+        ``SetOnlineStatusFn`` — ``void __cdecl(FriendStatus)``
+        (``friend_list_methods.cpp:13``, ``121-127``). That function is what this
+        calls, so the client emits the packet itself.
         """
 
-        raise _disabled(
-            "SetPlayerStatus",
-            "setting the status calls the client's own setter through the "
-            "in-process game thread so the client emits the CtoS packet",
+        player_status = PlayerStatus.from_value(status)
+        if player_status is None:
+            return False
+        require_client().call_function(
+            "friend_list.set_online_status_func", CallForm.U32, int(player_status)
         )
+        return True
 
     @staticmethod
     def ChangeTarget(agent_id: int) -> None:
-        """Disabled: targeting runs through the client's target setter.
+        """Change the player's target.
 
-        Reforged calls ``PyPlayer.ChangeTarget`` on the game thread.
+        The source path is two steps and the second one acts.
+        ``PyPlayer.ChangeTarget`` (``player_bindings.cpp:237``) refuses a zero id
+        and an id that resolves to no agent, then sends ``kSendChangeTarget``;
+        the runtime's own handler for that message is what calls the client's
+        target setter (``agent.cpp:143-155``). With no runtime inside the client,
+        this calls what the handler calls: ``agent.change_target_func(target, 0)``,
+        which is the same function the source's ``ChangeTarget`` resolves.
+
+        The binding's guard is applied here, first, exactly as it is there: a
+        zero or unresolvable id changes nothing.
         """
 
-        raise _disabled(
-            "ChangeTarget",
-            "it calls the client's own target setter from the game thread",
+        if not agent_id or not Player.IsAgentIDValid(agent_id):
+            return
+        require_client().call_function(
+            "agent.change_target_func", CallForm.U32_U32, agent_id, 0
         )
 
     @staticmethod
     def CallTarget(agent_id: int) -> None:
-        """Disabled: call-target dispatches a UI message from inside the client.
+        """Broadcast a call-target alert to the party.
 
-        Reforged routes through ``GW::Agents::CallTarget`` and the
-        ``kSendCallTarget`` UI message. Reforged defines this method twice; this
-        port keeps one definition with identical behavior.
+        Native ``PyPlayer::CallTarget`` (``player_bindings.cpp:256``) requires a
+        nonzero id that resolves to an agent with a living record, then calls
+        ``GW::agent::CallTarget(uint32_t)`` (``agent_methods.cpp:227``). That
+        branches on allegiance: an enemy is called through ``kSendCallTarget``
+        with ``AttackingOrTargetting``, and anything else through
+        ``kSendWorldAction`` with ``InteractPlayerOrOther`` and the call flag set.
+
+        Both messages are handled by the runtime, whose handler calls
+        ``call_target_func`` and ``do_world_action_func`` respectively
+        (``agent.cpp:166-183``), so those two are what this calls.
+
+        Reforged defines this method twice with identical bodies; this port keeps
+        one definition, which is the behaviour the second one wins with.
         """
 
-        raise _disabled(
-            "CallTarget",
-            "it dispatches the kSendCallTarget UI message from inside the client",
+        if not agent_id:
+            return
+        agent = Player._agent_by_id(agent_id)
+        if agent is None or agent.GetAsAgentLiving() is None:
+            return
+
+        living = agent.GetAsAgentLiving()
+        if living is None:
+            return
+        if living.allegiance == AgentAllegiance.ENEMY:
+            require_client().call_function(
+                "agent.call_target_func",
+                CallForm.U32_U32,
+                int(CallTargetType.ATTACKING_OR_TARGETTING),
+                agent_id,
+            )
+            return
+        require_client().call_function(
+            "agent.do_world_action_func",
+            CallForm.U32_U32_U32,
+            int(WorldActionId.INTERACT_PLAYER_OR_OTHER),
+            agent_id,
+            1,
         )
 
     @staticmethod
     def Interact(agent_id: int, call_target: bool = False) -> None:
-        """Disabled: interacting runs the client's own agent-interaction call."""
+        """Interact with an agent, optionally calling it as a target.
 
-        raise _disabled(
-            "Interact",
-            "it calls the client's own agent-interaction function from the game "
-            "thread",
+        ``PlayerMethods.InteractAgent``
+        (``native_src/methods/PlayerMethods.py:114``) refuses a zero id, resolves
+        the agent, picks the world-action id from its type and allegiance, and
+        sends ``kSendWorldAction`` with the call flag. Native's
+        ``agent::InteractAgent`` (``agent_methods.cpp:157``) does the same and
+        additionally calls ``CallTarget`` first when the flag is set. The
+        runtime's handler for that message calls
+        ``do_world_action_func(action_id, agent_id, suppress)``
+        (``agent.cpp:176-183``), which is the call made here.
+        """
+
+        if not agent_id:
+            return
+        agent = Player._agent_by_id(agent_id)
+        if agent is None:
+            return
+
+        action_id = WorldActionId.INTERACT_ENEMY
+        if agent.is_item_type:
+            action_id = WorldActionId.INTERACT_ITEM
+        elif agent.is_gadget_type:
+            action_id = WorldActionId.INTERACT_GADGET
+        else:
+            living = agent.GetAsAgentLiving()
+            if living is None:
+                return
+            if living.allegiance == AgentAllegiance.ENEMY:
+                action_id = WorldActionId.INTERACT_ENEMY
+            elif living.allegiance == AgentAllegiance.NPC_MINIPET:
+                action_id = WorldActionId.INTERACT_NPC
+            else:
+                action_id = WorldActionId.INTERACT_PLAYER_OR_OTHER
+
+        if call_target:
+            Player.CallTarget(agent_id)
+
+        require_client().call_function(
+            "agent.do_world_action_func",
+            CallForm.U32_U32_U32,
+            int(action_id),
+            agent_id,
+            1 if call_target else 0,
         )
 
     @staticmethod
     def Move(x: float, y: float, zPlane: int = 0) -> None:
-        """Disabled: movement calls the client's own movement function."""
+        """Move the player to a position on its current map.
 
-        raise _disabled(
-            "Move",
-            "it calls the client's own movement function from the game thread",
+        ``PlayerMethods.Move`` (``native_src/methods/PlayerMethods.py:157``) fills
+        the source's four-float array — ``{x, y, (float)zplane, 0.0}`` — and calls
+        ``MoveTo_Func``, declared ``Void_FloatPtr`` (``PlayerMethods.py:24-32``).
+        Native's ``agent::Move`` builds the same array
+        (``agent_methods.cpp:149-153``). ``agent.move_to_func`` is that resolver in
+        this project's catalog, so the array is built in the client and passed by
+        address, with the fourth float zero because the client reads it.
+        """
+
+        require_client().call_function(
+            "agent.move_to_func",
+            CallForm.FLOAT_PTR,
+            float_bits(x),
+            float_bits(y),
+            float_bits(float(zPlane)),
         )
 
     @staticmethod
     def DepositFaction(faction_id: int) -> None:
-        """Disabled: depositing faction runs a client action."""
+        """Deposit faction with an ambassador.
 
-        raise _disabled(
-            "DepositFaction",
-            "it calls the client's own faction-deposit action from the game thread",
+        ``0`` is Kurzick and ``1`` is Luxon. ``PlayerMethods.DepositFaction``
+        (``native_src/methods/PlayerMethods.py:173``) calls
+        ``DepositFaction_Func(0, allegiance, 5000)``, and native's
+        ``player::DepositFaction`` passes the same three values
+        (``player_methods.cpp:203``). The leading ``0`` and the ``5000`` amount
+        are the source's, not this port's.
+        """
+
+        require_client().call_function(
+            "player.deposit_faction_func",
+            CallForm.U32_U32_U32,
+            0,
+            faction_id,
+            5000,
         )
 
     @staticmethod
     def RemoveActiveTitle() -> None:
-        """Disabled: changing the active title runs a client action."""
+        """Clear the player's active title.
 
-        raise _disabled(
-            "RemoveActiveTitle",
-            "it calls the client's own title action from the game thread",
+        ``RemoveActiveTitleFn`` is ``void __cdecl(void)``
+        (``player_methods.cpp:39``), so the call carries no arguments at all —
+        which is a different thing from a call with a zero argument.
+        """
+
+        require_client().call_function(
+            "player.remove_active_title_func", CallForm.NO_ARGS
         )
 
     @staticmethod
     def SetActiveTitle(title_id: int) -> None:
-        """Disabled: changing the active title runs a client action."""
+        """Set the player's active title.
 
-        raise _disabled(
-            "SetActiveTitle",
-            "it calls the client's own title action from the game thread",
+        ``SetActiveTitleFn`` is ``void __cdecl(uint32_t identifier)``
+        (``player_methods.cpp:40``), and the identifier is the title id.
+        """
+
+        require_client().call_function(
+            "player.set_active_title_func", CallForm.U32, title_id
         )
 
     @staticmethod
     def SendRawDialog(dialog_id: int) -> None:
-        """Disabled: dialog responses are UI messages raised inside the client."""
+        """Send a dialog response by its raw dialog id.
 
-        raise _disabled(
-            "SendRawDialog",
-            "it dispatches the kSendAgentDialog UI message from inside the client",
+        ``PlayerMethods.SendRawDialog``
+        (``native_src/methods/PlayerMethods.py:413``) sends ``kSendAgentDialog``
+        with the dialog id in ``wparam`` and no packet. The client's own handler
+        for that message is ``SendDialogFn`` — ``void __cdecl(uint32_t dialog_id)``
+        (``agent_methods.cpp:18``) — and the runtime reaches it by handing the
+        message's ``wparam`` straight through as the argument
+        (``agent.cpp:138-141``). That function is what this calls, and
+        ``agent.send_agent_dialog_func`` is its resolver.
+        """
+
+        require_client().call_function(
+            "agent.send_agent_dialog_func", CallForm.U32, dialog_id
         )
 
     @staticmethod
     def BuySkill(skill_id: int) -> None:
-        """Disabled: buying a skill runs a client trainer action."""
+        """Buy or learn a skill from a Skill Trainer (``Player.py:816-822``).
 
-        raise _disabled(
-            "BuySkill",
-            "it dispatches a skill-trainer dialog from inside the client",
-        )
+        The source queues ``PlayerMethods.SendSkillTrainerDialog``, whose whole body is
+        ``Utils.SkillIdToDialogId(skill_id)`` followed by ``PlayerMethods.SendRawDialog``
+        (``native_src/methods/PlayerMethods.py:426-436``) — and both halves are ported:
+        :func:`py4gw.py4gwcorelib_src.utils.Utils.SkillIdToDialogId` is the source's own OR with
+        ``0x0A000000``, and :func:`SendRawDialog` calls the function the runtime's ``_action``
+        reaches through ``UIManager.SendUIMessageRaw(kSendAgentDialog, dialog_id, 0)``. The
+        ``ActionQueueManager`` that queued it has no ported home; this port's call path runs on the
+        client's own thread already, which is what the queue was for (``docs/PLAYER_PORT.md``).
+        """
+
+        dialog_skill_id = Utils.SkillIdToDialogId(skill_id)
+        Player.SendRawDialog(dialog_skill_id)
 
     @staticmethod
     def UnlockBalthazarSkill(skill_id: int, use_pvp_remap: bool = True) -> None:
-        """Disabled: unlocking a skill runs a client vendor action."""
+        """Unlock a skill from the Priest of Balthazar vendor (``Player.py:824-831``).
 
-        raise _disabled(
-            "UnlockBalthazarSkill",
-            "it dispatches a Balthazar skill-unlock dialog from inside the client",
-        )
+        The source queues ``PlayerMethods.SendBalthazarSkillUnlockDialog``
+        (``native_src/methods/PlayerMethods.py:438-450``), whose body is
+        ``Utils.BalthazarSkillIdToDialogId(skill_id, use_pvp_remap)`` followed by
+        ``PlayerMethods.SendRawDialog`` — the same shape as :func:`BuySkill`, through the same
+        ported send.
+
+        Both halves are ported: the conversion reads the skill constant record through the ported
+        ``Skill`` class (``py4gw/skill.py``, ``Skill.ExtraData.GetIDPvP``) and the send calls the
+        function the runtime's handler reaches. The one thing the default path needs is a
+        connection: without one the conversion's own record read is unavailable, which is the
+        source's ``except Exception`` branch (``Utils.py:801-807``) and not a substitute for it.
+        """
+
+        dialog_skill_id = Utils.BalthazarSkillIdToDialogId(skill_id, use_pvp_remap=use_pvp_remap)
+        Player.SendRawDialog(dialog_skill_id)
 
     @staticmethod
     def SendDialog(dialog_id: str | int) -> None:
-        """Disabled: dialog responses are raised inside the client."""
+        """Send a dialog response to the agent the current dialog belongs to.
 
-        raise _disabled(
-            "SendDialog",
-            "it sends a dialog through the client's own dialog sender",
+        Native ``agent::SendDialog`` (``agent_methods.cpp:28-37``) resolves the agent
+        it is answering — ``g_dialog_agent_id``, which the runtime keeps from the
+        client's ``kDialogBody`` message — and sends the **gadget** dialog if that
+        agent is a gadget and the **agent** dialog otherwise, returning without
+        sending when the agent no longer resolves. Both sends are
+        ``kSendGadgetDialog``/``kSendAgentDialog``, whose handler passes ``wparam``
+        straight to ``SendDialogFn`` — ``void __cdecl(uint32_t dialog_id)``
+        (``agent.cpp:138-159``) — so those two functions are what this calls.
+
+        Two boundary differences, both recorded in ``docs/PLAYER_PORT.md``: the agent
+        comes from the dialog module's state rather than from the agent module's own
+        global (same message, same field, one state instead of two), and the send is
+        recorded by :func:`py4gw.dialog._note_sent_dialog` because the runtime records
+        it inside the message handler that this port bypasses.
+
+        The dialog id may be given as a number or as the hex string Reforged's Python
+        accepts (``Py4GWCoreLib/Player.py:836-851``), which strips a ``0x`` prefix and
+        parses the rest as base 16.
+        """
+
+        if isinstance(dialog_id, int):
+            dialog_value = dialog_id
+        else:
+            cleaned = dialog_id.strip().lower().replace("0x", "")
+            dialog_value = int(cleaned, 16)
+
+        client = require_client()
+        active = dialog.get_active_dialog()
+        if active is None:
+            return
+        agent = Player._agent_by_id(active.agent_id)
+        if agent is None:
+            return
+
+        # The message id **is** the variant: the source's handler is reached by
+        # ``kSendGadgetDialog`` for a gadget and ``kSendAgentDialog`` for an agent, and it logs
+        # the id it handled. So which one this send is has to be known before the recording,
+        # not after it.
+        is_gadget = bool(agent.is_gadget_type)
+        dialog._note_sent_dialog(
+            dialog_value,
+            dialog.DIALOG_SEND_GADGET_MESSAGE
+            if is_gadget
+            else dialog.DIALOG_SEND_AGENT_MESSAGE,
         )
+        if is_gadget:
+            client.call_function(
+                "agent.send_gadget_dialog_func", CallForm.U32, dialog_value
+            )
+            return
+        client.call_function("agent.send_agent_dialog_func", CallForm.U32, dialog_value)
 
     @staticmethod
     def SendAutomaticDialog(button_number: int) -> None:
-        """Disabled: it reads the active dialog and sends the chosen button.
+        """Click one of the open dialog's buttons, by its visible position.
 
-        It needs both a readable active dialog, which this project cannot obtain,
-        and a dialog sender.
+        ``Py4GWCoreLib/Player.py:854-900``: refuse a negative index, read the active
+        dialog's buttons, drop the ones with no dialog id, refuse an index past the
+        end, and send the selected button's id through :meth:`SendDialog`. Every one
+        of those checks is here in the source's order.
+
+        **One difference.** The source reports each refusal through
+        ``PySystem.Console.Log``, which is Reforged's console *inside* the client.
+        There is no external equivalent of that console, so the diagnostics are not
+        ported; the returns they accompany are, which is what a caller observes.
+
+        ``getattr(button, "dialog_id", 0)`` in the source guards against a binding
+        object that may not carry the field. Every button this port builds is a
+        :class:`py4gw.dialog.DialogButtonInfo`, which always declares it, so the read
+        is direct — the same value, without the dynamic name.
         """
 
-        raise _disabled(
-            "SendAutomaticDialog",
-            "the active dialog is DLL-owned state and sending the choice needs "
-            "the client's dialog sender",
-        )
+        if button_number < 0:
+            return
+
+        available_buttons = [
+            button for button in dialog.get_active_dialog_buttons()
+            if button.dialog_id != 0
+        ]
+        if not available_buttons:
+            return
+        if button_number >= len(available_buttons):
+            return
+
+        selected_button = available_buttons[button_number]
+        Player.SendDialog(selected_button.dialog_id)
 
     @staticmethod
     def RequestChatHistory() -> None:
-        """Disabled: it asks the client to fetch chat history."""
+        """Fill the chat history from the client's own log (``player_bindings.cpp:276-323``).
 
-        raise _disabled(
-            "RequestChatHistory",
-            "it calls the client's own chat-history request",
-        )
+        The source's body, in its own order: clear the buffer and the ready flag; take
+        ``GW::chat::GetChatLog()`` and answer ready-with-nothing when it is null; collect the
+        non-null messages of the ``CHAT_LOG_LENGTH``-entry ring; decode each of them through
+        ``AsyncDecodeStr``; wait up to **500 ms from one start time** for the decodes to land,
+        substituting ``L"[ERROR: Timeout]"`` for the ones that do not; convert each decoded wide
+        string to a narrow one, replacing every code unit above ASCII with ``?``; store the result
+        and set the flag.
 
+        Two things differ, and both are the execution model rather than a choice.
+        ``std::thread`` and ``game_thread::Enqueue`` are how the source gets the walk off its own
+        thread and the decode onto the client's; this port has no frame loop, so the walk runs at
+        the point of request and every client call inside it is issued on the client's own thread
+        by the capability layer — the same adaptation the GW.dat load uses. And the wait is on the
+        decode slot the emitted stub fills (``py4gw/ui/async_decode.py``) instead of on native's
+        ``std::wstring``, with the source's own 500 ms deadline and 5 ms poll.
+        """
+
+        global _chat_history, _chat_ready
+
+        _chat_ready = False
+        _chat_history = []
+
+        log = chat.GetChatLog()
+        if log is None:
+            _chat_ready = True
+            return
+
+        temp_chat_log: list[str] = []
+        for record in log.message_records:
+            temp_chat_log.append(record.message_str)
+
+        decoded_chat: list[str] = []
+        start_time = time.monotonic()
+
+        for message in temp_chat_log:
+            decoded_chat.append(_decode_chat_message(message, start_time))
+
+        converted: list[str] = []
+        for decoded in decoded_chat:
+            text = ""
+            for character in decoded:
+                code_unit = ord(character)
+                text += chr(code_unit) if code_unit < 128 else "?"
+            converted.append(text)
+
+        _chat_history = converted
+        _chat_ready = True
     @staticmethod
     def IsChatHistoryReady() -> bool:
-        """Disabled: chat history readiness is DLL-owned state."""
+        """Return whether the history buffer has been filled (``player_bindings.cpp:324``)."""
 
-        raise _disabled(
-            "IsChatHistoryReady",
-            "the chat-history buffer is owned by the runtime, not by a readable "
-            "context",
-        )
+        return _chat_ready
 
     @staticmethod
     def GetChatHistory() -> list[str]:
-        """Disabled: chat history is buffered inside the runtime."""
+        """Return the history ``RequestChatHistory`` filled (``player_bindings.cpp:325``)."""
 
-        raise _disabled(
-            "GetChatHistory",
-            "the chat-history buffer is owned by the runtime, not by a readable "
-            "context",
-        )
+        return _chat_history
 
     @staticmethod
     def SendChatCommand(command: str) -> None:
-        """Disabled: chat commands are sent by the client."""
+        """Send a ``/`` chat command, through the client's own chat sender.
 
-        raise _disabled(
-            "SendChatCommand",
-            "it hands the command to the client, which emits the CtoS packet",
-        )
+        ``PyPlayer::SendChatCommand`` is ``GW::chat::SendChat('/', msg.c_str())``
+        (``player_bindings.cpp:327``), and the ``'/'`` is the command **opcode**
+        ``GetChannel`` maps to ``CHANNEL_COMMAND`` (``chat_methods.cpp:53-64``). The facade's
+        own body hands the call to Reforged's ``ActionQueueManager``; that manager belongs to the
+        injected runtime and has no ported home, so this calls the same function the manager's
+        action would have called — :func:`py4gw.chat.SendChat` — which is the port of
+        ``GW::chat``'s sender (``chat_methods.cpp:88-103``).
+        """
+
+        chat.SendChat("/", command)
 
     @staticmethod
-    def SendChat(channel: ChatChannel | int, message: str) -> None:
-        """Disabled: chat is sent by the client."""
+    def SendChat(channel: ChatChannel | int | str, message: str) -> None:
+        """Send a chat message to a channel, through the client's own chat sender.
 
-        raise _disabled(
-            "SendChat",
-            "it hands the message to the client, which emits the CtoS packet",
-        )
+        ``PyPlayer::SendChat`` is ``GW::chat::SendChat(channel, msg.c_str())``
+        (``player_bindings.cpp:328``) and the facade queues that call. The channel the source
+        takes is an **opcode character**, not a :class:`ChatChannel` value: ``'!'`` for all,
+        ``'@'`` for guild, ``'#'`` for group, ``'$'`` for trade, ``'%'`` for alliance, ``'"'``
+        for whisper and ``'/'`` for a command (``chat_methods.cpp:53-64``). An opcode the sender
+        does not know sends nothing, which is the source's own guard — and that guard is why
+        passing ``ChatChannel.CHANNEL_ALL`` sends nothing: its value is ``3``, and ``3`` is not
+        an opcode. That is the source's behaviour, not this port's reading of it.
+        """
+
+        chat.SendChat(channel, message)
 
     @staticmethod
     def SendWhisper(target_name: str, message: str) -> None:
-        """Disabled: whispers are sent by the client."""
+        """Whisper a player, through the client's own chat sender.
 
-        raise _disabled(
-            "SendWhisper",
-            "it hands the whisper to the client, which emits the CtoS packet",
-        )
+        ``PyPlayer::SendWhisper`` is ``GW::chat::SendChat(name.c_str(), msg.c_str())``
+        (``player_bindings.cpp:329``) — the *string* overload, which formats
+        ``L"\\"%s,%s"`` into the client's own whisper syntax and hands that buffer to the same
+        ``g_send_chat_func`` (``chat_methods.cpp:115-127``). It is not ``StartWhisperFn``: that
+        ``__fastcall`` opens the whisper frame and is what the *UI* uses, and this member's
+        binding does not go near it.
+        """
+
+        chat.SendChat(target_name, message)
 
     @staticmethod
     def SendFakeChat(channel: ChatChannel | int, message: str) -> None:
-        """Disabled: local chat injection runs inside the client."""
+        """Write a line into this client's own chat log, the way ``SendFakeChat`` does.
 
-        raise _disabled(
-            "SendFakeChat",
-            "it injects a local chat line through the client's own chat hook",
-        )
+        ``PyPlayer::SendFakeChat`` is ``GW::chat::SendFakeChat`` (``player_bindings.cpp:330``),
+        which is ``WriteChat`` with ``transient = true`` (``chat_methods.cpp:262-267``): the line is
+        *encoded* (``L"\\x108\\x107%s\\x1"``, ``chat_methods.cpp:159``) and handed to the client in a
+        ``ui::UIChatMessage {channel, message, channel2}`` packet over ``kWriteToChatLog``
+        (``173-202``). :func:`py4gw.chat.WriteChat` is that walk, so this member is the delegation
+        its binding is — nothing is sent to the server.
+        """
+
+        chat.SendFakeChat(channel, message)
 
     @staticmethod
     def SendFakeChatColored(
         channel: ChatChannel | int, message: str, r: int, g: int, b: int
     ) -> None:
-        """Disabled: local chat injection runs inside the client."""
+        """Write a coloured line into this client's own chat log.
 
-        raise _disabled(
-            "SendFakeChatColored",
-            "it injects a colored local chat line through the client's own chat hook",
-        )
+        ``GW::chat::SendFakeChatColored`` (``chat_methods.cpp:269-275``) formats the line with
+        ``FormatChatMessage`` — the clamping and the ``<c=#RRGGBB>`` wrap this class already
+        carries — and writes it as a transient line, which is what
+        :func:`py4gw.chat.SendFakeChatColored` does.
+        """
+
+        chat.SendFakeChatColored(channel, message, r, g, b)
 
     @staticmethod
     def FormatChatMessage(message: str, r: int, g: int, b: int) -> str:
         """Return ``message`` wrapped in a clamped ``<c=#RRGGBB>`` tag.
 
-        This is the only chat member that is pure string work, so it is ported in
-        full even though the senders are disabled.
+        ``GW::chat::FormatChatMessage`` (``chat_methods.cpp:277-290``): each channel is clamped
+        to 1..255 and the tag is upper-case hex. Pure string work, so it is ported whether or not
+        the injection that uses it is.
         """
 
         r = max(1, min(255, r))

@@ -24,9 +24,9 @@ for the inventory and resumable plan.
 
 **Reforged and Reforged Native are complete, working libraries.** They ship and
 they run in production. Stealth is a *port* of them — not a parallel design, not
-a reimplementation with different ideas — and the context port is at an **early
-stage**: contexts can be loaded and read, and little beyond that has been done on
-that side yet.
+a reimplementation with different ideas — and the port is past its early stage:
+the contexts load and read, five accessor classes are ported, and what is left is
+breadth of porting, named member by member in each class's port doc.
 
 **The ported library is read-only; `py4gw/game_thread` is not.** Every path that
 reads the client — the contexts, `Map`, `Player`, `Party`, `Client` — only reads.
@@ -38,17 +38,22 @@ the running client, and the layer puts both functions' original bytes back when 
 connection closes: **hooks**, **execution** (typed calls into the client's own
 functions, with the effect asserted from what the client itself reported), and
 **callbacks** (a registry keyed by event kind, plus a listener thread that delivers
-an event as it arrives). What is thin is **breadth, not capability** — two typed call
+an event as it arrives). What is thin is **breadth, not capability** — six typed call
 forms where the sources need more, and a callback kind per hooked function — and no
-ported context is wired to either yet, so the members that need them still refuse.
+ported context is wired to either yet, so a context member that needs them is not
+ported yet. Eleven `Player` actions are the first members ported onto the call path, and
+the callback layer has its first consumers: the connection registers the dialog
+module's handler and the target capture against the client's own UI messages, which is
+how `Player.GetTargetID` and `Dialog.get_active_dialog()` read what the client reported
+rather than polling for it.
 
 **The structure comes first.** Every member of a ported class is declared now, in
-the source's own shape and nesting, including the members whose bodies cannot
-work yet. That is deliberate: when remote execution, hooks or callbacks are added,
+the source's own shape and nesting, including the members whose bodies are not
+ported yet. That is deliberate: when remote execution, hooks or callbacks are added,
 the functionality is ported into a slot that already exists, instead of the class
-having to be redesigned around a capability that arrived later. A refused member
-in this library is therefore not an unknown quantity — it is a placeholder that
-carries its own name, its source location, and the reason it cannot run.
+having to be redesigned around a capability that arrived later. A member that is not
+yet ported in this library is therefore not an unknown quantity — it is a placeholder
+that carries its own name, its source location, and exactly what it still needs.
 
 Read [`docs/PORTING_RULES.md`](docs/PORTING_RULES.md) before adding anything.
 
@@ -207,8 +212,8 @@ the members and the source lines, and
 
 The Reforged wrapper classes are being ported one at a time, keeping every member
 name and signature. Each member either returns a real value from a readable game
-context or refuses with `NotImplementedError` naming the mechanism it would need;
-nothing is silently wrong, and nothing writes to the client.
+context, or is not ported yet and raises `NotImplementedError` naming the mechanism
+it still needs; nothing is silently wrong, and nothing writes to the client.
 
 ```python
 import py4gw
@@ -218,10 +223,39 @@ py4gw.connect(py4gw.win32.list_processes()[0])
 print(Player.GetName(), Player.GetLevel(), Player.GetXY())
 ```
 
-`Player` and `Party` are ported. `Player` has 70 Reforged members, 46 working
-externally and 24 refusing; `Party` is complete across all five of its
-namespaces, with every action refusing. See [`docs/PLAYER_PORT.md`](docs/PLAYER_PORT.md) and
-[`docs/PARTY_PORT.md`](docs/PARTY_PORT.md) for the per-member tables.
+`Map`, `Player`, `Party`, `Scanner` and `Dialog` are ported, and each one carries a
+verdict in [`docs/CLASS_PORT_MAP.md`](docs/CLASS_PORT_MAP.md): **FULL** when every member
+works, **INCOMPLETE** with the remaining members named. `Scanner` is FULL. `Player` has 71
+Reforged members: 51 that read, 18 that act by calling the client's own function on its own
+thread, and 1 that refuses — `player_instance`, an artifact of the port that is no longer valid for
+anything: it returned Reforged's in-process `PyPlayer` object, this project has no player object,
+and every value it provided is answered by the class's own members. The chat-history trio is ported and the
+history is kept **live**: the connection watches the client's own `kWriteToChatLog` message and
+decodes each announced line as it arrives, so `Player.GetChatHistory()` answers after the fact
+without anyone calling `RequestChatHistory` first — which still does the source's own
+walk-and-replace when it is called. `Party` declares all five of its
+namespaces, with its 30 action members still to port; `Dialog` declares all 32 of `PyDialog`'s
+bound methods and **all of them answer** — the state from the client's own messages, the five
+metadata columns, the frame-by-hash read, the catalog decode queue, both journals, and the
+lifecycle. A button's caption **is** produced: the port reads the string where the source reads it
+— inside the client's own call — and the client's own decoder renders it (live, 2026-09-25). One
+work item is left in the class, and it is porting work: this build's `DialogLoader_GetText`, so a
+catalog dialog's `content` is empty for now — the client function the source calls through has not
+been identified on this build, and the 2026-09-26 pass over `Gw.exe` itself shows why the usual
+routes come up empty (this client inlines the text path into its dialog window). **The sources are
+complete and working, so the function is there to find**; the method and the evidence are in
+[`docs/RESEARCH.md`](docs/RESEARCH.md) and [`docs/DIALOG_PORT.md`](docs/DIALOG_PORT.md). What is not
+missing is the decode: the string the client announces is handed straight back to the client's own
+`AsyncDecodeStr`, and the text returns through a callback the port places inside the client
+(`docs/RESEARCH.md`). `Agent` (148 members), `Utils` (40 members), `Skill` (87 members) and `SkillBar` (18 members) are
+ported and INCOMPLETE too, each with its remaining members named — `Skill`'s record readers and name
+tables all work, `Utils.BalthazarSkillIdToDialogId` runs the source's PvP remap over one of them,
+`Utils.GenerateSkillbarTemplate` composes a template from the skillbar the `SkillBar` port reads, and
+`SkillBar`'s three skill presses name the control-action mechanism they still need. See
+[`docs/PLAYER_PORT.md`](docs/PLAYER_PORT.md), [`docs/PARTY_PORT.md`](docs/PARTY_PORT.md),
+[`docs/UTILS_PORT.md`](docs/UTILS_PORT.md), [`docs/SKILL_PORT.md`](docs/SKILL_PORT.md),
+[`docs/SKILLBAR_PORT.md`](docs/SKILLBAR_PORT.md) and
+[`docs/CLASS_PORT_MAP.md`](docs/CLASS_PORT_MAP.md) for the per-member tables.
 
 ## Main UI
 
@@ -358,15 +392,22 @@ inside Guild Wars.
 - [Installation guide](INSTALL.md) — setup and usage details
 - [Design contract](docs/DESIGN.md) — current implementation rules
 - [Performance](docs/PERFORMANCE.md) — timing, resolver caching, and the live harness
-- [Porting rules](docs/PORTING_RULES.md) — read before adding any API: port only what can be ported, refuse and record the rest, never redesign or invent
+- [Porting rules](docs/PORTING_RULES.md) — read before adding any API: port what can be ported, name what each unported member still needs, never redesign or invent
 - [Readiness gate](docs/READINESS_GATE.md) — the ported `Map` gate that decides when map data may be read
-- [Player port](docs/PLAYER_PORT.md) — the ported Reforged `Player` class, its adaptations, and its disabled members
+- [Player port](docs/PLAYER_PORT.md) — the ported Reforged `Player` class, its adaptations, its eighteen action members, and what is still to port
+- [Utils port](docs/UTILS_PORT.md) — the ported `py4gwcorelib_src/Utils.py` and its `Color`: 36 of 40 members working, the four members it unblocked in `Player` and `Agent`, and the four that name what they still need
+- [Skill port](docs/SKILL_PORT.md) — the ported `Skill` class over the client's skill constant table: 79 of 87 members working, native's three generated name tables, and the offline byte-level verification of the record
+- [Skillbar port](docs/SKILLBAR_PORT.md) — the ported `SkillBar` class: every read working over the client's skillbar array and tooltip, the control-action members that name their mechanism, and the tooltip indirection measured against the running client
 - [Party port](docs/PARTY_PORT.md) — the complete `Party` surface and the four members that can only return a constant
+- [Dialog port](docs/DIALOG_PORT.md) — the whole `Dialog` class and the state behind it: all 32 of `PyDialog`'s members answering, the button caption produced where the source produces it, both journals, and the one recorded build divergence
+- [Dialog migration plan](docs/DIALOG_MIGRATION_PLAN.md) — the seven features to port first, in dependency order, and what each unblocks beyond `Dialog`
+- [Agent port](docs/AGENT_PORT.md) — the queue for Reforged's 147-member `Agent`, prepared ahead of the point it is reached at: `Player.GetInstanceUptime` delegates to it
 - [Map port](docs/MAP_PORT.md) — the staged plan for the 178-member `Map` surface, and its progress record
 - [Context inventory](docs/CONTEXT_INVENTORY.md) — native/Reforged context mapping and Stealth status
+- [Class port map](docs/CLASS_PORT_MAP.md) — which Reforged classes exist, which are ported, what each depends on, and the order the dependencies allow
 - [Parity certification checklist](docs/PARITY_CERTIFICATION_CHECKLIST.md) — the one-context-at-a-time binary parity gate
 - [Context parity audit](docs/CONTEXT_PARITY_AUDIT.md) — source-backed fields, helpers, and explicit gaps for every migrated reader
-- [Target-side work](docs/DEFERRED_INJECTION.md) — planned features that require code, writes, hooks, or patches in the client
+- [Target-side work](docs/TARGET_SIDE_WORK.md) — planned features that require code, writes, hooks, or patches in the client
 - [Native execution plan](docs/NATIVE_EXECUTION_PLAN.md) — source inventory and phased, extensible plan for hooks, callbacks, and game-thread execution
 - [Callback pointer research](docs/CALLBACK_POINTER_RESEARCH.md) — the self-sufficient pointer acquisition direction and research steps
 - [UI frame tree](docs/UI_FRAME_TREE.md) — the `py4gw/ui/` package and the read-only frame-array route to frame-published contexts
@@ -416,9 +457,10 @@ covers `WorldMapContext`, `MissionMapContext`, and `SalvageSessionInfo`; both ma
 contexts are live-verified, and `GwDxContext` still needs target-side code.
 
 Capabilities that are still missing are tracked in
-[`docs/DEFERRED_INJECTION.md`](docs/DEFERRED_INJECTION.md) and the phased
+[`docs/TARGET_SIDE_WORK.md`](docs/TARGET_SIDE_WORK.md) and the phased
 [`docs/NATIVE_EXECUTION_PLAN.md`](docs/NATIVE_EXECUTION_PLAN.md): the call vocabulary
-covers two typed forms where the sources need more, the callback kinds cover what the
+covers six typed forms where the sources need more — pointer and string arguments
+are still the gap — the callback kinds cover what the
 two hooks report, and no ported context consumes either yet — which is why a member
-needing its source's callback still refuses rather than returning a value.
+needing its source's callback is not ported yet rather than returning a value.
 

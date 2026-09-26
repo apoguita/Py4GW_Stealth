@@ -97,15 +97,14 @@ For every source context we port:
 2. preserve source names, offsets, relationships, and behavior; additive
    snake-case aliases may be provided for this project's style, but source
    names are never removed or renamed;
-3. copy declarations even when their operation cannot work from an external
-   controller. A write, callback, injected cache, or game-thread operation is
-   declared with the same public signature and reports an explicit
-   `NotImplementedError`/unsupported status until its required mechanism is
-   authorized;
+3. copy declarations even when the member is not ported yet. A write, callback,
+   injected cache, or game-thread operation is declared with the same public
+   signature and reports an explicit `NotImplementedError` naming the mechanism
+   it still needs until that mechanism is built;
 4. adapt only the transport boundary: in-process `POINTER(T)` dereferences
    become fixed-width target addresses plus a remote read, and direct
    `GW_Array` views become bounded remote views; and
-5. record the exact source operation and the external limitation. Do not
+5. record the exact source operation and what the member still needs. Do not
    remove a declaration because it is inconvenient, infer a new meaning from
    an offset, or replace a source traversal with an invented one.
 
@@ -113,8 +112,8 @@ This produces two separate answers for each member: **declared parity** (the
 source field/property/method exists with the source contract) and **runtime
 availability** (the operation can currently execute through the external
 transport). A context is not called source/API-parity complete until both are
-complete, but an unavailable operation is still part of the port and must be
-visible in the code and stubs.
+complete, but an operation that is not ported yet must still be visible in the
+code and stubs.
 
 ## Current capability
 
@@ -142,8 +141,8 @@ this order: `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
 `AvailableCharacterArray`, `PartyContext`, `GuildContext`, `AccAgentContext`,
 `Camera`, `FriendList`, `ChatBuffer`, `WorldContext`, `TradeContext`,
 `ItemContext`, `AccountContext`, and `GadgetContext`; broader
-Guild Wars structure interpretation remains outside
-the current capability.
+Guild Wars structure interpretation is
+still to port.
 A `Gw.exe` result is a candidate found by filename, and a scanner result is
 only an address selected by a pattern or resolver.
 
@@ -151,7 +150,7 @@ The `MailboxRecord` type validates a proposed fixed-width record format for a
 WorldMap callback pointer handoff. It only converts and validates
 local byte strings; it does not allocate memory in, write to, or execute code
 inside a process. Nothing uses it: the frame-array route reaches the same pointer
-without a hook, so the hook-based handoff it was written for was not built.
+without a hook, so the hook-based handoff it was written for has not been ported.
 
 `py4gw/ui/` is the separate package for user-interface engine primitives. It
 holds the `Frame` and callback layouts, the read-only frame-array reader, the

@@ -65,6 +65,10 @@ CHANGE_TARGET_RESOLVER = "agent.change_target_func"
 #: its target changed. Its packet starts with the manual target id.
 CHANGE_TARGET_MESSAGE = 0x10000020
 
+#: ``ChangeTargetUIMsg`` names no string (``context/ui.h:78-84``), so the watch entry's second
+#: word is zero: the observer records the packet's words and copies nothing.
+CHANGE_TARGET_STRING_OFFSET = 0
+
 #: What the observing hook displaces at the message sender's entry. Eight bytes
 #: and not the ten that also cover the ``jae`` after them, because a relative
 #: branch replayed from the trampoline would branch to the wrong place.
@@ -454,7 +458,7 @@ class LiveObservationTests(unittest.TestCase):
             },
             module_base=cls.module_base,
             module_size=cls.module_size,
-            watch=[CHANGE_TARGET_MESSAGE],
+            watch=[(CHANGE_TARGET_MESSAGE, CHANGE_TARGET_STRING_OFFSET)],
             observing=(cls.observe_target, UI_DISPLACED),
         )
         try:

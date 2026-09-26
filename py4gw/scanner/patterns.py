@@ -53,6 +53,8 @@ class _scanner_api(Protocol):
 
     def read_uint32(self, address: int) -> int: ...
 
+    def to_module_address(self, va: int) -> int: ...
+
 
 @dataclass(frozen=True)
 class PatternDefinition:
@@ -455,6 +457,14 @@ class PatternCatalog:
 
         if step.operation in {"deref", "dereference", "read_u32", "read_uint32"}:
             return scanner.read_uint32(self._value(values, step.input_name))
+
+        if step.operation in {"module_relative", "rebase", "to_module_address"}:
+            # A hardcoded client virtual address from the source, rebased onto the live
+            # module. Native keeps these constants in `DialogMemory` and rebases them
+            # with `ToRuntimeAddress` (`dialog_patterns.cpp:21-31`); its own note says
+            # they could not live in the JSON pattern system because it had no
+            # module-base-relative op. This is that op.
+            return scanner.to_module_address(step.value)
 
         if step.operation == "add":
             return self._value(values, step.input_name) + step.value

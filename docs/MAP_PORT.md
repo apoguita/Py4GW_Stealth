@@ -3,9 +3,9 @@
 Plan and progress record for porting Reforged's `Py4GWCoreLib/Map.py` (2327 lines,
 178 members) into `py4gw/map.py`.
 
-The rules this follows are in [`PORTING_RULES.md`](PORTING_RULES.md): port what can
-be ported, declare what cannot, refuse it with the mechanism named, and record it.
-No redesign, no additions, no substitutes.
+The rules this follows are in [`PORTING_RULES.md`](PORTING_RULES.md): port everything,
+and name what each member still needs as the next work item. No redesign, no additions,
+no substitutes.
 
 > **Plan vs source.** The structure diagram and the stage tables below are the
 > *plan*. As each stage lands, the tables are updated with what was actually
@@ -27,31 +27,31 @@ Map                                            74 members   lines 38-889
 |                                                   449,458,467,476,485,493
 +-- AreaInfo field block                       22   520..688
 +-- unloaded map, challenge, bounds             4   696,706,714,734
-+-- actions (all refused)                       9   743,757,765,829,845,853,
++-- actions (all to port)                       9   743,757,765,829,845,853,
 |                                                   860,867,878
 |
 +-- class MissionMap                           16   lines 891-1404
 |   +-- window + geometry                     11   898..1088
-|   +-- input / ImGui (refused)                5   930,938,946,954,982
+|   +-- input / ImGui (to port)                5   930,938,946,954,982
 |   +-- class MapProjection                   15   lines 1097-1403
 |
 +-- class MiniMap                              15   lines 1406-1851
 |   +-- window + geometry                     10   1412..1556
-|   +-- input / ImGui (refused)                5   1432,1440,1448,1455,1480
+|   +-- input / ImGui (to port)                5   1432,1440,1448,1455,1480
 |   +-- class MapProjection                   16   lines 1575-1850
 |
 +-- class WorldMap                             12   lines 1853-2023
 |   +-- context + geometry                     7   1859,1866,1873,1951,1962,
 |   |                                               1969,1976
-|   +-- input / ImGui (refused)                5   1880,1888,1896,1903,1927
+|   +-- input / ImGui (to port)                5   1880,1888,1896,1903,1927
 |
 +-- class Pregame                               9   lines 2025-2097
 |   +-- context + window                       7   2034..2074
-|   +-- client calls (refused)                 2   2081,2088
+|   +-- client calls (to port)                 2   2081,2088
 |
 +-- class Pathing                              16   lines 2099-2327
     +-- live pathing + quads                  13   2102..2303
-    +-- overlay / navmesh (refused)            2   2138,2170
+    +-- overlay / navmesh (to port)            2   2138,2170
     +-- source cache (to determine)            1   2122
     +-- class Quad                             5   lines 2177-2222
 ```
@@ -65,7 +65,7 @@ Four sources only. Nothing else is introduced.
 | **Contexts** | `InstanceInfo` (38 uses), `World`, `Char`, `WorldMap`, `PreGame`, `MissionMap`, `Map`, `AccAgent`, `Cinematic`, `Gameplay`, `AvailableCharacterArray`, `ServerRegion` | all already loaded — `ConnectedClient.read_*` |
 | **UI frame tree** | `Frame.from_id`, `.exists`, `.coords()`, `.content_coords()`, `.viewport_scale()` — geometry only | `FramePositionStruct` already parses the record; field correspondence to be established in Stage 5 |
 | **Local tables** | `enums_src/Map_enums.py`, `enums_src/Region_enums.py` | not ported yet (Stage 2) |
-| **Native map methods** | `MapMethods.GetMapInfo` (a scanned `AreaInfo` array); the rest are actions | `GetMapInfo`'s scan is portable (Stage 4); actions refuse |
+| **Native map methods** | `MapMethods.GetMapInfo` (a scanned `AreaInfo` array); the rest are actions | `GetMapInfo`'s scan is portable (Stage 4); actions still to port |
 
 ## Stage pipeline
 
@@ -78,13 +78,13 @@ Four sources only. Nothing else is introduced.
     |
  Stage 4   AreaInfo array .. 1 member  (any map id, loaded or not)
     |
- Stage 5   frame geometry .. 34 port + 2 verify + 17 refuse
+ Stage 5   frame geometry .. 34 port + 2 verify + 17 to port
     |
  Stage 6   projections ..... 31 members
     |
- Stage 7   pathing ......... 18 port + 1 verify + 2 refuse
+ Stage 7   pathing ......... 18 port + 1 verify + 2 to port
     |
- Stage 8   record .......... this document, plus DEFERRED_INJECTION entries
+ Stage 8   record .......... this document, plus TARGET_SIDE_WORK entries
 ```
 
 Stages 1–4 need no capability Stealth does not already have.
@@ -93,7 +93,7 @@ Stages 1–4 need no capability Stealth does not already have.
 
 | | Source | `py4gw/map.py` today |
 | --- | ---: | ---: |
-| Members | 178 | **178 declared** (44 working, 134 refusing) |
+| Members | 178 | **178 declared** (44 working, 134 not yet ported) |
 | Undeclared | — | **0** |
 | Namespaces | nested under `Map` | nested identically: `Map.MissionMap.MapProjection`, `Map.MiniMap.MapProjection`, `Map.Pathing.Quad` |
 | Member order | source order | preserved |
@@ -136,24 +136,25 @@ it the cache is never filled and `GetContext` would answer `None` forever — wh
 not what the source does. This is the same reasoning already recorded for dropping
 `@frame_cache`: no in-process tick, so the refresh happens on demand.
 
-The `_disabled` refusal builder is **not** a defect: it is the mechanism this
-project's refusal contract requires.
+The `_unported` builder is **not** a defect: it is the mechanism this project's
+contract provides for a member that is not yet ported.
 
 ## Stage 1 — shape and guard  *(done)*
 
 Restructured `py4gw/map.py` into one `Map` class with the nested classes above, in
 source order, and declared all 178 members. The 44 working members carry over
-unchanged; the other 134 are declared and refuse, each naming what blocks it.
+unchanged; the other 134 are declared and not yet ported, each naming the mechanism
+it needs next.
 
 `tests/test_map_offline.py` was added: it parses `Map.py` and compares the surface
 class by class, so a member cannot be dropped or invented, and it checks that every
-member which is not implemented refuses structurally rather than returning a value.
+member which is not implemented raises structurally rather than returning a value.
 
 | Check | Command | Result |
 | --- | --- | --- |
 | surface parity | `python -m unittest tests.test_map_offline` | **7 tests OK** |
 | members present | AST cross-check, source order preserved | **178/178, order exact** |
-| no extras | only the six private helpers + `_disabled` | **pass** |
+| no extras | only `_unported` and the nested helpers the source itself declares (`_point_in_quad`, and the ones inside `Travel`) | **pass** |
 | working members, live | `python -m unittest tests.test_map` | **12 tests OK** — all 44 checked against the structs they read |
 | types | `pyright` | **0 errors** |
 | offline suite | `python -m unittest discover -s tests -p "*_offline.py"` | **323 tests OK** |
@@ -230,7 +231,7 @@ map's own `AreaInfo`.
 `content_left/top/right/bottom`) and Stealth's `FramePositionStruct`. Report it
 before building on it.
 
-| Namespace | Port | To determine | Refuse |
+| Namespace | Port | To determine | To port |
 | --- | ---: | ---: | ---: |
 | `Map` (`IsEnteringChallenge` 706) | 1 | | |
 | `MissionMap` | 11 | | 5 |
@@ -244,12 +245,20 @@ before building on it.
   2062, 2067, 2074.
 - **To determine at the stage:** `MiniMap.IsLocked` (1512),
   `MiniMap.GetRotation` (1539).
-- **Refuse:** `OpenWindow` / `CloseWindow` on all three window namespaces, every
+- **To port** (each needs the mechanism named for it in *Members still to port*
+  below): `OpenWindow` / `CloseWindow` on all three window namespaces, every
   `IsMouseOver`, every `GetLastClickCoords` and `GetLastRightClickCoords`,
   `Pregame.InCharacterSelectScreen` (2081),
   `Pregame.LogoutToCharacterSelect` (2088).
 
 **Verify:** live with each window open **and** closed.
+
+**Landed early, because `Utils` reached it:** `Map.MissionMap.GetZoom` (1032) —
+`GWContext.Gameplay.GetContext().mission_map_zoom`, with the source's `1.0` when the context is
+unavailable. `Utils.GwinchToPixels` and `Utils.PixelsToGwinch` read it alongside
+`Map.MissionMap.GetScale` (`py4gwcorelib_src/Utils.py:156,168`), so the zoom half is ported and the
+scale half is what those two members still wait on ([`UTILS_PORT.md`](UTILS_PORT.md)). The port's
+implemented count for `Map` moved from 44 to 45 with it.
 
 ## Stage 6 — projections
 
@@ -268,22 +277,22 @@ over the bounds and geometry the earlier stages expose.
   `GetshiftedScreenComputedGeometry` (2252), `_point_in_quad` (2262),
   `GetMapQuads` (2277), `IsPointInPathing` (2290),
   `IsScreenPointInPathing` (2303), and `Quad` (2178, 2196, 2199, 2202, 2210).
-- **Refuse:** `WorldToScreen` (2170, overlay kernel), `ForceReloadNavMesh` (2138,
+- **To port:** `WorldToScreen` (2170, overlay kernel), `ForceReloadNavMesh` (2138,
   navmesh builder), and the offline branch of `GetPathingMaps` / `GetSpawns` /
   `GetTravelPortals` (`PyDatReader.read_file_by_id` + the FFNA format).
 - **To determine at the stage:** `ClearPathingCache` (2122) — it manages the
   source project's own caches, which are not ported here. Report what it does and
-  how it is blocked rather than guessing.
+  what it needs rather than guessing.
 
 ## Stage 8 — the record
 
 Fold the verified results back into this document and add the capability entries
-to [`DEFERRED_INJECTION.md`](DEFERRED_INJECTION.md).
+to [`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md).
 
-## Members that will refuse permanently
+## Members still to port
 
 In-process mechanisms, not reading problems. Recorded here and in
-[`DEFERRED_INJECTION.md`](DEFERRED_INJECTION.md).
+[`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md).
 
 | Mechanism | Members |
 | --- | --- |

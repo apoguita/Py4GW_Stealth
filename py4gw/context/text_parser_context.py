@@ -247,7 +247,13 @@ class TextParser:
 
     @staticmethod
     def _update_ptr() -> None:
-        """Refresh the source-compatible facade from the selected client."""
+        """Refresh the source-compatible facade from the selected client.
+
+        The first successful refresh also starts the string-table load, which is what the
+        source does here (``TextContext.py:152-155``): a context that exists means a client
+        exists, and the table is the one thing that only has to be read once. The load is
+        ``_do_load_string_table``'s own, and it decides for itself whether it has already run.
+        """
 
         from ..client import current_client
 
@@ -264,6 +270,12 @@ class TextParser:
         except (OSError, RuntimeError):
             TextParser._ptr = 0
             TextParser._cached_ctx = None
+
+        if TextParser._cached_ctx is not None and not TextParser._string_table_triggered:
+            TextParser._string_table_triggered = True
+            from ..internals.string_table import _do_load_string_table
+
+            _do_load_string_table(TextParser._cached_ctx.language_id)
 
     @staticmethod
     def enable() -> None:

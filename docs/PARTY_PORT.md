@@ -1,9 +1,10 @@
 # Party port
 
-`py4gw/party.py` ports Reforged's `Py4GWCoreLib/Party.py`. The class surface is
-**complete**: every member of `Party`, `Party.Players`, `Party.Heroes`,
-`Party.Henchmen` and `Party.Pets` is present, and
-`tests/test_party_offline.py` fails if one is dropped.
+`py4gw/party.py` ports Reforged's `Py4GWCoreLib/Party.py`. Every member of `Party`,
+`Party.Players`, `Party.Heroes`, `Party.Henchmen` and `Party.Pets` is present in the
+source's own shape and nesting, and `tests/test_party_offline.py` fails if one is
+dropped. The 30 action members are the work still to do on this class — so its verdict
+is **INCOMPLETE**, not FULL.
 
 | | Count |
 | --- | ---: |
@@ -14,7 +15,7 @@
 | `Party.Pets` | 4 |
 | **Total** | **70** |
 | Implemented (read a context, or compute from one) | 40 |
-| Refuse with `NotImplementedError` | 30 |
+| Not yet ported (`NotImplementedError`) | 30 |
 | Members that write to `Gw.exe` | **0** |
 
 Parity was checked against the source file itself, not against a hand-written
@@ -77,7 +78,7 @@ data here, reading the array rather than the binding's empty copy.
 
 | Member | Limitation |
 | --- | --- |
-| `Heroes.IsHeroFlagged(hero_party_number)` | Native handles **position 0 only**, reporting whether the all-flag is set; every other position returns `False`, with the source noting that per-hero flags are not reachable through the context it has (`party_bindings.cpp:366-376`) |
+| `Heroes.IsHeroFlagged(hero_party_number)` | Native handles **position 0 only**, reporting whether the all-flag is set; every other position returns `False`, with the source noting that per-hero flags are not available through the context it has (`party_bindings.cpp:366-376`) |
 | `Players.IsPlayerTicked(login_number)` | Native treats the argument as an **array index**; `0xFFFFFFFF` means "this player". Reforged's Python names the parameter `login_number` and passes it straight through, so the name and the meaning disagree in the source. Reforged's name is kept for call-site parity |
 
 ### The unset all-flag is `(+inf, +inf, 0.0)`
@@ -161,7 +162,7 @@ ported as data:
 - `tests/test_party_offline.py` — 13 tests: the transcribed member lists are
   cross-checked against `Py4GWCoreLib/Party.py` itself, so they cannot agree with
   a wrong port; full parity across all five namespaces; no public member beyond
-  the source; every disabled member refusing and naming itself; the documented
+  the source; every member still to port raising and naming itself; the documented
   constants; and the hero table.
 - `tests/test_party.py` — 24 live tests, each checked against the party context
   or an invariant in a loaded map. The four members that were first ported from

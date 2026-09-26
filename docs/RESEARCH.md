@@ -196,7 +196,7 @@ the fix installed the hook on the first attempt.
   handler fired from a real client message with no `pump()` call. What is thin is
   the number of kinds — one per hooked function.
 
-See [`DEFERRED_INJECTION.md`](DEFERRED_INJECTION.md) and
+See [`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md) and
 [`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md).
 
 ## Live observation: the first writes from this project (2026-09-24)
@@ -262,6 +262,94 @@ from the smaller number can only refuse a legitimate target inside that last pag
 never accept an illegitimate one. Which field should carry `module_size` across
 the wire is **unresolved**; it is recorded in
 [`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md).
+
+## Live observation: nine `Player` actions, and the effect read from the client (2026-09-24)
+
+The first time this project has made the client do things and *read back* what it
+did, for a whole family of members rather than one call. Every action member of
+`py4gw/player.py` that is ported was exercised through the member — `Player.Move`,
+not `agent.move_to_func` — and each effect came out of a report the client itself
+produces, not out of a call completing.
+
+**Target.** `F:\GW\GW1\Gw.exe`, PID 20192, module base `0x00610000`, size
+`0x0F49000`. **Input.** `python -m unittest tests.test_live_player`, elevated, in a
+map. Result: 9 tests, 9 passing. `tests/test_player.py` passed alongside it, 49
+tests between the two runs.
+
+**The three reports used, and why only those three.**
+
+| Report | Packet | Used for |
+| --- | --- | --- |
+| `kChangeTarget` (`0x10000020`) | `ChangeTargetUIMsg`, manual target id first | the target a `ChangeTarget` call produced |
+| `kDialogBody` (`0x100000A6`) | `DialogBodyInfo`, agent id second | the dialog an interaction opened |
+| the client's own world/player records | — | position after `Move`, title tier after `RemoveActiveTitle`, friend-list status after `SetPlayerStatus` |
+
+The observer dereferences each watched message's `wparam`, so **only messages whose
+`wparam` is a packet pointer may be watched.** `kSendAgentDialog` is the counter-example
+in the sources — its `wparam` *is* the dialog id (`agent.cpp:138-141`) — and no
+`kSend*` message is watched, because reading four words from a small integer on the
+game thread is a wild read in the client.
+
+**What the run established.**
+
+- `Player.ChangeTarget(agent)` → the client's own notice carried that agent id back.
+- `Player.ChangeTarget(0)` → published **no call at all**: the source's binding
+  refuses a zero id before it calls (`player_bindings.cpp:237-239`). The client
+  function *does* accept zero — the suite uses it to clear — so the member and the
+  function are not the same thing, and this is the run that shows it.
+- `Player.Move(x, y)` → the character walked and the suite walked it back. The +X
+  attempt moved nothing (geometry) and the −X attempt worked: 4.61 units, measured by
+  the client's own position.
+- `Player.Interact(agent)` → **the client reported a dialog for that agent.** This is
+  the strongest evidence in the run: an interaction the client acknowledged in its own
+  message stream.
+- `Player.CallTarget(agent)` → completed on the game thread, taking the world-action
+  branch that a non-enemy is routed to (`agent_methods.cpp:219-224`).
+- `Player.RemoveActiveTitle()` → the client's active title tier went from `182` to `0`.
+- `Player.SetActiveTitle(id)` → put tier `182` back on title `1`, and switching to
+  title `0` moved the client to tier `6`: a *different* title, read back from the
+  client's own record. A round trip that removes a title and restores the same one
+  proves less than it looks like — a function that does nothing passes it — so the
+  switch is the assertion that matters, and the character was left on title `1`.
+- `Player.SetPlayerStatus(current)` → completed, and the client's own field still
+  agreed; `SetPlayerStatus(9)` published no call, because the source validates first.
+
+Rollback: both hooked functions read back as their own bytes, and the whole code
+section hashed identically before and after (`33984c4c...`, 5,473,792 bytes).
+
+**A bug this run found, in code that was already ported and already "verified".**
+`Player.GetActiveTitleID` had dropped native's `!player->active_title_tier` check
+(`player_methods.cpp:159-161`). A tier index of `0` is what "no title displayed"
+*is*, and without the check the title search matched the first title whose tier index
+was also `0` and reported a title the player was not displaying. `RemoveActiveTitle()`
+had been working correctly; the reader was wrong about what it produced. The existing
+live test (`tests/test_player.py::test_active_title_matches_the_player_tier`) had
+encoded the same mistake in its assertion, and was split on the same condition. This
+is the argument for reading an effect out of the client rather than out of a member:
+the member that lies is the one being used to check the member that works.
+
+**A fact the suite's first version got wrong, recorded so it is not re-learned.**
+Command sequences start at **zero**: a command's sequence is the `command_written`
+counter's value *before* it advances. A test waiting for "a sequence greater than the
+last one seen", initialised to `0`, waits forever for a completion event it has
+already been handed. Recorded in `Bridge.publish_call`'s docstring.
+
+**And the same mistake a second time, in a different place — which is why it is
+written down twice.** The helper that picks a second title to switch to returned `0`
+for "none found", and **title index `0` is "Hero", a real title**: `TitleID` starts at
+`Hero` and puts `None` at `0xff` (`constants/constants.h:250-267`). For one run the
+suite reported that a character with progress in **forty titles** had no second title
+to switch to. Two different sentinels in one suite, both colliding with a real `0`.
+The rule the suite now follows: a "nothing found" value is `None`, never `0`, unless
+`0` is genuinely not a value of that type (an agent id, which starts at `1`, is the
+one place `0` is still safe).
+
+**What was not run.** `DepositFaction` (needs 5000 faction and an ambassador), and
+the enemy branch of `CallTarget` — a real call-target is a party broadcast and the
+suite will not choose a party's target. Interacting with an enemy is never done: it
+starts a fight. A dialog an interaction opens is not yet closed by this project —
+that needs the Escape key, which is the next work item there; the suite says so and
+runs that check last.
 
 ## Live observation: the hook, the payload and the queue (2026-09-24)
 
@@ -365,7 +453,7 @@ externally validated.
 
 ## Live result: the effect asserted from the client's own report (2026-09-24)
 
-The target cannot be read from a context — checked in both projects, not assumed:
+The target is not yet read from a context — checked in both projects, not assumed:
 
 ```cpp
 // Py4GW_Reforged/Py4GWCoreLib/Player.py:229-235
@@ -386,7 +474,7 @@ case ui::UIMessage::kChangeTarget:
 `ChangeTargetUIMsg` and `ChangeTargetPacket` (`include/GW/context/ui.h:78-85, 198-205`)
 are message payloads, not contexts. So the target is **only** available the way
 Reforged gets it: by listening to the client's own `kChangeTarget` message. Nothing
-else holds it, which is why `Player.GetTargetID` refuses here as a port.
+else holds it, which is why `Player.GetTargetID` is not yet ported here.
 
 **So this project now listens too.** `tests/test_live_call.py` installs a second
 hook on `ui.send_ui_message_func` (resolved as `0x008441A0`), with a watch list of
@@ -432,8 +520,10 @@ exists for: the bytes match either way, and only the *cut* is wrong.
 
 **What this unlocks.** `Player.GetTargetID` can now be implemented the way Reforged
 implements it — from the client's own notification, maintained by the host — instead
-of refusing. And any future action can be verified the same way: call the function,
-watch the client say what it did.
+of leaving the member unported. **Done**: the connection watches `kChangeTarget` and keeps the packet's
+first word, and a live run had the client announce target `16` with the member reading
+`16` back (`docs/PLAYER_PORT.md`). Any future action can be verified the same way: call
+the function, watch the client say what it did.
 
 ## Live result: the target changed, and why the message did not (2026-09-24)
 
@@ -499,7 +589,7 @@ follow the message to the handler, and call what the handler calls.
 observable by a person, but at the time it was not readable by this process: the
 current target is `g_current_target_id`, fed from the `kChangeTarget` message
 (`agent.cpp:161-165`), and no context holds it — which is why `Player.GetTargetID`
-refuses. Both directions were then built. Observing the notification is the
+was not yet ported. Both directions were then built. Observing the notification is the
 observer hook in `py4gw/game_thread/`: `client.watch(message)` records a message id
 in the client's own watch list and the listener delivers it to a registered
 handler. Reading the value is `offsets/gwau3_leads.json`, a copied GwAu3 lead whose
@@ -507,8 +597,8 @@ resolver lands on the address operand at `0x0129A174`; it was confirmed
 differentially rather than assumed — the target was set to the player's own agent,
 a gadget and two living agents of different allegiances, and the address followed
 every one, each checked against the client's own change notice. `Player.GetTargetID`
-still refuses: the value is reachable, the member has not been ported onto that
-route yet.
+is still not ported: the value is reachable, and porting the member onto that
+route is the next work item.
 
 ## Live observation: the first call into the client (2026-09-24)
 
@@ -581,7 +671,7 @@ code section after         = 33984c4c6a98d23ec43b00798f9f2a11... (5473792 bytes)
 **What it does not prove.** That the game changed *in this run*. The player's
 current target is `g_current_target_id`, which Native maintains from a
 `kChangeTarget` UI-message hook (`agent.cpp:60,143-145`) and which no readable
-context holds — the reason `Player.GetTargetID` refuses in this library. This run
+context holds — the reason `Player.GetTargetID` is not yet ported in this library. This run
 proves the call reached the client's own function on the client's thread and the
 client survived it. The effect itself was shown separately, by calling
 `agent.change_target_func` directly from a probe and watching the target ring
@@ -630,13 +720,13 @@ Two consequences for this project:
    files that are byte-identical to Native's. Nothing new was needed to resolve a
    callable target.
 
-**A refusal this explains.** `Player.GetTargetID` refuses because the current
+**A not-yet-ported member this explains.** `Player.GetTargetID` is not yet ported because the current
 target is `g_current_target_id`, which Native maintains from a `kChangeTarget`
 UI-message **hook** (`agent.cpp:60` and `143-145`), not from any context, so the
-source's own accessor cannot be ported as written. Both halves of that gap now have
+source's own accessor is still to port as written. Both halves of that gap now have
 a route in Stealth — the notification through the observer hook, and the value
-through the current-target resolver — but the member is still declared and refusing,
-because porting it onto either route has not been done.
+through the current-target resolver — but the member is still declared and not yet
+ported; porting it onto either route is the next work item.
 
 ## Terminology
 
@@ -763,7 +853,7 @@ the same interpreter where NiceGUI and the editable project are installed.
 - The native repository identifies itself as a Windows-only, 32-bit injected DLL. Its runtime creates hooks and runs frame/callback work in process. Relevant owners include `src/Py4GW.cpp`, `src/dllmain.cpp`, `src/base/hooker.cpp`, and `include/callback/callback.h`.
 - The native code uses MinHook through `HookBase`. Its game- and render-driven callbacks are therefore in-process behavior, not an externally delivered callback mechanism.
 
-Conclusion: the existing `Py*` modules and Python callback system cannot be imported by an ordinary external Python interpreter. They exist because the DLL has embedded a Python runtime inside `Gw.exe`.
+Conclusion: the existing `Py*` modules and Python callback system are not yet ported to Stealth — an ordinary external Python interpreter does not import them directly, so reproducing that surface here is outstanding work. They exist because the DLL has embedded a Python runtime inside `Gw.exe`.
 
 ### GwAu3
 
@@ -846,8 +936,8 @@ text-decoding rule must not be hidden inside the reusable scanner.
 | Run controller logic outside the game | Yes | Yes | Bridge/client split only |
 | Reliably execute code on a known game path | Not established | Yes, as GwAu3 demonstrates | Yes |
 | Hook internal functions / receive internal callbacks | No normal detour callback path | Yes | Yes |
-| Use Py4GW `Py*` modules | No | No, unless separately recreated | Yes |
-| In-game D3D/ImGui overlay | No | Possible only with further in-process code | Yes |
+| Use Py4GW `Py*` modules | No | Not yet ported: they need to be recreated here | Yes |
+| In-game D3D/ImGui overlay | No | Not yet ported: it needs in-process overlay code | Yes |
 
 Important distinction: an external process can ask Windows to start code in another process, but that does not prove that a particular Guild Wars function is safe on that thread. Thread affinity, calling convention, object lifetime, and game state must be established per function.
 
@@ -1550,10 +1640,10 @@ Wars game thread and returns injected-runtime state; it is not equivalent to
 reading the ring bytes. A read-only probe against the same running client
 could open `Gw.dat` only for metadata: requesting `GENERIC_READ` failed with
 Windows sharing-violation error 32. This is why the Reforged `PyDatReader`
-cannot simply be reused by Stealth while the client is running. The raw
-encoded messages remain available; decoded-history parity is unresolved unless
-the project adds and validates a separate external archive/data source or
-changes its architecture to permit in-process execution. A follow-up attempt
+is not yet reusable by Stealth while the client is running. The raw
+encoded messages remain available; decoded-history parity is not yet ported —
+it needs the decode queued on the client's own game thread, which is the next
+piece of work for this module. A follow-up attempt
 to duplicate the client's existing file handle remained read-only but could
 not obtain `PROCESS_DUP_HANDLE` access (Windows error 5), so that route is not
 currently a verified capability either.
@@ -1563,8 +1653,8 @@ an external decoder: `Utils_DecodeEncStringAsync` copies the encoded string
 into a command buffer and queues an assembly payload that calls the client's
 `ValidateAsyncDecodeStr` function. That is process injection/code execution,
 not a pure external read. GwAu3 therefore supplies comparative evidence for
-why its decoded result cannot be copied into Stealth without changing the
-current architecture.
+what the decoded result needs here: the same queued call into the client's own
+function, which is the outstanding piece for decoded history.
 
 ## Live Observation: WorldContext root
 
@@ -1629,7 +1719,8 @@ Reforged Python structure uses the same bytes for `map_type`, `start_pos`, and
 Pathing child arrays and the reachable props records are read externally;
 terrain and zones remain raw pointers. Source pathing snapshots, facade
 helpers, and PID-scoped map-ID caches are implemented. Automatic in-client
-callback registration remains unavailable. See
+callback registration is not yet ported; it next needs a callback kind for the map
+hooks. See
 [`PATHING_MIGRATION_PLAN.md`](PATHING_MIGRATION_PLAN.md).
 
 On 2026-09-22, the live read found 1,270 trapezoids, 1,270 sink nodes, 4,271 X
@@ -1830,10 +1921,11 @@ annotations disagree with some runtime implementations; behavior follows the
 remains incomplete: `AgentArrayStruct` cache helpers now check the matching
 external context readers and materialize accepted records through remote reads.
 Reforged's `SystemShaMemMgr` lookup fallback is not ported; the process-wide
-callback facade remains unavailable, and the wider `Agent.py` helper surface
+callback facade is not yet ported (next: a callback kind per hooked function),
+and the wider `Agent.py` helper surface
 is unaudited. The external
-facade uses per-client ownership; `enable()` reports that the injected callback
-runtime is unavailable. The native `AgentContext` root itself is the same
+facade uses per-client ownership; `enable()` reports that the callback
+runtime is not yet ported. The native `AgentContext` root itself is the same
 `GameContext.agent` root documented under AccAgentContext; the array pointer is
 a separate global resolver. See the certification record for remaining gaps.
 
@@ -1857,8 +1949,8 @@ This completes the remaining small direct-pointer root readers identified in
 the current inventory at their implemented read boundary. It does not claim
 source parity for every nested helper: the field and API gaps are recorded in
 `docs/CONTEXT_PARITY_AUDIT.md`. Item child records now have a live-verified
-bag-based access path; render, salvage, and callback-owned map contexts still
-lack an external object-pointer source.
+bag-based access path; render, salvage, and callback-owned map contexts are not yet
+ported onto an external object-pointer source.
 
 ## Live JSON resolver sweep — 2026-09-22
 
@@ -2078,7 +2170,7 @@ Both map routes are therefore **verified open and closed**. The two close
 transitions differ in mechanism — the mission-map slot was reused by another
 frame, the world-map slot was nulled — and both are handled.
 
-**`SalvageSessionInfo` is NOT reachable read-only, PID 29520, 2026-09-23.**
+**`SalvageSessionInfo` is not yet read on the read-only frame route, PID 29520, 2026-09-23.**
 With the operator's lesser-kit salvage window open, four measurements settled
 it:
 
@@ -2108,11 +2200,11 @@ and 2 as CancelButton and Button, which match `SalvageSessionCancel` and
 `SalvageMaterials`). `SalvageSessionInfo` is the options window only, and
 Reforged drives the other flows by frame navigation rather than by any context.
 
-**Consequence:** this is the first context for which target-side code is
-required. The selected mechanism is a Stealth-owned detour on `0x014A4980`
+**Consequence:** `SalvageSessionInfo` is not yet ported, and it needs target-side
+code: the selected mechanism is a Stealth-owned detour on `0x014A4980`
 mirroring `OnSalvagePopup_UICallback`. It has **not** been implemented; the
-install/rollback contract has to be written and reviewed, and installing it is
-a target-modifying operation needing explicit scope.
+install/rollback contract has to be written and reviewed, which is the next work
+item here, and installing it is a target-modifying operation needing explicit scope.
 
 **What salvage exposes without a hook.** Follow-up source analysis narrowed the
 hook's value considerably:
@@ -2210,6 +2302,690 @@ samples (`salvage_session_id` read `29` each time with frame 1718 visible), so
 the field is confirmed readable but its idle value is unmeasured. Neither
 reference project depends on that: both read it immediately before starting a
 salvage.
+
+## Live: the GW.dat read and the text it decodes to — 2026-09-25
+
+**Target:** PID `39188`, `F:\GW\GW1\Gw.exe`, module `0x00610000` + `0xF49000`
+(image base), file/product version `1.0.0.1` (no useful build identifier, as
+before). The character was in a map. Test: `tests/test_live_dat.py`, which
+connects — installing the capability layer — reads one string-table file, then
+interacts with the closest NPC and decodes the dialog body the client reports.
+
+**This is the first live run of the call path's value-returning forms and of the
+block's data region.** The block layout changed for it (version 3: the command
+record gained `arg4`/`arg5`, because `OpenFileByFileId` takes five words), and
+the version-2 layout was never installed live, so this run is also the first
+live exercise of the current block.
+
+**Read-only preflight, before anything was written:** both hooked functions'
+entry bytes were the ones the tests declare
+(`55 8B EC 81 EC 20 02 00 00` at `leave_game_thread_func`, `0x00845880`, and
+`55 8B EC 8B 45 08 83 F8 56` at `ui.send_ui_message_func`, `0x008441A0`), and
+the whole `.text` section hashed to
+`33984c4c6a98d23ec43b00798f9f2a11…` over 5,473,792 bytes.
+
+**Input and expected result:** resolve the five `gw_dat_reader` functions;
+convert the first `TextParser` file slot's hash with the ported
+`FileHashToFileId`; read that file through the ported chain
+(`OpenFileByFileId` → `ReadFileBuffer` → copy → `FreeFileBuffer` →
+`CloseRecObj`); parse its entries; then interact with the closest NPC and render
+the dialog body the client announces. Each step should answer what the sources
+say it answers, and the client should be unchanged afterwards.
+
+**Observed, the read:**
+
+| Fact | Value |
+| --- | --- |
+| the five resolvers | all present: `open_file_by_file_id_func`, `file_hash_to_rec_obj_func`, `read_file_buffer_func`, `free_file_buffer_func`, `close_rec_obj_func` |
+| `TextParser` | `language_id` 0, `entries_per_file` 1024, 11 languages × 99 file slots |
+| slot 0's hash | code units `[13485, 256]` → file id 13230 |
+| slot 0's range | entries 0..1024 — the stride `entries_per_file` the source indexes with |
+| bytes read | 91,114, through the client's own `ReadFileBuffer` |
+| entries parsed | 1024 |
+| decoded with no key | 1022, of which **944 printable** (e.g. `'[null]'`, `'%num1%'`, `'<pg>[b]'`, `'%str1%'`) |
+
+**Observed, the text:** interacting with agent 17 at `(-5430.6, -4763.3)` opened
+its dialog 0.2 s later (one body, two buttons). The body's encoded pointer
+`0x09D74058` held 22 codepoints starting `0x8103, 0x0A66, 0xDAA8, 0xA948, …` —
+the same first four codepoints this project measured for a dialog body by an
+independent route earlier (`03 81 66 0a a8 da 48 a9 …`). `_parse_codepoints`
+named table index **99942** with key `0x1610C5A3EA63`; that index lives in file
+slot 97, which was read through the same chain (1024 entries, 111,447 bytes), and
+its 105-byte entry decrypted and unpacked to:
+
+```text
+I bring good tidings and announcements of exciting events! Right this very
+moment, you could be taking part in...
+```
+
+**Observed, and unresolved: the button labels.** Both of the dialog's buttons
+(ids 4484 and 6020) announced the **same** label pointer, whose five codepoints
+were `0x953C, 0xC037, 0x0A92, 0x4006, 0x0000`. Parsed as an encoded reference
+those name index `5475942290066`, which is far outside the table's 101,376
+entries, so **the button label pointer does not carry a table reference**. The run
+was repeated after a code change and saw the same dialog again: same two ids, same
+shared pointer, and five codepoints whose **first two units differed**
+(`0xFDF5, 0xC03B, 0x0A92, 0x4006, 0x0000`) while the last three were identical. The
+earlier probe's observation of this dialog (`0x39B1, 0xC019, 0x0A92, 0x4006,
+0x4A23, 0x0000`) fits the same pattern: a head that changes between runs, a tail
+that does not.
+
+Three readings of that, in the order the evidence supports them:
+
+1. **The pointer is right and the memory behind it is not stable.** The first two
+   units look like a 32-bit value written into that allocation (`0xC03BFDF5`,
+   `0xC037953C`, `0xC01939B1` as little-endian pairs), which is what a reused or
+   freed buffer looks like. The body's pointer, read the same way in the same runs,
+   was **identical every time** (and its codepoints matched what this project had
+   measured for a body before), so the mechanism works when the pointed-to memory
+   is stable.
+2. **A consequence for the port** *(proposed, not tested)*: a dialog member that
+   needs a **button's** text cannot rely on reading the event's pointer later. It
+   has either to copy the codepoints where they are live — inside the client, which
+   is what the observer could be made to do — or to ask the client to decode
+   (Route B), or to read the label from `DialogLoader_GetText` by dialog id. The
+   body does not have this problem, which is why `Dialog`'s text still has a route
+   that needs nothing new.
+3. **Alternatively the button's word 1 is not the text pointer at all** for this
+   message. Native's own handler treats it as one (`DialogButtonInfo.message`,
+   `context/ui.h`), so this reading needs evidence before it is preferred.
+
+What is **verified** is only what was read: the pointer, the codepoints at it, and
+that they changed between runs while the body's did not.
+
+**Safety and cleanup:** the run connected (two entry hooks, a block, a
+dispatcher, a listener) and called five of the client's own file functions on
+the client's own thread — the first time this project has called anything that
+reads the archive. It sent nothing else: the only game action was the
+interaction the test declares. Afterwards both hooked functions held their
+original bytes again and the `.text` section hashed to the same
+`33984c4c6a98d23ec43b00798f9f2a11…`, so the patch window is the only client code
+that was ever written. The dialog the interaction opened is still up: closing it
+needs the Escape key, and this project does not synthesise keyboard input.
+
+**Not established:** that the whole table loads (99 files per language were
+walked by the source, one file per read here); that the compressed path
+(`UnpackGWDat`) is ever needed for these files — nothing in the chain this test
+ran decompresses, and the bytes it read parsed as a string table directly; and
+whether a dialog whose body is not a table reference exists (the buttons are
+already one case).
+
+## Live: the first client crash, and what it proved about the dialog table — 2026-09-25
+
+**This is the first time this project crashed the client. It had two causes: a rebase bug in this
+port, and a stale constant in the sources' table. Both are recorded here in full, and the
+corrected comparison with Reforged is at the end of the entry.**
+
+**Target:** PID `39188`, `F:\GW\GW1\Gw.exe`, module base `0x00610000`, module size
+`0xF49000`. The client reported its own crash: `Exception: c0000005`, *"Memory at address
+00000000 could not be read"*, `App: Gw.exe`, `BaseAddr: 00610000`, **`Build: 38888`**, at
+`9/25/2026 11:30:35`, with a `Crash.dmp` written beside the client.
+
+**What the port was doing.** `tests/test_live_dialog_text.py` — the first live run of the five
+`PyDialog` text members — connected (installing the capability layer), asked
+`enumerate_available_dialogs()` for the catalog, and for each available dialog id queued a
+decode. The queue's second step is the client's own `DialogLoader_GetText`, which the sources
+reach through a **hardcoded client virtual address**: `DialogMemory::DIALOG_LOADER_GETTEXT =
+0x0079EEF0` (`dialog.h:96`), rebased onto the module by `ResolveDialogLoaderGetText`
+(`dialog_patterns.cpp:261-269`) and called **without anything being read at it first**.
+
+**What the crash dump shows, and it is unambiguous:**
+
+```text
+eip=0079eef0  eax=00000000  ebx=017c0000  esi=017c0040     (the block, at its magic)
+0079EEE0  0000e8c9 310a0056 8bf8e8b1 d4edff83
+0079EEF0  c41083f8 0176146a 0068e0da 79006a00
+Stack: 065BF868  017e0156 00000000 0169dc64 0a5779f0
+```
+
+Three things follow from those bytes and that context:
+
+1. **`0x0079EEF0` is not a function entry.** The instruction that ends at `0x0079EEF1` is
+   `83 C4 10` (`add esp, 0x10`) — a return sequence — so the address the port called is the
+   **middle of another function**. Executing from there, `C4 10` is `LES edx, [eax]` with
+   `eax = 0`: *"Memory at address 00000000 could not be read"* is that instruction faulting,
+   which is why the fault address is `eip` itself and not inside the loader.
+2. **The call path did exactly what it was told.** The dump's `ebx` is the block
+   (`4b4c4253` = `SBLK`, version 3), `esi` is command slot 0 (`operation 5` = `CALL`), and
+   `esp+0`/`esp+4` are this project's dispatcher (`0x017E0156`) and the one argument, `0` — the
+   first dialog id `enumerate_available_dialogs()` asks about. Nothing about the block, the
+   dispatcher or the argument passing was wrong; the **address** was.
+
+**The address was wrong for two separate reasons, and the first one was this port's bug.**
+
+**1. The rebase was a no-op.** `ToRuntimeAddress` (``dialog_patterns.cpp:23-31``) is
+
+```cpp
+static uintptr_t base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+return base + (va - kGwImageBase);          // kGwImageBase = 0x00400000
+```
+
+The port rebased with the module's own ``OptionalHeader.ImageBase`` instead — an invention, on
+the theory that the header would be the link-time base. **It is not, on this client**: measured
+read-only (`tests/probe_dialog_loader_address.py`), the live mapped header reads
+``ImageBase = 0x610000`` (the address the image was loaded at, rewritten by the client's own
+loader) while the file on disk reads ``0x400000``. So the port computed
+``0x610000 + (0x79EEF0 - 0x610000) = 0x79EEF0`` — the constant, unrebased — where Reforged
+computes ``0x610000 + (0x79EEF0 - 0x400000) = 0x9AEEF0``. **Fixed:** ``RemoteScanner`` now uses
+the sources' constant, with a regression test (`tests/test_remote_scanner.py`) that loads a
+synthetic image away from its link base and requires the rebase to move by the load delta.
+
+**2. The constant is stale on this build as well.** With the correct rebase the address is
+``0x9AEEF0``, and that is **inside a function too** — one that starts at ``0x9AEEB0``:
+
+```text
+9AEEB0  55 8b ec 83 ec 18 a1 80 74 e0 00 33 c5 89 45 fc 53 8b 5d 08 56 57 8b 3b ...
+        push ebp; mov ebp,esp; sub esp,18; mov eax,[E07480]; xor eax,ebp; mov [ebp-4],eax;
+        push ebx; mov ebx,[ebp+8]; push esi; push edi; mov edi,[ebx]; ...
+9AEEF0  89 45 ec 89 55 f4 83 e1 01 ...        ← the sources' constant, rebased, lands here
+```
+
+`sources: 0x0079EEF0 → ToRuntimeAddress → 0x9AEEF0 → to_function_start → 0x9AEEB0` — and that
+function **dereferences its first argument** (`mov ebx,[ebp+8]` then `mov edi,[ebx]`) and reads
+a second one (`cmp esi,[ebp+0xc]`): it is a two-pointer container search, not
+``DialogLoader_GetText(uint32_t)``. So the dialog *data* addresses are not the only stale ones in
+that table — the code address is stale by at least this much, which is consistent with the
+table's own shape having changed (see the row probe above).
+
+**Why this matters for the comparison with Reforged:** on this build Reforged computes the same
+``0x9AEEF0`` and calls it inside ``SafeCallDialogLoader_GetText``'s ``__try``. The fault is
+caught, the function answers null, and the queue caches **empty text for every dialog** — so
+Reforged's *catalog text* is silently empty here too, while everything that comes from the
+client's own messages (dialog body, buttons, state) keeps working. That is the difference that
+made this a crash in the port and a silent empty string in Reforged: the sources wrap the call
+in SEH and this project's emitted dispatcher cannot (`docs/DIALOG_MIGRATION_PLAN.md`, adaptation
+2).
+
+**The fix in the port, and what it does *not* claim.** `DialogTables.resolve_loader_get_text`
+confirms the candidate's bytes before handing the address out — a prologue (`55 8B EC`, or
+`8B FF 55 8B EC`) or a `jmp rel32` thunk to one inside `.text` — and answers `0` otherwise, which
+is the sources' own "no loader" path (``dialog.cpp:1166-1177``: cache empty text, clear pending).
+**An entry check is not identification**, and the measurement above is why: `to_function_start`
+would resolve `0x9AEEF0` to the real entry `0x9AEEB0`, which the check would *accept*, and
+calling that with a dialog id would dereference a small integer. So the resolver deliberately
+does **not** walk back to a function start, and the loader stays refused until it is identified by
+a signature rather than by an address from a stale table.
+
+**Verified live after the fix** (`tests/test_live_dialog_text.py`, PID `18928`, 2026-09-25):
+the tables resolve, **56 dialogs are available**, the loader is **refused**, the members answer
+the source's empty text, **0 commands were published** — nothing was called at all — and both
+hooked functions held their original bytes with the `.text` section hashing to `33984c4c…` as
+before.
+
+
+**What one row of the table actually holds on this build** (a read-only probe,
+`tests/probe_dialog_rows.py`, run after the client was restarted; new PID `18928`, same module
+`0x00610000`): the rows are `0x24` bytes and the five columns the sources name sit where they
+expect them, but the field the sources call the *frame type* is **a pointer to the dialog's
+name**:
+
+```text
+id 0  0xB5CF08:  event_handler 0x0070B8D0  [+0x04] 0x00B5D918 -> "AgentCommander0"
+                 flags 0x563  content_id 0x20  property_id 0x1
+id 7  0xB5D004:  event_handler 0x007103C0  [+0x04] 0x00B5D9F8 -> "Announcement"
+                 flags 0x159  content_id 0x20  property_id 0x0
+```
+
+So this build's table is a different shape from the one the sources describe, which is
+consistent with the code address being wrong too. The `event_handler` values (`0x0070B8D0`,
+`0x007103C0`) are real client functions whose first bytes are `55 8B EC` (`push ebp` /
+`mov ebp, esp`) — which is what the entry confirmation below is built on.
+
+**The fix, and it is a check the source does not have.** `DialogTables.resolve_loader_get_text`
+now confirms the candidate before it hands the address out: the bytes at it must begin like a
+function (`55 8B EC`, or `8B FF 55 8B EC` with the hot-patch padding the same functions carry).
+A candidate that does not is answered as `0`, and `QueueDialogTextDecode` already has the
+source's own behaviour for a missing loader — cache empty text, clear the pending flag
+(`dialog.cpp:1166-1177`) — so no dialog member ever calls an unconfirmed address.
+
+**Verified live after the fix** (`tests/test_live_dialog_text.py`, PID `18928`, 2026-09-25):
+the tables resolve, **56 dialogs are available**, the loader is **refused** with the reason
+printed, the members answer the source's empty text, **0 commands were published** — nothing
+was called at all — and both hooked functions held their original bytes with the `.text`
+section hashing to `33984c4c…` as before. The text half of those five members therefore cannot
+be exercised on this build, and what it needs is a **resolver for this build's
+`DialogLoader_GetText`** — a work item with a name, not a stub.
+
+**Not established:** where this build's `DialogLoader_GetText` is. **Four probes have now
+looked, and what they rule out is the useful result** — it stops the next attempt repeating them.
+The method named above was taken (`tests/probe_dialog_loader_candidates.py`, 2026-09-25): every
+dialog anchor, and then **every one of the 937 `P:\Code\` paths the client carries**, resolved to
+the code that references it, `to_function_start` for the function.
+
+- **The dialog anchors are other dialogs.** `P:\Code\Gw\Ui\Dialog\DlgKey.cpp` is the **key-binding**
+  screen (its asserts are `s_currKey < arrsize(s_keys)`, `actionSelected`, and its code walks a
+  117-entry key table); `DlgCustomize`, `DlgDevSound`, `DlgNetCancel`, `DlgOptGeneral`, `DlgOptGr`
+  and `DlgTimeout` are those dialogs' UI; and `dialog < DIALOGS` belongs to the **login screen** —
+  it is referenced by one function, `0xa6daa0`, which indexes a 7-entry table at `0xdaa648` and
+  asserts `!FrameGetChild(frame, code)` from `ActFrLogin.cpp`. `DIALOGS` is 7 there, not 58.
+- **`P:\Code\Engine\Dialog\DlgMsg.cpp` is the dialog *message* module.** Exactly two functions
+  reference it: `0x838760`, whose body dispatches a 0x5c-case jump table on `[wparam+4] - 4`
+  (the packet's message kind), and `0x838c30`, which registers a callback and asserts on a null
+  argument. Neither takes a dialog id and returns text.
+- **The 58-row table has one reader.** `s_floatingDialogs` is 58 rows of `0x24` bytes at
+  `0xb5cf08` (the assert `dialog < arrsize(s_floatingDialogs)` sits in the reader, whose bound is
+  `cmp edi,0x3a`), and the only function in `.text` whose immediates land on the table's own
+  addresses is **`0x6f2300`** — the dialog *window*, which indexes rows by `id*0x24` and reads the
+  five fields the sources name **and the four words after them**. So no loader reads this table.
+- **The row's four unnamed words are not the text.** `DialogInfo.content` comes from the loader,
+  and the four words move together per dialog (`0x187ca 0xdc 0x11 0x37` for id 0,
+  `0x187ca 0xdd 0x11 0x38` for id 1, `0x337 0x12a 0x11 0x6a` for id 7), which looks exactly like
+  an `(index, key)` pair — so `tests/probe_dialog_row_text.py` decoded every packing of them
+  through the game's own string table. **All of them are nonsense or refuse**: they are not a
+  text reference.
+- **Nothing is laid out as a text table either.** A run of dwords in the band every measured
+  dialog text index falls in (99942, 99994, 99946) would be a table of references; there is none
+  in `.rdata` or `.data`.
+- **The row stride is scaled by 17 functions in the whole `.text`**, and none of them has the
+  loader's shape: the only one in the dialog region is `0x79a180` (right after the templates
+  dialog, `0x79a000`), and it **dereferences** its argument (`mov ecx,[ebp+8]; mov eax,[ecx+4]`)
+  — calling it with a dialog id would dereference a small integer, which is how the 2026-09-25
+  crash happened. The rest take their object in `ecx` (a `thiscall` member) or two arguments.
+- The client carries no `DialogLoader`-like name: the only dialog-named symbols in its data are
+  `GetDialog` (used by one login-module function) and `DialogGetFrame`.
+
+What remains is not another static pass: the identification needs a function **tested for what it
+returns**, and that means calling candidates from the game thread. Every call this project makes
+goes through the dispatcher, which has no `__try` — a candidate that is not the loader does not
+fail safely, and the one that was tried with a stale address killed the client. That is a decision
+about accepting that risk, not a search that has not been run.
+
+The loader's own consequence is narrow, which is worth stating plainly: `get_dialog_text_decoded`
+and the `content` field of `get_dialog_info` are its only consumers, and the *button caption*
+fallback can only reach ids 0..57 (`MAX_DIALOG_ID = 0x39`) — which real buttons (4484, 6020) are
+not. The live dialog flow this class exists for works without it.
+
+**The two earlier attempts, kept because two of their results are still load-bearing.**
+`tests/probe_dialog_loader.py` read the 58 handler pointers out of the resolved table (41
+distinct handlers), read the first `0x800` bytes of each, and collected every `call rel32`
+  target inside `.text`: **481 candidates**, the busiest of which are called 100–372 times
+  (`0x00697BC0`, `0x008420B0`, `0x008410B0`) — utility functions, not a loader. Frequency alone
+  does not identify it, and ranking the same 481 by **how many distinct handlers** call them
+  (6, 5, 4 …) only surfaces UI functions. The same probe found something that matters for any
+  entry check:
+  **most handler pointers are ``jmp rel32`` thunks** (`0x0070B8D0` → `0x0070B940`), so a
+  legitimate function pointer in this client need not begin with a prologue. The port's
+  confirmation accepts both shapes because of it.
+- `tests/probe_dialog_strings.py` read the whole data section for dialog strings and the whole
+  code section for `push imm32` references to them. The client carries its **own source paths
+  and assertion messages**, which is the anchor style the offsets catalog already uses:
+  ``P:\Code\Gw\Ui\Dialog\DlgNetCancel.cpp``, ``DlgDevSound.cpp``, ``DlgCustomize.cpp``,
+  ``DlgOptGeneral.cpp``, ``DlgOptGr.cpp``, ``DlgKey.cpp``, ``P:\Code\Gw\Ui\Game\GmAgentDialogue.cpp``,
+  ``dialog < DIALOGS``, ``DialogGetFrame(frame, dialog)``, ``dialog < GM_INT_TEMPLATES_DIALOGS``,
+  ``dialog < arrsize(s_floatingDialogs)``, ``ArenaNet_Dialog_Class``. **None of them is
+  referenced by a `push imm32`** — the code loads those addresses another way — which is what
+  the `find_use_of_string` pass above then did, and what it came back with is the list of
+  ruled-out things.
+
+## The loader, hunted from the file — 2026-09-26
+
+**The method changed, and that is this pass's first result: the client is a file.** Every earlier
+attempt read a *running* client — hooks, the game thread, an elevated shell, a UAC prompt, and a
+crash when an address that was not the loader got called. `Gw.exe` is on disk
+(`F:\GW\GW1\Gw.exe`, 10,493,120 bytes, build 38888 — the image the live pid runs), and a file needs
+none of that: the headers give the sections, the sections give the bytes, and a virtual address the
+sources quote (`0x0079EEF0`, `0x00913920`) is an offset into it. Read-only, offline, repeatable.
+
+**The tools** (all in `tools/`, documented in their own files, none of them touching a client):
+
+| tool | what it answers |
+| --- | --- |
+| `pe_image.py` | sections, `ImageBase`, and virtual address ↔ file offset. Refuses a range the file does not hold rather than padding zeros |
+| `gw_scan.py` | this *client's* shapes: function entries (`55 8B EC`, or the `8B FF` hot-patch padding), encoded strings via the port's own `is_valid_enc_str`, where a value is referenced in code or in data |
+| `dialog_loader_hunt.py` | the hunt's questions: `constants` (do Native's two dialog constants describe this file?), `rows` (the metadata table, dumped by **the port's own** `ResolveFlagsBase` over the file), `table-users` (who names the table in code, and is its address held in data), `immediates` (who holds a value), `strings` (encoded strings and the tables of them) |
+| `ghidra_scripts/*.java` | `DecompileAt`, `DialogTableReaders`, `ListModuleFunctions` — run by Ghidra 12.0.4 headless over the same file (project `.ghidra/gw38888`, gitignored; Ghidra's settings directory is redirected into the workspace, which the sandbox requires) |
+| `resolve_offline.py` | **every resolver in `offsets/*.json`, run against the file** — the port's own `PatternCatalog` over a reader that answers virtual addresses out of the PE, with each answer's bytes and whether they begin like a function. It never connects, never calls and never writes |
+
+**And the same file answers the resolver question — 2026-09-26, and it was the port's own bug.**
+A resolver is a claim about a build and the engine that evaluates it is pure, so
+`tools/resolve_offline.py` runs all of them offline. The first sweep found **15 of 143 function
+resolvers** answering with something that does not begin like a function, and the worst of them was
+the crash of 2026-09-25: `chat.send_chat_func` answered `0x0082D64F` from a pattern match at
+`0x0082D65E`. **The pattern was never stale.** The walk back to the function start was this port's:
+`to_function_start` had grown a second candidate — a `jmp` whose destination leaves the module,
+treated as a patched function entry — and took whichever candidate was nearest, so an `e9` byte
+*inside the instruction before the match site* won against the real prologue at `0x0082D620`. The
+source has no such candidate: `Scanner::ToFunctionStart` is three lines that scan backward for
+`55 8B EC` (`scanner.cpp:205-210`). The member is the source's again; the recovery that inference was
+for now lives in `py4gw/client.py` (`_stale_patch_before`, verified against the bytes it expects) and
+the regression is pinned in `tests/test_remote_scanner.py`. After the fix the same sweep reports
+**4 of 143** — `map.cancel_enter_challenge_mission_func`, `memory.gw_version_func`,
+`ui.set_game_renderer_mode_func`, `ui.trigger_terrain_rerender_func` — and
+`chat.send_chat_func` answers `0x0082D620`, the client's chat send, decompiled to the source's own
+`(wchar_t* message, uint32_t agent_id)` shape. The finding is in [`CHAT_PORT.md`](CHAT_PORT.md) and
+[`PLAYER_PORT.md`](PLAYER_PORT.md); the four that remain are the open list.
+
+**The port's own scan reproduces the live result.** `rows` over the file finds the flags column at
+file VA `0x0094CF10` — live `0x00B5CF10`, `0x210000` apart, which is the module's relocation on this
+client — and every row matches the live reading (id 0: `0x004FB8D0` handler, flags `0x563`,
+content `0x20`, property `0x1`; that handler is live `0x0070B8D0`). The file *is* the binary the port
+has been reading, so everything below is about the build the port runs against.
+
+**What the client does with a row**, decompiled (`FUN_004e2300` = live `0x006F2300`, which is
+`IUi::Game::DialogShow` — it ends `FUN_006342a0(frame, L"GmView-Dialog")`, and the native repository's
+own RE notes name that same function: `docs/RE/ui_frame_identity_reverse_engineering.md` §3):
+
+| row | the port's model (`dialog.h:89-99`) | the client's own use |
+| --- | --- | --- |
+| `+0x00` | `event_handler` | the `FrameCreate` **proc** argument |
+| `+0x04` | `frame_type` | the `FrameCreate` **name** argument — a `wchar_t` literal (`"AgentCommander0"`) |
+| `+0x08` | `flags` | the window's **style word**: `FUN_00634250(frame, FUN_0087c8b0, word)`, with bits `0x100`, `0x08`, `0x04` read |
+| `+0x0C` | `content_id` | the `FrameCreate` **flags** argument (`0x20`, or `0x30` for ids 22/41/57) |
+| `+0x10` | `property_id` | the **availability word**: tested `& 1`, `& 2`, `& 4`, `& 8` |
+| `+0x14` | — | a **text id**: `if (id < 0x187CA) FUN_007c9860(id)` — the dialog's text |
+| `+0x18` | — | a second id: `if (id != 0x12A) FUN_00633540(id, …)` → `FUN_005a9cd0` → text |
+| `+0x1C` | — | a value compared with `0x11` |
+| `+0x20` | — | a value compared with `0x6A` |
+
+Two things follow, and both are build facts rather than port defects. The source's five columns are
+the five the port reads (the scan's handler column is the proc pointer, so `flags_base - 8` is
+`+0x00` and `flags_base` is `+0x08`), but on this build the word the *client* treats as
+"available" is `+0x10`: `IsDialogAvailable`'s `flags & 1` lands on the style word at `+0x08`, which
+is odd for 56 of the 58 rows, while the client's own window manager
+(`FUN_004e8240`) tests `(&DAT_0094CF18)[id*9] & 1`. The port reads the columns the source names;
+what those columns *mean* is the build's business, and it is recorded here so the next reader does
+not re-derive it.
+
+**The loader is not a reader of this table.** Ghidra's reference analysis finds **exactly one**
+reference to the table's start `0x0094CF08`: `0x4E23A8`, inside `DialogShow`. The byte scan over
+every dword boundary of the table's `0x828` bytes agrees — the functions that name any of its
+addresses are `DialogShow` (`+0x00`…`+0x20` of row 0), `FUN_004e8240` (the window *manager*, which
+walks all 58 rows and reads `+0x10`, `+0x1C`, `+0x20`), and nothing else of substance — and the
+data sections hold **no pointer to it at all** (checked for its start, its `+4`, and its last row),
+so there is no global through which a reader could reach it either. The earlier live probe's five
+"table users" are readers of a *different* array: they name `0xB5D730`, one past the table's end,
+which is where the next structure begins.
+
+**The client inlines the text path, and its text module is identified.** The only code that reads a
+dialog's text id is `DialogShow` itself (`row+0x14 < 0x187CA` → `FUN_007c9860`), and the per-column
+check says it column by column: `+0x14` has **one** reader in the whole module (`DialogShow`, at
+`0xE246D`), `+0x1C` one (the window manager), `+0x18` two and `+0x20` four — every reader already
+named above. That function, and the encoder behind it, decompile to:
+
+```c
+/* FUN_007c9860 (file VA 0x007C9860) */            /* FUN_007c9880: the body */
+void FUN_007c9860(id) { FUN_007c9880(id, 0); }     buf = FUN_007ca070();          /* shared buffer */
+                                                   FUN_007cbbb0(buf, id, arg, va);  /* encode */
+                                                   return buf->base;                /* wchar_t* */
+```
+
+`FUN_007cbbb0`'s numeric branch is **the port's own encoding, constant for constant**:
+`WORD_VALUE_RANGE = 0x7F00`, `WORD_VALUE_BASE = 0x100`, the `MORE` bit on every digit but the last,
+and `CONCAT_CODED`/`TERM_INTERMEDIATE` between segments — the arithmetic of
+`py4gw/ui/encoded_str.py`. It refuses to encode a string whose security bit is set
+(`"Text: Encoding encrypted string (%u). Check this string's security field."`), which is the
+`ConstGetTextStrEncryptedBitmask()` the WASM symbol list carries. Two consequences, one of them an
+old measurement explained:
+
+- the pointer a dialog announces is **that shared buffer**, which is what this port measured on
+  2026-09-25 (both buttons of one dialog announcing the same pointer, holding nineteen contents in
+  two seconds) — the finding that moved the label read *inside* the client;
+- the codepoints the port's observer copies (`8103 0a66 …`, index 99942) are this function's
+  output, which is why the client's own decoder accepts them and why the port's observer had to be
+  placed where it is.
+
+**Native's own constant is stale, and here it lands in asset code.** `0x0079EEF0` rebases to
+`0x9AEEF0` on this client; the function containing it is `FUN_0079EEB0`, decompiled here: a
+**packet/record deserializer** — fixed `0x15`/`0x14`-byte records copied through an `alloca` probe,
+asserts `0x7e7`/`0x7e4`/`0x171`, a security cookie, and counts written at `+0x40`/`+0x44`. The
+port's refusal to call it is therefore correct on evidence rather than on caution. The same is true
+of the five data constants: `dialog_loader_hunt.py constants` checks RVA `0x513920` in every
+`Gw.exe` on this machine (the live build, the 2026-07 build under `Gw2Launcher\10`, and the 2024
+build in the recycle bin) and **none of them is the dialog table** — Native's constants describe a
+build that is not on this disk. The native repository says the same from the other side: its own RE
+notes place `s_floatingDialog` at VA `0x0094bee8` and `FrameCreate` at `0x00630c90` in "the live
+build", while `dialog.h` still carries `0x00913918` and `0x0079EEF0`, and
+`ResolveDialogLoaderGetText` (`dialog_patterns.cpp:261-269`) rebases that value without verifying
+anything.
+
+**Where this leaves the item.** `class Dialog` stays INCOMPLETE on one work item: this build's
+`DialogLoader_GetText`. **The sources are complete and 100% functional** — `Reforged Native` resolves
+that function and calls it — so the function exists here too, and what the pass above establishes is
+what it is *not* and where to look next: it is not the stale hardcoded address (`0x0079EEF0` rebases
+into a packet deserializer), and it is not a reader of `s_floatingDialogs` (the client's own dialog
+window is the table's only reader on this build, and it inlines the text path a loader would wrap).
+Until it is identified, `resolve_loader_get_text` answers `0` and `QueueDialogTextDecode` takes the
+source's own missing-loader path (empty text cached, pending cleared — `dialog.cpp:1166-1177`), which
+is one of the source's cases rather than a substitute for one. The two routes left are named and
+both are work with a method: a **witness** — hook the confirmed text encoder (`FUN_007c9880`, live
+`0x9D9880`, 659 call sites) and drive an interaction, which names the code that builds a dialog's
+codepoints — and the client's announce path read statically from `DialogShow`'s callers
+(`FUN_0082D3E0`-style chat-side callers were found exactly this way for the chat send).
+
+## Live: the client's own decoder, and the assertion it makes on a button's label — 2026-09-25
+
+The dialog class's text was the one thing this port rendered **itself**: `QueueDialogTextDecode`
+and the body's decode were ported onto a host-side render with the game's string table (Route A),
+because native's `AsyncDecodeStr` hands the string to the client and gets a callback into **its
+own address space**, which nothing of this project's occupies. That substitution is what this
+session replaced, and the protocol itself is now ported:
+
+- `shared_block.py`: a **decode region** — `DECODE_DEPTH = 32` slots, each holding the string the
+  client is handed (1024 bytes) and the text it writes back (2048 wide characters). Each slot has
+  one writer at a time (the host writes the string, the client's callback writes the text), and
+  the state word is written **last**, so the block's lock-free rule holds. `VERSION = 4`.
+- `payload.build_decoder_stub()`: the emitted stub the client calls — native's
+  `DecodeStr_Callback`, `void(__cdecl*)(void* param, const wchar_t* s)` (`ui.h:299`) — which
+  copies the text into the slot `param` names and publishes the string's real length. It is
+  `__cdecl` (the client cleans the stack), it scans bounded (this side has no SEH where native
+  has `wcslen` inside `__try`), and it touches nothing but its own slot.
+- `py4gw/ui/async_decode.py`: the port of `AsyncDecodeStr` (`ui_methods.cpp:2582-2607`) with
+  `SafeAsyncDecodeStr`'s wrapper (`dialog.cpp:264-274`), including the wrapper's three refusals
+  and the empty answer each gives — no decoder, no string, `L""`; not an encoded string,
+  `L"!!!"`; no text parser, `L""`.
+- `dialog.py`: `_on_body` makes the copy and calls the client; `_on_string_decoded` is
+  `OnDialogBodyDecoded`, `OnDialogButtonDecoded` and `OnDialogTextDecoded` behind one event
+  kind, dispatching on the request the slot belongs to. The host render, the string-table load
+  and the deferred "point of use" queue are deleted.
+
+**Verified live** (`tests/test_live_dat.py`, pid 18928 and later 30560): the resolver
+`ui.validate_async_decode_str_func` is there, the body's text comes back through the client's own
+decoder — `'I bring good tidings and announcements of exciting events! … Northern Support bonus
+week / Guild versus Guild bonus week'` — the same text Route A rendered independently, so the two
+decoders agree; the journal's `recv_body` row and `get_active_dialog().raw_message` carry it, and
+the client is restored (both entries original, `.text` digest unchanged).
+
+### The crash: `IsParam(data)`, and a hole in the source's own guard
+
+Extending the same protocol to the third text path — a **button label** — killed the client, and
+the crash report named it exactly:
+
+```text
+Assertion: IsParam(data)
+P:\Code\Engine\Text\TextParser.cpp(724)
+App: Gw.exe   Build: 38888   When: 9/25/2026 15:02:06
+...
+(2) Text parser data string:
+(2) 4481 c02f 0a92 4006 4a23 0000
+```
+
+The trace's `Pc:09bc0176` and `Pc:0aef001b` are outside `Gw.exe`'s module — this project's
+allocations — so the decode call was on the stack when the client's parser asserted, and this
+build makes an assertion **fatal**. The string in the log is a button's announced label: the same
+shape the live runs print for buttons 4484 and 6020, with the first words varying between reads
+and the tail `0a92 4006 4a23 0000` constant.
+
+**Verified live** (`tests/probe_dialog_label_fill.py`, 2026-09-25): **the announced pointer is a
+buffer the client reuses, not the label.** Both buttons of one dialog announced the *same* pointer
+(`0x266CF190`), and reading it repeatedly for two seconds returned 19 distinct contents for one
+button and 24 for the other — heap-pointer heads, small numbers, and at one moment UTF-16
+loading-screen tip text (`y Know Nothing`). The module's caption for those buttons,
+`継쀩\u0a92䀆䨣`, is one of those contents, and the varying head of every read on record is a heap
+pointer (`0xC02F4481`, `0xC143455B`, `0xC0301DD4`, `0xC0297D99`) — memory that holds a pointer is
+not a wide string that has been written yet. What the four (index, key) parses decode to is
+therefore not evidence about labels at all: read through the ported chain, the entries at 17499,
+17281 and 7380 all render as non-text (`tests/probe_dialog_label_indices.py`), because the index
+they were parsed from was never that buffer's content.
+
+**Why native reads something else: its callback runs *after* the client's own send returns.** The
+dialog registers its four handlers at altitude `0x1` (`GW::ui::RegisterUIMessageCallback(...,
+0x1)`, `dialog.cpp:1273-1292`), and `SendUIMessage` runs the callbacks with `altitude > 0`
+**after** `RawSendUiMessage` — the original function — has returned (`ui_methods.cpp:1390-1404`).
+So `DupWideStringSafe(info->message)` (`dialog.cpp:639`) copies the string *inside the client's own
+call*, after the client's handlers have filled it, and the buffer is still its own at that moment.
+This port observes the message at the sender's **entry** — the observer sits on
+`ui.send_ui_message_func` and its stub runs before the function's body (`py4gw/game_thread`) — and
+dereferences `label_pointer` later still, on the listener thread (`dialog._on_button`). Both are
+moments outside the window the label exists in.
+
+**It is not a weak imitation of the source's check.** `py4gw/ui/encoded_str.py` already carries
+`EncStrValidate`, `EncStrValidateWord`, `EncStrValidateSingleWord`,
+`EncStrValidateTerminatedLiteral` and the character classes as a faithful port of
+`ui_methods.cpp:260-362`, and the logged string **passes** it — the port's own validator says so of
+the very string in the crash report. That was read at the time as "the client's check is stricter
+than the source's", with a button's label named as the one string Reforged decodes that is not a
+real table reference. **The measurement below corrects that reading.**
+
+### The label is a real table reference, and the port was reading the wrong buffer
+
+**Verified live**, 2026-09-25, the same day and the same client: the observer was moved to the
+source's moment and made to **copy the string inside the client's own call** (``post_payload``
+hooks plus the copy in ``payload.build_observer``; the copy travels in the event record). What it
+copies is the label:
+
+| what was read | words | parses to | renders to |
+| --- | --- | --- | --- |
+| the body, copied inside the call | `8103 0a66 daa8 a948 3363 0002` | index 99942 | "I bring good tidings and announcements of exciting events! …" |
+| the body, read from the host a second later | *identical* | *identical* | *identical* |
+| button 4484, copied inside the call | `8103 0a9a ecfb c982 63f6 0000` | index 99994 | **"Would you tell me more about the Northern Support bonus?"** |
+| button 6020, copied inside the call | `8103 0a6a 9c12 91f1 4a23 0000` | index 99946 | **"Would you tell me more about the Guild versus Guild bonus?"** |
+| the same announced pointer, read from the host | `fdf5 c03b 0a92 4006` | nothing | nothing |
+
+So a button's announced pointer **does** carry a table reference, and the host's read of it is the
+problem: the buffer is reused between the client's call and any read made from outside it. The
+crash of 2026-09-25 was this port handing the client's decoder a string that was never the label —
+not a check the client makes and the source does not. The body's row in that table is the control:
+a string that does not move gives the same answer either way, which is why the body always worked
+and the label never did.
+
+**It is not a weak imitation of the source's check.** `py4gw/ui/encoded_str.py` already carries
+`EncStrValidate`, `EncStrValidateWord`, `EncStrValidateSingleWord`,
+`EncStrValidateTerminatedLiteral` and the character classes as a faithful port of
+`ui_methods.cpp:260-362`, and tracing the logged string through it by hand, it **passes**: two
+words and a terminator, `data == term`. What the source's guard accepted was a buffer's contents
+that happened to be shaped like an encoded string, which is why it passed a check that only looks
+at the shape.
+
+**What the port does about it:** the label is **handed over**, and the branch is the source's
+(`dialog.cpp:641-708`): the copy above is its `encoded_copy`, so the port runs the source's own
+check, its own "the label is the text" branch, and otherwise the request, the pending map with its
+cap, the handover and the release path. Live, 2026-09-25, the module answers the dialog's two
+buttons with `'Would you tell me more about the Northern Support bonus?'` and
+`'Would you tell me more about the Guild versus Guild bonus?'` — the client's own decoder's text —
+and both `recv_choice` rows carry it.
+
+**What is missing is one capability, and it is the source's own order: reading the packet after
+the client has finished with it.** The source's read is inside its callback at altitude `0x1`, and
+this port's hook form has no such moment — its stub runs the payload before the hooked function's
+body and never sees the return (`byte ... jmp trampoline`, `py4gw/game_thread/hooker.py`).
+
+**That capability is now built and live-verified, and it moved the window without closing it.**
+`build_stub(..., post_payload=True)` / `Hooker.install(..., after=True)` take the hooked function's
+return address off the stack, `call` the trampoline so the body still returns into this project's
+code, run the payload there, and return to the client's caller with the body's value and the stack
+exactly as the caller left them — both calling conventions, because the transfer back pushes the
+saved address and consumes it with `ret` rather than restoring a stack pointer. A frame stack
+(`POST_DEPTH = 8`) makes a re-entrant send safe, and a call that finds every level in use is passed
+through untouched rather than waited on. `tests/test_hooker_offline.py` **executes** it against a
+synthetic function patched with the real entry patch — the payload runs after the body and sees the
+arguments, the return value and esp are unchanged, a payload that sends the message again nests,
+and a disabled hook or a full stack passes through — and the observer hook is installed in that
+form (`bridge.OBSERVER_AFTER`). Live, 2026-09-25: `tests/test_live_dat.py` is 10/10, the client is
+the same pid afterwards, both entry patches are back to their original bytes and the `.text`
+digest is unchanged.
+
+**It is not enough on its own, and the fix for that is in.** The observer now fires inside the
+client's own call, but a string read from *this* side is still read after the stub has returned —
+outside the window — so the observer's emitted code **copies the string itself**, at the offset
+each watched message declares (`DialogButtonInfo.message` is four, `ui.h:60-65`;
+`DialogBodyInfo.message_enc` is eight, `ui.h:54-58`), into the event record the host reads
+(`EVENT_TEXT_WORDS`, bounded, with the terminator included as native's `wcslen + 1` gives it). It
+is the same shape as the decoder stub copying the text the client hands it, and the same reason:
+the client's own call is the only place the string is the client's. The live run of 2026-09-25
+(10/10, client restored, the body's copy word-for-word equal to the host's own read of it) is what
+established the table above.
+
+The harness itself needed one fix to report any of this: the live suite's evidence is printed, and
+`run_live_dat.cmd` redirects stdout to a file, so on 2026-09-25 the two `test_z_...` tests failed
+with `UnicodeEncodeError: 'charmap' codec` while printing the module's caption — a cp1252 stdout,
+not a port defect, and the buffered write took the rest of their evidence with it. The wrapper now
+sets `PYTHONIOENCODING=utf-8`, as `run_probe_text.cmd` already did, and the suite is 10/10 with the
+client restored.
+
+### The second crash: an address that is not code, and the hole that let it through — 2026-09-25
+
+`py4gw/chat.py` was written to close the four `Player` chat senders — the source's `SendChat`
+builds a `wchar_t buffer[140]` and hands its address to `g_send_chat_func`
+(``chat_methods.cpp:88-142``), and the port can now do the same thing with the block's data
+region, which is what that region is for. The offline suite passed (16 tests, pinning the buffer's
+bytes, the clamp, the terminator and every refusal). The **live** probe killed the client:
+
+```text
+Exception: c0000005   Memory at address 462fd617 could not be written
+eax=03b10450  eax+0 03B10450  0061002f 00650067 00000000   ← "/age", the buffer this port placed
+ebx=03b00000  ebx+0 03B00000  4b4c4253 00000005 ...        ← the block (SBLK, version 5)
+esi=03b00040  esi+0 03B00040  00000000 00000005 00000000 03b10450   ← command 0: CALL, arg1 = the buffer
+eip=462fd617  Trace: Pc:462fd617 Rt:030c01ca → Pc:030c01ca Rt:03b4001b → our stub → 0x0083e398
+```
+
+Three things the dump settles, and they are worth keeping:
+
+1. **The transport did what it was told.** The block is intact at its magic and version, the
+   command record carries the operation and the buffer's address, and the dispatcher and the stub
+   are where the trace says they are. Nothing about the ring, the arguments or the ABI was wrong.
+2. **The client was made to execute data.** The dispatcher *called* `0x462FD617` — the trace's
+   return address is the dispatcher itself — and that address is outside the module
+   (`0x00610000` + `0xF49000`). Whatever wrote it into the call table, the call was to something
+   that is not code.
+3. **The port had no check for that.** The dispatcher refuses a target outside the **module**, and
+   `0x462FD617` is outside it — so this went further than the module bound should have allowed, and
+   the bound is not the check that matters: an address *inside* the module but outside `.text` is
+   data, and executing data does not fail, it runs. The dialog loader learned this on the same day
+   from the other side (`DialogTables._is_function_entry` confirms a candidate before it is handed
+   out); the call path never got the same treatment.
+
+**What changed, and it closes the class of crash.** `ConnectedClient._descriptor_slot` confirms
+the target is inside the client's code section before it writes the descriptor, and refuses
+otherwise with the pid, the address, the section and what was expected. That is a *host* check by
+necessity: inside the client, an address about to be executed is not distinguishable from one that
+is not. `tests/test_client_startup_offline.py::CallTargetSectionTests` pins it — a code address is
+written, the data address that got through (`0xb5cf08`) is refused with nothing written, and so is
+`0x462fd617`.
+
+**What is still not established: which resolver answered that address.**
+`tests/probe_resolver_targets.py` is the read-only diagnostic for it — it resolves the chat, ui,
+agent and game-thread names, prints each resolver's own step trace, and reads the bytes at the
+answer, **without calling anything** (read-only connection, no hook, no write). It has to be run
+once the client is restarted; the client that crashed is gone, and re-running the chat probe before
+that diagnosis exists would be repeating the same experiment.
+
+Two candidates for the fault, both readable in that probe's output:
+
+- the resolver's answer is not a function (the pattern's mask is nine characters for a ten-byte
+  pattern, and the two engines treat a short mask differently — Native compares
+  `strlen(mask)` bytes, `file_scanner.cpp:325`, while the port's `Pattern` requires equal lengths
+  and its `from_literal` decides what a mismatch means); or
+- the answer is a function and the call itself was misread (the trace shows a direct call, so the
+  descriptor's words are the place to look).
+
+Until one of them is settled, the three ported chat senders answer with the refusal above rather
+than sending anything, and `Player.SendChat`/`SendChatCommand`/`SendWhisper` are **ported but
+blocked** — a finding, not a silent failure.
+
+### Two defects of this project's own, found on the way
+
+- **A deadlock in the command ring.** Serialising the ring with a non-reentrant lock is a
+  deadlock on the first call of a session: `Bridge.call` takes the lock and then publishes, which
+  takes it again. It is an `RLock`, and
+  `test_a_call_publishes_and_waits_without_deadlocking_itself` fails — rather than hangs — on the
+  old code.
+- **A stale patch broke its own resolution.** A run killed mid-connection leaves this project's
+  entry patches in the client. The next install repairs them (`_prepare_target`: a `jmp` whose
+  destination leaves the module), but the *resolution* of the patched target walks back for a
+  prologue, and the patch is not one — so it answered the **previous** function
+  (`0x008440C0` instead of `0x008441A0`) and the repair could not find the address to repair.
+  `RemoteScanner.to_function_start` now treats a `jmp` that **leaves the module** as a function
+  start, and a `jmp` inside it as an ordinary branch, with a synthetic-image test for both.
 
 ## Sources Consulted
 

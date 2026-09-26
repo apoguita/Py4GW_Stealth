@@ -63,6 +63,11 @@ class _Memory:
     def write_u32(self, address: int, value: int) -> None:
         self.write(address, value.to_bytes(4, "little"))
 
+    def write_wide(self, address: int, text: str) -> None:
+        """Write a NUL-terminated UTF-16 string, as the client stores labels."""
+
+        self.write(address, text.encode("utf-16-le") + b"\x00\x00")
+
 
 class _Catalog:
     """A resolver stand-in that returns one fixed callback address."""
@@ -103,6 +108,7 @@ def _write_frame(
     callbacks: tuple[tuple[int, int, int], ...] = (),
     callbacks_buffer: int = _CALLBACK_BUFFER,
     frame_state: int = 0,
+    frame_hash: int = 0,
 ) -> None:
     """Write one frame record and its callback entries."""
 
@@ -117,6 +123,12 @@ def _write_frame(
     memory.write_u32(frame_address + FrameStruct.frame_id.offset, frame_id)
     memory.write_u32(frame_address + FrameStruct.frame_state.offset, frame_state)
     memory.write_u32(frame_address + FrameStruct.relation.offset, parent_relation)
+    memory.write_u32(
+        frame_address
+        + FrameStruct.relation.offset
+        + FrameRelationStruct.frame_hash_id.offset,
+        frame_hash,
+    )
 
     for index, (callback, context, extra) in enumerate(callbacks):
         entry = callbacks_buffer + index * _CALLBACK_STRIDE
@@ -151,6 +163,7 @@ def _frames_for(
             callbacks=callbacks,
             callbacks_buffer=cursor,
             frame_state=spec.get("frame_state", 0x4),
+            frame_hash=spec.get("frame_hash", 0),
         )
         cursor += max(len(callbacks), 0) * _CALLBACK_STRIDE
 
@@ -613,6 +626,178 @@ class FrameArrayBatchTests(unittest.TestCase):
         tree = FrameTree(frames_reader)
         matches = tree.frames_using_callback(0x00AABBEE)
         self.assertEqual([frame_id for frame_id, _ in matches], [3])
+
+
+class FrameLabelTests(unittest.TestCase):
+    """The label accessors (``TextLabelFrame::GetEncodedLabel`` / ``GetDecodedLabel``).
+
+    ``ui_methods.cpp:2216-2234``. Both read the frame's context: ``[+4]`` is a pointer to the
+    encoded label and ``[+0xC]`` is a size word that is zero when there is no label. The
+    **decoded** label sits immediately after the encoded one in the same allocation, which
+    is why the source computes ``wcslen(enc) + 1`` and returns ``enc + len``.
+
+    The synthetic image below lays out exactly that: a context, an encoded string, and the
+    decoded string after it, so the arithmetic is pinned without a client.
+    """
+
+    #: Where the context and the encoded string live in the image. The decoded copy follows
+    #: the encoded one immediately, because that is the layout the source's arithmetic
+    #: (``enc + wcslen(enc) + 1``) depends on.
+    LABEL_CONTEXT = _BASE + 0x90000
+    ENCODED_AT = _BASE + 0xA0000
+
+    def _label_frame(
+        self,
+        encoded: str,
+        decoded: str,
+        size: int | None = None,
+    ) -> tuple[_Memory, FrameArray]:
+        """Write a frame whose context holds an encoded label and its decoded copy."""
+
+        memory = _Memory()
+        frames_reader = _frames_for(
+            memory,
+            [_FRAME_BASE],
+            {0: {"callbacks": ((0, self.LABEL_CONTEXT, 0),)}},
+        )
+        memory.write_u32(self.LABEL_CONTEXT + 0x4, self.ENCODED_AT)
+        encoded_units = len(encoded.encode("utf-16-le")) // 2 + 1
+        decoded_units = len(decoded.encode("utf-16-le")) // 2 + 1
+        memory.write_u32(
+            self.LABEL_CONTEXT + 0xC,
+            encoded_units + decoded_units if size is None else size,
+        )
+        memory.write_wide(self.ENCODED_AT, encoded)
+        memory.write_wide(self.ENCODED_AT + encoded_units * 2, decoded)
+        return memory, frames_reader
+
+    def test_reads_the_encoded_label(self) -> None:
+        _, frames_reader = self._label_frame("\u8103\u0a66", "Foreman the Crier")
+        frame = frames_reader.get(0)
+        assert frame is not None
+        self.assertEqual(frames_reader.encoded_label(frame), "\u8103\u0a66")
+
+    def test_reads_the_decoded_copy_after_the_encoded_one(self) -> None:
+        """``enc + wcslen(enc) + 1`` — the decoded string in the same allocation."""
+
+        _, frames_reader = self._label_frame("\u8103\u0a66", "Foreman the Crier")
+        frame = frames_reader.get(0)
+        assert frame is not None
+        self.assertEqual(frames_reader.decoded_label(frame), "Foreman the Crier")
+
+    def test_a_zero_size_word_means_no_label(self) -> None:
+        """Both accessors return nothing while ``[+0xC]`` is zero."""
+
+        _, frames_reader = self._label_frame("\u8103\u0a66", "Foreman", size=0)
+        frame = frames_reader.get(0)
+        assert frame is not None
+        self.assertEqual(frames_reader.encoded_label(frame), "")
+        self.assertEqual(frames_reader.decoded_label(frame), "")
+
+    def test_a_decoded_copy_that_does_not_fit_is_not_read(self) -> None:
+        """The source's guard is ``len < size``; at the boundary it returns nothing."""
+
+        encoded = "\u8103\u0a66"
+        encoded_units = len(encoded.encode("utf-16-le")) // 2 + 1
+        _, frames_reader = self._label_frame(encoded, "Foreman", size=encoded_units)
+        frame = frames_reader.get(0)
+        assert frame is not None
+        self.assertEqual(frames_reader.decoded_label(frame), "")
+
+    def test_a_frame_without_a_context_has_no_label(self) -> None:
+        memory = _Memory()
+        frames_reader = _frames_for(memory, [_FRAME_BASE], {0: {}})
+        frame = frames_reader.get(0)
+        assert frame is not None
+        self.assertEqual(frames_reader.encoded_label(frame), "")
+        self.assertEqual(frames_reader.decoded_label(frame), "")
+
+    def test_a_wide_string_stops_at_its_terminator_and_its_limit(self) -> None:
+        memory = _Memory()
+        memory.write_wide(self.ENCODED_AT, "Foreman")
+        empty = FrameArray(cast(Any, memory), cast(Any, None), cast(Any, None))
+        self.assertEqual(empty.read_wide_string(self.ENCODED_AT, 32), "Foreman")
+        self.assertEqual(empty.read_wide_string(self.ENCODED_AT, 3), "For")
+        self.assertEqual(empty.read_wide_string(0, 32), "")
+        self.assertEqual(empty.read_wide_string(self.ENCODED_AT, 0), "")
+
+
+class FrameHashLookupTests(unittest.TestCase):
+    """``GetFrameIDByHash`` (``ui_methods.cpp:575-587``) and the id it returns.
+
+    The source's convention is that **``0`` means "not found"**, so its callers refuse a
+    zero id before reading the frame; the tests pin that convention, the first-match rule,
+    and the validity filter the source applies through ``IsFrameValid``.
+    """
+
+    #: The hash ``is_dialog_active`` looks for (``dialog.cpp:1668``), and a second one.
+    NPC_DIALOG_HASH = 3856160816
+    OTHER_HASH = 0x1234ABCD
+
+    def _array(self) -> tuple[_Memory, FrameArray]:
+        memory = _Memory()
+        slots: list[int | None] = [
+            _FRAME_BASE,
+            None,
+            0xFFFFFFFF,
+            _FRAME_BASE + 3 * _FRAME_STRIDE,
+            _FRAME_BASE + 4 * _FRAME_STRIDE,
+        ]
+        frames_reader = _frames_for(
+            memory,
+            slots,
+            {
+                0: {"frame_hash": self.OTHER_HASH},
+                3: {"frame_hash": self.NPC_DIALOG_HASH},
+                4: {"frame_hash": self.NPC_DIALOG_HASH},
+            },
+        )
+        return memory, frames_reader
+
+    def test_finds_the_frame_holding_the_hash(self) -> None:
+        _, frames_reader = self._array()
+        self.assertEqual(
+            frames_reader.frame_id_by_hash(self.NPC_DIALOG_HASH), 3
+        )
+        self.assertEqual(frames_reader.frame_id_by_hash(self.OTHER_HASH), 0)
+
+    def test_the_first_match_wins(self) -> None:
+        """The source returns the first index in ascending order, which is 3 here, not 4."""
+
+        _, frames_reader = self._array()
+        self.assertEqual(frames_reader.frame_id_by_hash(self.NPC_DIALOG_HASH), 3)
+
+    def test_an_unknown_hash_is_zero(self) -> None:
+        _, frames_reader = self._array()
+        self.assertEqual(frames_reader.frame_id_by_hash(0xDEADBEEF), 0)
+
+    def test_a_zero_hash_is_never_searched(self) -> None:
+        """``if (!(hash && frame_array))`` returns 0 before the scan begins."""
+
+        _, frames_reader = self._array()
+        self.assertEqual(frames_reader.frame_id_by_hash(0), 0)
+
+    def test_a_frame_hash_of_zero_is_not_found_by_that_lookup(self) -> None:
+        """A frame whose hash is 0 cannot be found this way — the source's own convention."""
+
+        memory = _Memory()
+        frames_reader = _frames_for(
+            memory,
+            [_FRAME_BASE],
+            {0: {"frame_hash": 0}},
+        )
+        self.assertEqual(frames_reader.frame_id_by_hash(0), 0)
+
+    def test_null_and_sentinel_slots_are_skipped(self) -> None:
+        """Only valid slots are scanned, which is the source's ``IsFrameValid`` filter."""
+
+        memory = _Memory()
+        frames_reader = _frames_for(
+            memory,
+            [None, 0xFFFFFFFF, _FRAME_BASE + 2 * _FRAME_STRIDE],
+            {2: {"frame_hash": self.NPC_DIALOG_HASH}},
+        )
+        self.assertEqual(frames_reader.frame_id_by_hash(self.NPC_DIALOG_HASH), 2)
 
 
 class ThunkCallbackTests(unittest.TestCase):

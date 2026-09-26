@@ -474,10 +474,27 @@ class LivePlayerTests(unittest.TestCase):
         self.assertLess(Player.GetActiveTitleID(), count)
 
     def test_active_title_matches_the_player_tier(self) -> None:
-        """Find the title whose tier index the player record names."""
+        """Find the title whose tier index the player record names.
+
+        A tier index of ``0`` means no title is displayed, and the source returns
+        ``None`` for it *before* it looks at the title array
+        (``player_methods.cpp:159-161``). That is not the same as "the title at
+        index 0": with no active title there is no title to match, which is why the
+        check comes first here exactly as it does there.
+        """
 
         active_tier = int(self.local_player.active_title_tier)
         active_id = Player.GetActiveTitleID()
+
+        if not active_tier:
+            self.assertEqual(
+                active_id,
+                0,
+                "a tier index of 0 means no title is active, so the member must "
+                "report None rather than the first title whose tier index is 0",
+            )
+            return
+
         title = Player.GetTitle(active_id)
         self.assertIsNotNone(title)
         assert title is not None
@@ -570,18 +587,26 @@ class LivePlayerTests(unittest.TestCase):
         self.assertIsInstance(Player.IsTyping(), bool)
         self.assertEqual(Player.IsTyping(), self.client.is_typing())
 
-    # ── disabled members ──────────────────────────────────────────────────
+    # ── refused members ───────────────────────────────────────────────────
 
-    def test_disabled_members_refuse_while_connected(self) -> None:
-        """Refuse in a live session too, not only without a client."""
+    def test_not_ported_members_refuse_while_connected(self) -> None:
+        """Refuse in a live session too, not only without a client.
+
+        Only the members that still refuse. The action members are ported now, so
+        they **do** what they say: this list must never contain one, because
+        ``Player.Move(0.0, 0.0)`` inside an ``assertRaises`` that no longer raises
+        walks the character. The nine actions have their own live suite,
+        ``tests/test_live_player.py``, where they are exercised deliberately.
+        """
 
         for name, call in (
-            ("Move", lambda: Player.Move(0.0, 0.0)),
-            ("ChangeTarget", lambda: Player.ChangeTarget(1)),
             ("GetTargetID", Player.GetTargetID),
             ("GetInstanceUptime", Player.GetInstanceUptime),
             ("GetChatHistory", Player.GetChatHistory),
+            ("IsChatHistoryReady", Player.IsChatHistoryReady),
             ("SendChat", lambda: Player.SendChat(0, "hi")),
+            ("SendDialog", lambda: Player.SendDialog(1)),
+            ("BuySkill", lambda: Player.BuySkill(1)),
         ):
             with self.subTest(member=name):
                 with self.assertRaises(NotImplementedError) as caught:

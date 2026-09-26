@@ -10,8 +10,10 @@ Current status: active research. The immediate goal is to establish evidence-bac
 
 - **Reforged and Reforged Native are complete, working libraries.** They ship and
   run in production. Stealth is a *port* of them — not a parallel design.
-- **The port is at an early stage.** Contexts can be loaded and read; little
-  beyond that has been done yet.
+- **The port is well past its early stage.** The contexts load and read, five accessor
+  classes are ported (`Map`, `Player`, `Party`, `Scanner`, `Dialog`), and the capability
+  layer below is live-verified. What is left across the port is breadth of porting, named
+  member by member in each class's port doc — not missing capability.
 - **The ported library is read-only; `py4gw/game_thread` is not.** Every path that
   reads the client — the contexts, `Map`, `Player`, `Party`, `Client` — only reads,
   and a context read never patched anything. What is new is a separate capability
@@ -22,9 +24,19 @@ Current status: active research. The immediate goal is to establish evidence-bac
   finishes. **All three capabilities now exist and are live-verified**: hooks,
   execution (typed calls into the client's own functions, with effects asserted from
   the client's own reports), and callbacks (a registry keyed by event kind, plus a
-  listener thread that delivers events as they arrive). What is thin is **breadth,
-  not capability**: two typed call forms where the sources need more, and a callback
-  kind per hooked function. Nothing in `game_thread` is on the read path of a ported
+  listener thread that delivers events as they arrive). The call vocabulary covers
+  seven forms — no arguments, one, two, three and five words, a four-float pointer,
+  and a packed UI message — a call's return register, and a writable data region in
+  the block; the GW.dat read uses all three and is the widest thing it drives. **A fourth
+  form now exists and is live-verified**: an observation *after* the hooked call returns,
+  which is the source's own callback order — the dialog registers at altitude `0x1` and
+  `SendUIMessage` runs those after the original send (`docs/TARGET_SIDE_WORK.md` has the
+  lines) — together with a bounded **copy of the string the watched packet names**, taken
+  inside the client because that is the only moment the string is the client's. That pair is
+  what a dialog button's caption needed, and it produces them. What is left there is breadth
+  of porting — a form that places a **string** in the client for the chat sends, and a
+  callback kind per hooked function — and
+  every one of them is written down as work. Nothing in `game_thread` is on the read path of a ported
   member; connecting now sets it up on its own, which is the one place it is not
   something a caller asks for by hand — `game_thread=False` is the read-only
   connection for anything that should not touch the client.
@@ -58,13 +70,12 @@ Current status: active research. The immediate goal is to establish evidence-bac
   filter (`RTCore64.sys`), recorded in `docs/RESEARCH.md`. `Win32.is_elevated()` is
   the check; do not re-derive it in a caller, and do not catch the refusal to keep
   going.
-- **The structure comes first.** Every member of a ported class is declared now,
-  in the source's own shape and nesting, including members whose bodies cannot
-  work yet. That is deliberate: when remote execution, hooks or callbacks are
-  added, the functionality is ported into a slot that already exists rather than
-  the class being redesigned around a capability that arrived later. A refused
-  member is a placeholder carrying its name, source location and blocking
-  mechanism — never an invitation to write a substitute.
+- **The structure comes first.** Every member of a ported class is declared in the
+  source's own shape and nesting, including the members whose bodies are still being
+  written. That is deliberate: the functionality is ported into a slot that already
+  exists rather than the class being redesigned around code that arrives later. A member
+  that raises meanwhile carries its name, its source location, and exactly what it still
+  needs — the next work item — and is never an invitation to write a substitute.
 
 Read `README.md` before investigative, design, implementation, documentation, or review work. It is the current project intent and research record.
 
@@ -98,14 +109,48 @@ This project **ports** Py4GW Reforged and Py4GW_Reforged_Native. It does not
 design its own way of doing what they already do. See `docs/PORTING_RULES.md`
 for the full statement and the audit procedure.
 
-**The mandate: port only what can be ported, and identify what cannot, so it can
-be picked up later when the capability exists.** Every source member is either
-**ported** (source-identical) or **refused** (`NotImplementedError` naming the
-missing mechanism, plus a recorded entry). There is no third outcome. A member is
-never approximated, softened, wrapped, defaulted, made to "work for now", or left
-out. Refusals are recorded in that module's port doc, and anything needing
-target-side code goes in the existing `docs/DEFERRED_INJECTION.md` - do not
-create a third list.
+### The unit of work is the class, not the member
+
+**When a class is migrated, it is migrated whole — every member of its source
+surface working — in one pass.** Not the part the caller in hand touches, not the
+read half now and the rest later. This is a standing directive from the project
+owner and it outranks convenience:
+
+> *"I do not want partial migrations or ports. If I migrate a class I expect a FULL
+> migration, not just some features."*
+
+- **A dependency is part of the task.** If a member needs another class, a resolver,
+  a call form, a stub, a block region or a table, build it and finish the member in
+  the same change. Cascades are ported as they are reached. Deferring a dependency
+  that could be built now is the defect this rule exists to stop.
+- **Never port by call site.** Reaching a member that needs code that does not exist yet
+  is the signal to write that code, not to move on without the member.
+- **Nothing is blocked, deferred or unportable.** If a member needs something that does
+  not exist yet — a call form, a string or text region, a callback stub, a table, a block
+  region — that is work with a name, and the answer is to build it. The docs never
+  describe a feature as out of reach; they state what works and what is next.
+- **A no-op is very hard to justify.** If a member does nothing where the source does
+  something, the justification must be written down, specific, and rare. Two members
+  qualify today, both because they return or consume an object the injected runtime owns
+  in-process (`Player.player_instance`, `Dialog._call_native_dialog_method`); they report
+  that plainly and never return a stand-in. That is a documented divergence of those two,
+  not a pattern for anything else.
+- **Every class carries a verdict** in `docs/CLASS_PORT_MAP.md`: **FULL** (every member
+  works) or **INCOMPLETE** (with the members still to port named, and what each needs).
+  **Never describe an INCOMPLETE class as ported** — not in a doc, a commit, a summary,
+  or conversation. "Ported" means FULL.
+- The verdict is updated in the same change that moves the class, so the map cannot
+  drift from the code.
+
+**The mandate: port everything.** Reforged and Reforged Native are complete, working,
+in-production code, and this project reproduces them member for member. A member is
+never approximated, softened, wrapped, defaulted, made to "work for now", or left out —
+and it is never left doing nothing while the source does something. While the code that
+makes a member work is being written, the member raises `NotImplementedError` naming
+exactly what it still needs rather than returning a plausible wrong value; the thing it
+names is the next work item. Outstanding work is recorded in that module's port doc, and
+target-side work in the existing `docs/TARGET_SIDE_WORK.md` - do not create a third
+list.
 
 **The absolutes.** Never optimise for line count - repetition in the source is the
 port, not noise to factor out. Never use a structure the source does not have.
@@ -117,7 +162,8 @@ and do not defer a check it does make. Never monkey-patch. Never treat precedenc
 as permission: an existing helper, an earlier commit, or a line in these documents
 blesses nothing, because only Reforged and Reforged Native are authority. Never
 offer invented options - do not hand the user a menu of designs you made up. The
-choices are always *port it* or *refuse it and record it*.
+choices are always *port it as the source writes it*, or *write it so it names exactly
+what it still needs*.
 
 **Never substitute a stand-in for an unported source file.** If the source calls
 something that has no ported home, port *that thing* - in the file and on the class
@@ -143,9 +189,10 @@ the code does and the line it is on, then port it as written.
 - **Port the structure, not a summary of it** - same order, same short-circuits,
   same return values, same defaults.
 - **A divergence is a finding, not a design choice.** Where this project cannot
-  reproduce what the source does, say so and refuse the member - never ship a
+  reproduce what the source does, say so plainly on that member - never ship a
   second behaviour alongside it and call that deliberate. It does not mean the
-  source is wrong.
+  source is wrong, and it is not a resting place: the divergence is written down so
+  the work to close it is visible.
 - **Docs must describe the ported source.** If a doc names an API that is not in
   Reforged or Native, the doc is wrong.
 
@@ -154,36 +201,80 @@ This rule exists because it was broken here: a fabricated readiness layer
 `BitmapWords` type were built on top of the sources and then documented as the
 library's contract. Both are deleted.
 
-### Caching: `@frame_cache` is not ported (decided, closed)
+### Inventing a method is forbidden
 
-**This is a settled decision, not an open design question. Do not re-open it.**
+**You may not invent a solution.** The sources are explicit about how every member works, and this
+project reproduces them. A method that is not in Reforged or Reforged Native is not a design
+choice, not a shortcut, not an improvement and not a fallback — it is a violation, whatever it
+achieves and however well it works. The owner's instruction has been the same from the start:
+*stay as true as possible to the source code.* This rule is that instruction, made enforceable.
 
-Stealth is **not run every frame** and is **not throttled**. It reads the client
-**on demand**, at the call site. Reforged's `@frame_cache` memoises a function for
-the duration of one game frame, and the *only* thing that invalidates it is an
-in-process tick: `PyCallback.Register(..., Phase.PreUpdate, FrameCache.reset_cache)`
-in `py4gwcorelib_src/FrameCache.py`. There is no TTL, no per-entry invalidation,
-no size bound and no lock — correctness comes entirely from that per-frame wipe.
+Before any code is written for a behaviour, three questions must be answerable **in the change
+itself**:
 
-Stealth has no frame loop and cannot register a callback read-only. A verbatim
-port would therefore **never invalidate**: the first call would pin a map-scoped
-value for the life of the process, which is exactly the stale data the readiness
-gate exists to prevent.
+1. **Which source line does this?** Name the file and the lines (`dialog.cpp:646-708`). If there
+   is no such line, there is nothing to port and nothing to write.
+2. **What does the source do it *with*?** The same call, the same inputs, the same order, the same
+   short-circuits, the same return values — not the same *outcome* reached another way.
+3. **What is being added that the source does not have?** The honest answer is almost always
+   "nothing". When it is not, it is a divergence: it goes in that class's port doc as a finding,
+   with the work to close it, and never quietly into the code.
 
-- **Do not port `@frame_cache`.** Drop the decorator and let the member read when
-  it is called.
-- **Do not invent a replacement tick** — no TTL, no throttle, no refresh timer, no
-  `with py4gw.frame():` block, no caller-driven `cache.reset()` protocol. All of
-  those were listed as options once and the answer is none of them.
-- **Do not add a cache to "match the source".** Matching the source means matching
-  observable behaviour, and a memo that never clears does not.
-- The source decorates heavily, so this will come up on nearly every ported file.
-  `Map` alone carries `@frame_cache` on 36 of its 178 members.
+**The evidence is this project's own log.** Every entry below was invented here, every one was
+wrong, and each cost live runs, client restarts and the owner's time:
 
-Caching is still permitted for **large structures** whose contents are expensive
-to re-read — that is a caller-visible cost decision. The existing rule is
-unchanged: **cache what the pattern scan produced, because that is stable; never
-cache a dereferenced pointer, because that is map-scoped.**
+| invented here | what the source actually does | what it cost |
+| --- | --- | --- |
+| a host-side render of dialog text with the game's string table (Route A inside `dialog.py`) | `SafeAsyncDecodeStr(req->encoded, OnDialogBodyDecoded, req)` — hand the string to the client, take the text from its callback (`dialog.cpp:885`) | weeks of detours; the real protocol worked on its first live attempt |
+| a deferred "complete it at the next point of use" queue for the body's text | the client's callback **is** the completion (`dialog.cpp:995-1054`) | a stand-in for a mechanism that already existed |
+| reading a button's caption from `TextLabelFrame` labels | the dialog module touches frames **once**, for `IsDialogActive()` (`dialog.cpp:1666-1683`); captions come from the label decode or the catalog (`1632-1664`) | a wrong answer presented as a reading, corrected by the owner |
+| reading the announced label at a moment the port chose | `DupWideStringSafe(info->message)`, where native reads it (`dialog.cpp:639`) | a string the client's own parser asserts on |
+| a validity check of this project's own | `SafeIsValidEncStr` → the source's `EncStrValidate` (`ui_methods.cpp:260-362`) | an approximation that disagreed with the client |
+
+**When a member seems to need something the source does not have: stop, do not build it.** Write
+down the member, the source lines that were read, and what is missing. That is a finding — *"the
+source's method needs X, which this port does not have"* — and X becomes the work item. It is
+never a licence to build a different method, and "it works" is not a defence: a method that works
+by another route is still the wrong answer, because the next member, the next build and the next
+client will be measured against the source and the port will not match.
+
+The audit procedure for a reviewer, and the worked failures in full, are in
+`docs/PORTING_RULES.md`.
+
+### Caching: `@frame_cache` is Reforged's, and this port is not frame-based
+
+`@frame_cache` is a **Reforged feature**. It memoises a wrapper call for the duration
+of one game frame, and the only thing that invalidates it is Reforged's own per-frame
+tick: `PyCallback.Register(self._callback_name, PyCallback.Phase.PreUpdate,
+self.reset_cache, priority=7)` in `py4gwcorelib_src/FrameCache.py`. There is no TTL,
+no per-entry invalidation, no size bound and no lock — correctness comes entirely from
+that per-frame wipe.
+
+**Stealth is not a frame-based environment.** Nothing runs per frame here: there is no
+frame loop, no phase tick, and nothing to dispatch to. So there is no frame boundary to
+key a memo to, and **no way to throttle by frame**. A verbatim copy of the decorator
+would never invalidate — the first call would pin a map-scoped value for the life of
+the process, which is exactly the stale data `Map.IsMapReady()` exists to prevent.
+
+**So the class is not used now, and that is a consequence of the execution model rather
+than a verdict on the class.** If this port ever gains a frame-driven mode,
+`@frame_cache` is what gets used — as the source writes it — instead of anything
+written here. Until then:
+
+- **The member reads when it is called.** Drop the decorator; that is the only
+  behaviour that matches what the source's callers observe.
+- **Do not stand in a throttle of our own** — no TTL, no refresh timer, no
+  `with py4gw.frame():` block, no caller-driven `cache.reset()` protocol. None of
+  those is this port's model and none of them is the source's.
+- **Do not add a cache in the name of parity.** Parity is observable behaviour, and a
+  memo that never clears is not parity.
+- **Caching a large structure is still allowed** when re-reading it is expensive and
+  the caller re-reads it often — a caller-visible cost decision, under the rule that is
+  unchanged: **cache what the pattern scan produced, because that is stable; never
+  cache a dereferenced pointer, because that is map-scoped.**
+
+The source decorates heavily, so this comes up on nearly every ported file: `Map` alone
+carries `@frame_cache` on 36 of its 178 members, and `Player` on 14 hot scalar reads.
 
 Full statement and the audit procedure: `docs/PORTING_RULES.md`. The original
 assessment of `FrameCache` and `GLOBAL_CACHE` is in
@@ -222,6 +313,31 @@ assessment of `FrameCache` and `GLOBAL_CACHE` is in
 - Update the research record whenever a capability decision, source provenance, limitation, or live observation changes.
 - Check repository status before edits and before reporting. Preserve unrelated changes.
 - Never reset, restore, clean, force-push, rewrite history, delete project files, or commit unless the user explicitly requests the exact operation.
+
+## Live verification: a dialog only exists while an interaction is in flight
+
+**A live test that reads a dialog drives the interaction itself.** Pick the closest NPC,
+interact with it, and wait for the dialog to appear — that is the whole procedure, in every
+live test and every probe, and it is not something the user does by hand and not something the
+test may assume. This has been forgotten more than once in this project, and each time it cost
+a live run and left a finding unverified: an empty journal, a missing frame, or a body with no
+buttons is a test that never drove the interaction, **not** a finding about the client.
+
+The order, in the port's own terms (`tests/test_live_dat.py`, `tests/probe_dialog_open.py`,
+`tests/probe_dialog_text.py`):
+
+1. `client.read_agent_array()` — find the closest living, non-enemy record: the NPC to talk to;
+2. `Player.Interact(agent_id)` — once;
+3. **wait**, bounded, for the client to walk there and open its dialog. The client announces a
+   body (`0x100000A6`) and then its buttons (`0x100000A3`), and the buttons can arrive
+   **seconds** after the body, not milliseconds — a wait that stops as soon as the body lands
+   will report zero buttons for a dialog that has them;
+4. only then read the dialog: the module's state, the two journals, or the frames.
+
+A probe that is deliberately read-only (`game_thread=False`, no hook, no patch, no call) cannot
+interact, and must therefore say so and be run by the user *after* an interaction — but a test
+whose subject is the dialog's own text, labels, or state uses the capability layer and does
+steps 1–3 itself.
 
 ## Communication
 

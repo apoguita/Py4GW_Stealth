@@ -51,6 +51,8 @@ OBSERVE_RESOLVER = "ui.send_ui_message_func"
 DISPLACED = bytes.fromhex("55 8B EC 81 EC 20 02 00 00")
 UI_DISPLACED = bytes.fromhex("55 8B EC 8B 45 08 83 F8 56")
 CHANGE_TARGET_MESSAGE = 0x10000020
+#: ``ChangeTargetUIMsg`` names no string (``context/ui.h:78-84``): nothing for the observer to copy.
+CHANGE_TARGET_STRING_OFFSET = 0
 SLOT_CHANGE_TARGET = 0
 
 CHUNK = 0x10000
@@ -187,7 +189,7 @@ def main() -> int:
             },
             module_base=base,
             module_size=size,
-            watch=[CHANGE_TARGET_MESSAGE],
+            watch=[(CHANGE_TARGET_MESSAGE, CHANGE_TARGET_STRING_OFFSET)],
             observing=(observe_target, UI_DISPLACED),
         )
         bridge.wait_for_hits(2, 5000)

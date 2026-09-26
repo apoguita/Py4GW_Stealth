@@ -3,3 +3,8 @@ __pycache__/
 *.egg-info/
 /external/
 .deep-copilot/
+# The Ghidra project holding an imported Gw.exe for offline static analysis, and the Ghidra user
+# settings directory it needs (redirected here because the sandbox refuses the default one). The
+# tools read the file itself; these are the disassembler's own state and are far too large to track.
+/.ghidra/
+/.ghidra_home/

@@ -23,6 +23,7 @@ from . import item_context
 from . import account_context
 from . import gadget_context
 from . import render_context
+from . import skill_context
 from . import mission_map_context
 from . import world_map_context
 from . import salvage_context
@@ -85,6 +86,12 @@ from .pre_game_context import (
     PreGameContextStruct,
 )
 from .server_region_context import ServerRegion, ServerRegionStruct
+from .skill_context import (
+    SKILL_ARRAY_LENGTH,
+    SKILL_RECORD_SIZE,
+    SkillConstantArray,
+    SkillStruct,
+)
 from .player_agent_id_context import (
     PlayerAgentId,
     PlayerAgentIdStruct,
@@ -346,6 +353,10 @@ __all__ = [
     "GameplayContextStruct",
     "ServerRegion",
     "ServerRegionStruct",
+    "SKILL_ARRAY_LENGTH",
+    "SKILL_RECORD_SIZE",
+    "SkillConstantArray",
+    "SkillStruct",
     "PlayerAgentId",
     "PlayerAgentIdStruct",
     "InstanceInfo",

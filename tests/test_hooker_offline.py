@@ -9,19 +9,33 @@ correctly, they encode the addresses they are given, the lifecycle
 (install / enable / disable / receive / remove) behaves, and a failure part-way
 through frees what it made.
 
-What it does not prove: that the bytes *execute* the way they are meant to. That
-needs a live client and is the first thing the live test must establish.
+What it also proves, for the **post-call form**: that its stub executes. That form
+swaps the hooked function's return address, so its stack discipline cannot be
+checked by reading bytes — ``PostCallExecutionTests`` therefore allocates real
+executable memory, patches a synthetic function with the real entry patch, calls it
+through ``ctypes`` and measures: the payload runs after the body, the return value
+and the stack are where the caller left them, a re-entrant payload nests, and a
+disabled hook or a full frame stack passes the call through untouched.
+
+What it does not prove: that the *entry* form executes the way it is meant to
+against a real client. That needs a live client and is the first thing the live
+test must establish.
 """
 
 from __future__ import annotations
 
+import ctypes
 import struct
 import threading
 import time
 import unittest
+from ctypes import wintypes
 
 from py4gw.game_thread.hooker import (
     MINIMUM_PATCH,
+    POST_DEPTH,
+    POST_DEPTH_OFFSET,
+    POST_SLOTS_OFFSET,
     STATE_ENABLED_OFFSET,
     STATE_HITS_OFFSET,
     STATE_SIZE,
@@ -29,6 +43,8 @@ from py4gw.game_thread.hooker import (
     build_entry_patch,
     build_stub,
     build_trampoline,
+    post_frame_size,
+    post_state_size,
     stub_size,
 )
 from py4gw.game_thread.patcher import PAGE_EXECUTE_READ
@@ -44,6 +60,28 @@ ALLOC_BASE = 0x20000000
 REGION = 0x100000
 
 PAGE_READWRITE = 0x04
+
+#: ``kernel32``'s allocator, for the tests that run generated code in this process.
+kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+kernel32.VirtualAlloc.restype = ctypes.c_void_p
+kernel32.VirtualAlloc.argtypes = (
+    ctypes.c_void_p,
+    ctypes.c_size_t,
+    wintypes.DWORD,
+    wintypes.DWORD,
+)
+kernel32.VirtualFree.argtypes = (ctypes.c_void_p, ctypes.c_size_t, wintypes.DWORD)
+
+MEM_COMMIT_RESERVE = 0x1000 | 0x2000
+MEM_RELEASE = 0x8000
+PAGE_EXECUTE_READWRITE = 0x40
+
+#: How many of the hooked function's arguments the post-call rig forwards, which is what the
+#: observer hook forwards: the message id and its packet.
+FORWARDED = 2
+
+#: The packet pointer the rig's payload is handed, standing in for the shared block.
+RIG_BLOCK = 0x0DEADBEE
 
 
 class FakeTarget:
@@ -464,6 +502,275 @@ class LifecycleTests(unittest.TestCase):
         ):
             with self.assertRaises(ValueError):
                 call()
+
+
+class PostCallStubTests(unittest.TestCase):
+    """The post-call form's shape, read off the bytes it generates."""
+
+    def test_the_stub_size_is_independent_of_addresses(self) -> None:
+        self.assertEqual(
+            stub_size(FORWARDED, True),
+            len(build_stub(1, 2, 3, 4, 5, FORWARDED, True)),
+        )
+        self.assertEqual(
+            stub_size(FORWARDED, True),
+            len(build_stub(9, 9, 9, 9, 9, FORWARDED, True)),
+        )
+
+    def test_the_post_call_form_is_longer_than_the_entry_form(self) -> None:
+        """It keeps a frame and runs the payload on the way out, so it has more to do."""
+
+        self.assertGreater(stub_size(FORWARDED, True), stub_size(FORWARDED, False))
+
+    def test_a_frame_holds_the_return_address_and_the_arguments(self) -> None:
+        self.assertEqual(post_frame_size(0), 4)
+        self.assertEqual(post_frame_size(2), 12)
+        self.assertEqual(post_frame_size(3), 16)
+
+    def test_the_state_keeps_one_frame_per_level(self) -> None:
+        """A re-entrant call nests, so the depth is a stack and not a single slot."""
+
+        self.assertEqual(
+            post_state_size(FORWARDED),
+            POST_SLOTS_OFFSET + POST_DEPTH * post_frame_size(FORWARDED),
+        )
+        self.assertEqual(
+            post_state_size(FORWARDED) - post_state_size(0),
+            POST_DEPTH * 4 * FORWARDED,
+            "every level keeps its own copy of the arguments",
+        )
+        self.assertGreater(post_state_size(FORWARDED), STATE_SIZE)
+
+    def test_the_depth_word_is_outside_the_words_the_plain_form_uses(self) -> None:
+        """The two forms share ``enabled`` and ``hits``, so a lifecycle read still works."""
+
+        self.assertEqual(STATE_ENABLED_OFFSET, 0)
+        self.assertEqual(STATE_HITS_OFFSET, 4)
+        self.assertGreaterEqual(POST_DEPTH_OFFSET, STATE_SIZE)
+
+    def test_a_negative_argument_count_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            build_stub(1, 2, 3, 4, 5, -1, True)
+
+
+class _PostCallRig:
+    """A synthetic hooked function this process can really call, with the post-call stub on it.
+
+    The function is six bytes of prologue (the entry patch's displaced bytes) then a body that
+    writes a marker and returns ``RIG_RESULT``. The rig patches its entry with the real
+    :func:`build_entry_patch`, so a test drives the generated code and not a model of it.
+    """
+
+    #: What the synthetic function's body returns, and what it writes to the marker.
+    RESULT = 0x12345678
+    MARKER = 0x1234
+
+    #: ``push ebp``, ``mov ebp, esp``, ``sub esp, 8``: whole instructions, at least five bytes.
+    DISPLACED = bytes.fromhex("558BEC83EC08")
+
+    def __init__(self) -> None:
+        self.allocations: list[int] = []
+        self.marker = ctypes.c_uint32(0)
+        body = (
+            bytes.fromhex("C705")
+            + struct.pack("<I", ctypes.addressof(self.marker))
+            + struct.pack("<I", self.MARKER)
+            + bytes.fromhex("B878563412C9C3")  # mov eax, RIG_RESULT / leave / ret
+        )
+        self.target = self._allocate(self.DISPLACED + body)
+        self.trampoline = self._allocate(b"")
+        self._write(
+            self.trampoline,
+            build_trampoline(
+                self.trampoline, self.DISPLACED, self.target + len(self.DISPLACED)
+            ),
+        )
+        self.state = self._allocate(bytes(post_state_size(FORWARDED)))
+        ctypes.memset(self.state, 0, post_state_size(FORWARDED))
+        self.set_enabled(1)
+        self.stub = self._allocate(b"")
+        self.set_payload(None)
+        ctypes.memmove(
+            self.target,
+            build_entry_patch(self.target, self.stub, len(self.DISPLACED)),
+            len(self.DISPLACED),
+        )
+        # ``__cdecl``: the body ends in a plain ``ret``, so the caller cleans the arguments.
+        self.call = ctypes.CFUNCTYPE(
+            ctypes.c_uint32, ctypes.c_uint32, ctypes.c_uint32
+        )(self.target)
+        self.snippet = ctypes.CFUNCTYPE(ctypes.c_uint32)(
+            self._allocate(bytes.fromhex("8BC4C3"))  # mov eax, esp / ret
+        )
+
+    def _allocate(self, code: bytes) -> int:
+        address = kernel32.VirtualAlloc(
+            None, len(code) + 64, MEM_COMMIT_RESERVE, PAGE_EXECUTE_READWRITE
+        )
+        if not address:
+            raise OSError(ctypes.get_last_error(), "VirtualAlloc failed.")
+        self.allocations.append(int(address))
+        if code:
+            self._write(int(address), code)
+        return int(address)
+
+    @staticmethod
+    def _write(address: int, code: bytes) -> None:
+        ctypes.memmove(address, code, len(code))
+
+    def set_payload(self, function: object) -> None:
+        """Place ``function`` as the payload, and rebuild the stub over it at the same address.
+
+        The ``ctypes`` callback is kept on the rig: it owns a small thunk, and letting it be
+        collected would free the address the stub calls.
+        """
+
+        self.payload = (
+            None if function is None else self.payload_type()(function)
+        )
+        address = (
+            0
+            if self.payload is None
+            else (ctypes.cast(self.payload, ctypes.c_void_p).value or 0)
+        )
+        code = build_stub(
+            stub_address=self.stub,
+            state_address=self.state,
+            block_address=RIG_BLOCK,
+            dispatcher_address=address,
+            trampoline_address=self.trampoline,
+            forwarded_arguments=FORWARDED,
+            post_payload=True,
+        )
+        self._write(self.stub, code)
+
+    def payload_type(self) -> type:
+        """Return the ``__stdcall`` signature a forwarding payload is called with."""
+
+        return ctypes.WINFUNCTYPE(
+            None, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p
+        )
+
+    def stack_pointer(self) -> int:
+        """Return esp, measured rather than inferred: a drift shows up as a difference."""
+
+        return int(self.snippet())
+
+    def depth(self) -> int:
+        return int(ctypes.c_uint32.from_address(self.state + POST_DEPTH_OFFSET).value)
+
+    def set_depth(self, value: int) -> None:
+        ctypes.c_uint32.from_address(self.state + POST_DEPTH_OFFSET).value = value
+
+    def set_enabled(self, value: int) -> None:
+        ctypes.c_uint32.from_address(self.state).value = value
+
+    def marker_value(self) -> int:
+        return int(self.marker.value)
+
+    def close(self) -> None:
+        for address in self.allocations:
+            kernel32.VirtualFree(address, 0, MEM_RELEASE)
+        self.allocations = []
+
+
+class PostCallExecutionTests(unittest.TestCase):
+    """The post-call stub, executed: what the payload sees and what the caller gets back."""
+
+    def setUp(self) -> None:
+        self.rig = _PostCallRig()
+        self.addCleanup(self.rig.close)
+
+    def test_the_payload_runs_after_the_body_and_sees_the_arguments(self) -> None:
+        """The whole point of the form: the label is only the client's string inside the call."""
+
+        seen: list[tuple[int, int, int, int]] = []
+
+        def payload(block: int, first: int, second: int) -> None:
+            seen.append(
+                (int(block), int(first), int(second), self.rig.marker_value())
+            )
+
+        self.rig.set_payload(payload)
+        result = self.rig.call(0xAAAA, 0xBBBB)
+
+        self.assertEqual(result, _PostCallRig.RESULT, "the caller keeps the body's value")
+        self.assertEqual(len(seen), 1, "the payload runs exactly once per call")
+        block, first, second, marker = seen[0]
+        self.assertEqual(block, RIG_BLOCK)
+        self.assertEqual(first, 0xAAAA, "the first argument is the one the call was made with")
+        self.assertEqual(second, 0xBBBB, "and so is the second")
+        self.assertEqual(marker, _PostCallRig.MARKER, "the body had already run")
+
+    def test_the_stack_is_where_the_call_left_it(self) -> None:
+        seen: list[int] = []
+        self.rig.set_payload(lambda block, first, second: seen.append(1))
+
+        before = self.rig.stack_pointer()
+        self.rig.call(0x1111, 0x2222)
+        after = self.rig.stack_pointer()
+
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(before, after, "a byte of drift here is a crash later")
+
+    def test_the_frame_is_released_after_each_call(self) -> None:
+        self.rig.set_payload(lambda block, first, second: None)
+
+        for _ in range(3):
+            self.rig.call(0x1, 0x2)
+
+        self.assertEqual(self.rig.depth(), 0, "every level is given back")
+
+    def test_a_payload_that_sends_the_message_again_nests(self) -> None:
+        """A client can send a message while handling one, and each level keeps its own frame."""
+
+        results: list[int] = []
+        markers: list[int] = []
+
+        def payload(block: int, first: int, second: int) -> None:
+            markers.append(self.rig.marker_value())
+            if len(markers) == 1:
+                results.append(self.rig.call(0x3333, 0x4444))
+
+        self.rig.set_payload(payload)
+        before = self.rig.stack_pointer()
+        outer = self.rig.call(0x5555, 0x6666)
+        after = self.rig.stack_pointer()
+
+        self.assertEqual(len(markers), 2, "the nested call runs the payload too")
+        self.assertEqual(results, [_PostCallRig.RESULT], "the nested call returns normally")
+        self.assertEqual(outer, _PostCallRig.RESULT, "and so does the outer one")
+        self.assertEqual(before, after)
+        self.assertEqual(self.rig.depth(), 0)
+
+    def test_a_full_frame_stack_passes_the_call_through(self) -> None:
+        """No level left: the event is dropped rather than the client asked to wait."""
+
+        seen: list[int] = []
+        self.rig.set_payload(lambda block, first, second: seen.append(1))
+        self.rig.set_depth(POST_DEPTH)
+
+        before = self.rig.stack_pointer()
+        result = self.rig.call(0x7777, 0x8888)
+        after = self.rig.stack_pointer()
+
+        self.assertEqual(result, _PostCallRig.RESULT)
+        self.assertEqual(seen, [], "no frame means no payload")
+        self.assertEqual(before, after)
+        self.assertEqual(self.rig.depth(), POST_DEPTH, "a call that is not taken changes nothing")
+
+    def test_a_disabled_hook_passes_the_call_through(self) -> None:
+        seen: list[int] = []
+        self.rig.set_payload(lambda block, first, second: seen.append(1))
+        self.rig.set_enabled(0)
+
+        before = self.rig.stack_pointer()
+        result = self.rig.call(0x9999, 0xAAAA)
+        after = self.rig.stack_pointer()
+
+        self.assertEqual(result, _PostCallRig.RESULT)
+        self.assertEqual(seen, [])
+        self.assertEqual(before, after)
 
 
 if __name__ == "__main__":

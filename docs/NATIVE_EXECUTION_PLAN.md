@@ -41,7 +41,7 @@ code, and it now exists.
 
 | Native mechanism | Verified responsibility | Stealth implication |
 | --- | --- | --- |
-| `HookBase` / `THook<T>` (`include/base/hooker.h`, `src/base/hooker.cpp`) | Creates hooks through MinHook, retains the original-function trampoline, and supports enable, disable, remove, and in-hook tracking. It has both a raw-address path and a near-call-to-function path. | The lifecycle is a useful behavior reference, but the Native implementation is in-process and its DLL function-pointer model cannot simply be reused by the external host. |
+| `HookBase` / `THook<T>` (`include/base/hooker.h`, `src/base/hooker.cpp`) | Creates hooks through MinHook, retains the original-function trampoline, and supports enable, disable, remove, and in-hook tracking. It has both a raw-address path and a near-call-to-function path. | The lifecycle is a useful behavior reference, but the Native implementation is in-process; reproducing its DLL function-pointer model for the external host is outstanding work on this layer. |
 | `MemoryPatcher` (`include/base/memory_patcher.h`, `src/base/memory_patcher.cpp`) | Saves original bytes, applies/restores patches, changes page protection, flushes the instruction cache, and supports E8/E9 redirection. Active users include chat timestamps, map bypass tolerance, camera/fog, gold confirmation, and cast-bar minimum patches. | Keep byte patches distinct from function hooks. Record the exact Native patch, original bytes, state toggle, and restore behavior for each port. `SetRedirect` exists, but no active call site was found in the reviewed source tree. |
 | Game-thread bridge (`src/GW/game_thread/`) | Hooks `LeaveGameThread_Func`; runs queued single-shot work and persistent altitude-ordered callbacks before forwarding to the original function. `Enqueue` runs immediately if already on the game thread. | This is Native's central route for calling Guild Wars functions on the appropriate thread. A Stealth operation must identify its exact function and thread rule; it must not become an arbitrary remote-call facility. |
 | UI callback hooks (`src/GW/ui/`) | Hooks UI message/frame/component paths and dispatches registered callbacks; some registrations are ordered and can block the original path. | Preserve each callback's arguments, original-call behavior, order, and block/forward semantics as described by its Native call site. |
@@ -71,8 +71,7 @@ Native hook call-site groups found in the reviewed source snapshot:
 - `world_render`: `Dx9DdiDispatch`.
 - Additional source call sites: agent recolor, native UI text, quest, skill
   filter listener, and raw CToS packet sending. Crash-handler stack handling
-  is present but is not a Guild Wars gameplay feature and is not part of the
-  initial Stealth port.
+  is present but is not a Guild Wars gameplay feature and is not yet ported.
 
 The Native source also uses the game-thread queue for operations across agent,
 camera, chat, CToS, friend-list, guild, inventory/item, map/pathing, merchant,
@@ -127,7 +126,7 @@ See "Inherit the invariants, design the shape" below.
 | 4 | Pump | `CallFunctions()` inside the `LeaveGameThread` detour | the same hook, installed from outside | **done, live-verified** |
 | 5 | Action queue | `game_thread::Enqueue` | command ring + completion | **done, live-verified** |
 | 6 | Callbacks | twelve typed per-feature registries | **one** registry keyed by event type, over an event ring | **done, live-verified** — a handler fired from a real client message with no `pump()` call |
-| 7 | Call vocabulary | `NativeFunction` + `Prototypes` (17 ctypes signatures) | descriptor table + generated call stubs | **partly built** — the descriptor table and two typed forms are live-verified; breadth is the remaining work |
+| 7 | Call vocabulary | `NativeFunction` + `Prototypes` (17 ctypes signatures) | descriptor table + generated call stubs | **partly built** — the descriptor table and six typed forms; the eleven ported actions use them, and the prototype table itself is still open |
 
 Why one registry and not twelve: Native needs a typed registry per feature because
 each hook has its own signature. Every event *we* deliver arrives as the same
@@ -144,7 +143,7 @@ table of 17 reusable shapes. `prototype.build()(address)` returns a real callabl
 and ctypes handles the marshalling. Nothing about any individual function is
 written down: the pattern finds the address, the prototype says how to call it.
 
-That works in-process and cannot work for us — `ctypes.CFUNCTYPE(...)(address)`
+That works in-process and is still to port here — `ctypes.CFUNCTYPE(...)(address)`
 builds its trampoline in *our* address space, and a `Gw.exe` internal function is
 not callable from there.
 
@@ -183,7 +182,7 @@ These are the user's to make, not assumptions to build on:
    `PatternCatalog`, `modules.py` for `Win32.get_main_module` /
    `list_processes`, and their process reader for `ProcessMemoryReader`.
 3. **Whether to verify the reference live first**, before writing our own. It
-   injects, so it needs explicit scope — and it would not be our code doing it.
+   injects, and it would not be our code doing it.
 
 ### Inherit the invariants, design the shape
 
@@ -215,7 +214,7 @@ reference as findings rather than as code:**
 - how it attaches to the library — through `ConnectedClient` and the existing
   readiness discipline, like every other reader here;
 - what it refuses. The reference's own defects are recorded in
-  [`DEFERRED_INJECTION.md`](DEFERRED_INJECTION.md) and are not inherited: the
+  [`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md) and are not inherited: the
   permanent wedge on a command timeout, `close()` freeing code after a refused
   restore, the broken reinstall path, the over-narrow executable-region fallback,
   and `watch_value`'s encoder ordering.
@@ -260,10 +259,12 @@ These record that the mechanism is possible. None of it is in this library.
 - [x] **Step 4 — the payload.** `py4gw/game_thread/payload.py` plus
   `tests/test_payload_offline.py`: the dispatcher the stub calls — validate the
   block header, take at most one command, run it, publish the result and the
-  completion event. **330 bytes of machine code, emitted from Python**, not
-  written in C and compiled. The harness places those bytes in this process's own
+  completion event. **Machine code, emitted from Python**, not
+  written in C and compiled — 330 bytes when this step landed without any call
+  form, 795 with all six and with the return capture (see the value-returning call below). The harness places those bytes in this process's own
   executable memory and calls them against a fake block, so the bytes that run are
-  the bytes the installer would write. 21 tests, no compiler, no client.
+  the bytes the installer would write. 21 tests at this step; the call forms added
+  later bring it to 55, no compiler, no client.
 - [x] **Step 5 — the queue.** `py4gw/game_thread/bridge.py`: publish a command,
   wait for its result, read the events back. Plus `tests/test_bridge_offline.py`
   (25 tests against a fake target) and **`tests/test_live_bridge.py`, which runs
@@ -293,14 +294,15 @@ These record that the mechanism is possible. None of it is in this library.
 
 **The call vocabulary — started, ahead of Step 6**
 
-Chosen over Step 6 because of what the refusals actually need. Counted from the
-refusal messages themselves: of 188 refusing members, **104 are plain porting
-gaps** (a context field not ported yet), **52 need the client to do something**
-("it asks the client to travel", "dispatches a tick UI message", "add a hero"),
-6 name the callback runtime, and 6 need in-client UI or the geometry kernel. The
-52 are the largest portable chunk left, and the 6 callback ones are the
-`enable()` members that want a per-frame refresh this project refuses by design.
-So the call path buys the port; callbacks (Step 6) buy a new event surface.
+Chosen over Step 6 because of what the members still to port actually need. Counted
+from the `NotImplementedError` messages themselves: of 188 members not yet ported,
+**104 are plain porting gaps** (a context field not ported yet), **52 need the client
+to do something** ("it asks the client to travel", "dispatches a tick UI message",
+"add a hero"), 6 name the callback runtime, and 6 need in-client UI or the geometry
+kernel. The 52 are the largest portable chunk left, and the 6 callback ones are the
+`enable()` members that want a per-frame refresh, which this project has no
+per-frame loop to drive — they stay on the outstanding list. So the call path buys
+the port; callbacks (Step 6) buy a new event surface.
 
 - [x] **Descriptor table addressed by index**, so no raw address crosses the wire.
   It lives in the client, is filled by the host from the pattern catalog, and a
@@ -309,10 +311,39 @@ So the call path buys the port; callbacks (Step 6) buy a new event surface.
 - [x] **A typed call form**: `ui::SendUIMessage(message_id, wparam, lparam)` —
   the shape nearly every Native action goes through — with the command's words
   packed into a zeroed sixteen-word payload. Proven by execution, not inspection.
-- [ ] Prototype table in the host — Native's 17 shapes plus whatever we need
+- [x] **The four forms the source's other declarations need.** Enumerated from the
+  typedefs themselves, not guessed: `NO_ARGS` (`RemoveActiveTitleFn`), `U32`
+  (`SetActiveTitleFn`, `SendDialogFn`), `U32_U32_U32` (`DepositFactionFn`,
+  `DoWorldActionFn`), and `FLOAT_PTR` (`MoveToFn`). Each is proven by executing the
+  emitted dispatcher against a callee that records its arguments *and* the stack
+  pointer it was entered with, because that is what separates "pushed the right
+  values" from "pushed the right number of them": one test asserts the four forms
+  push exactly 0, 1, 3 and 4 words respectively.
+- [x] **Eleven `Player` actions ported onto those forms**, which is what the forms
+  were for: `ChangeTarget`, `CallTarget`, `Interact`, `Move`, `DepositFaction`,
+  `SetActiveTitle`, `RemoveActiveTitle`, `SendRawDialog`, `SendDialog`,
+  `SendAutomaticDialog`, `SetPlayerStatus`. Each
+  calls the function the source's own message handler calls, with the source's
+  arguments and guards. See [`PLAYER_PORT.md`](PLAYER_PORT.md).
+- [x] **Live-verified**: `tests/test_live_player.py`, elevated. Each action's effect is
+  read out of the client's own reports — the `kChangeTarget`
+  notice, `kDialogBody`, and the client's own position, title tier and status fields
+  — rather than from a call completing. The live run also found and fixed a real
+  port bug (`Player.GetActiveTitleID` was missing native's tier-zero check); see
+  [`PLAYER_PORT.md`](PLAYER_PORT.md).
+- [ ] Prototype table in the host — Native's 17 shapes plus whatever we need. The
+  eleven ported actions name their form per call site instead, which is enough for a
+  fixed set and not enough for a generated one.
 - [ ] Stub generator per signature, with a cache, placed in the client
-- [ ] Scratch-buffer allocation and marshalling for pointer parameters, so
-  `Void_FloatPtr` and `wchar_t*` calls work
+- [ ] Scratch-buffer allocation and marshalling for pointer parameters. The
+  `float*` case is done — the array is built in the dispatcher's own frame from the
+  command's three words and a zero, which is where the source builds it too — but a
+  `wchar_t*` argument needs a buffer that outlives one call, and the block has no
+  region for strings yet. That is the next piece of work for `Player.SendChat`,
+  `SendWhisper`, `SendChatCommand` and the two fake-chat members.
+- [ ] A form that brings a **value** back. A completed call reports that it ran,
+  not what it returned, so `Player.GetInstanceUptime` is still to port — it needs
+  `GW::ui::GetFrameLimit`'s result.
 
 **Settled — elevation is a precondition, not a step.** `py4gw.connect()` asserts
 elevation and refuses without it, and **a process cannot elevate itself**: the token
@@ -384,9 +415,9 @@ unfinished checkbox is the resume point.
 - [x] Define owner-loss behavior for the first passive hook: the
   self-contained stub remains resident, forwards the original callback, and
   can be validated and detached on reconnect.
-- Deferred until the normal attach/capture/detach path has passed: define
+- Next, once the normal attach/capture/detach path has passed: define
   how interrupted-install recovery and reconnect will be checked on the real
-  client. This does not block the first bounded normal-path test.
+  client. The first bounded normal-path test does not wait on it.
 
 ### Phase 3 — Mailbox format and live preflight
 
@@ -466,9 +497,8 @@ Two deliberate follow-ups, not yet done:
 1. **Descriptor registry.** `arg3` still carries an address, now bounded. The
    fully contract-shaped design is a controller-populated descriptor table in
    the bridge and a `OP_CALL_DESC <index>` opcode, so no address crosses the
-   wire at all. That was scoped out of the hardening pass and is the next
-   architectural step for extensibility rule 4 (explicit typed parameter
-   forms).
+   wire at all. That is the next architectural step here, for extensibility rule 4
+   (explicit typed parameter forms).
 2. **Live validation — DONE (elevated).** The hook, the queue round trip, and a
    call into a real Guild Wars function are now verified live. `move_to_func`
    was called on the game thread with `arg = {x, y, (float)zplane, 0}` and the
@@ -500,8 +530,8 @@ Two deliberate follow-ups, not yet done:
   skillbar, and other listed call sites.
 - [ ] For each, first mark source behavior as active, disabled, or conditional;
   then port exact callback order, original-call behavior, and cleanup.
-- [ ] Exclude crash-handler hooks and any behavior not used by Native's
-  Guild Wars feature surface unless a later source audit changes that scope.
+- [ ] Port crash-handler stack handling last of all: it is present in the source, it is
+  not a Guild Wars feature surface, and nothing above waits on it.
 
 ## Resume record
 
@@ -509,8 +539,8 @@ Two deliberate follow-ups, not yet done:
 are all live-verified now — hooks, execution, and callbacks — so what is left is
 depth rather than capability: pointer arguments (`Move(float*)`), the prototype
 table, and per-signature stubs, which is what turns one typed form into the
-vocabulary the refused action members need. Then the members themselves, one at a
-time, each with its effect asserted rather than its completion trusted.
+vocabulary the action members still to port need. Then the members themselves, one
+at a time, each with its effect asserted rather than its completion trusted.
 
 ### How the payload is produced — corrected
 
@@ -557,8 +587,10 @@ keeps every other line of the project readable.
 ### Call vocabulary, first slice — built, not yet called live
 
 Built: `Operation.CALL` and `CallForm` in `shared_block.py`, the `Descriptor`
-record and the call table, the CALL path in `payload.py` (354 bytes without a
-table, 558 with one), and the host side in `bridge.py`. Offline suite 475 tests
+record and the call table, the CALL path in `payload.py`, and the host side in
+`bridge.py`. It shipped with one form at 558 bytes and a table; with all six, and since the return
+capture, it is **795 bytes with a table, 354 without one** — the forms live in the CALL path, so a
+dispatcher built without a table does not carry them at all. Offline suite 475 tests
 green, `pyright` reports no errors.
 
 **What the sources said, before anything was written.** `Py4GW_Reforged_Native`
@@ -642,7 +674,7 @@ built above (`test_live_call.py` watches `kChangeTarget` and asserts the target 
 from the client's own notice), and a read-only resolver for the current-target
 global — `offsets/gwau3_leads.json`, landing on `0x0129A174` and confirmed
 differentially against the client's own reports. `Player.GetTargetID` is still
-refused: Native keeps the value in `g_current_target_id`, a global its
+to port: Native keeps the value in `g_current_target_id`, a global its
 `kChangeTarget` UI-message *hook* maintains (`agent.cpp:60,143-145`) and no context
 holds, and the member has not been ported onto either route.
 
@@ -1006,14 +1038,15 @@ proved the mechanism was possible. Stealth's own version of it was built in five
 steps afterwards and is live-verified in its own right — see the resume record
 above. The difference that matters: the reference ships a C source, a build script
 and a checked-in 604-byte binary; this project ships none of those, and emits its
-330-byte dispatcher from Python instead.
+own dispatcher from Python instead — 795 bytes with all six call forms and the return
+capture, and grown by one form at a time from what the source's declarations asked for.
 
 **Update 2026-09-24.** Steps 1 to 6 of the Stealth implementation are done and the
 chain is live: `tests/test_live_bridge.py` installs our hook on
 `leave_game_thread_func` in the running client, runs our operations on the game
 thread, reads their results and events, and restores the original bytes — with the
 client's whole code section hashed before and after to show it came back identical.
-The call vocabulary is built for two typed forms and is live-verified; callbacks are
+The call vocabulary is built for six typed forms and is live-verified; callbacks are
 built, registry and listener both. What remains is breadth — more forms, more kinds,
 and porting members onto them. The cost that is now
 measured rather than theoretical: each attach maps about 3 KB in the

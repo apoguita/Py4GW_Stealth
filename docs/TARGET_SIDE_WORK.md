@@ -1,18 +1,18 @@
-# Deferred target-side implementation
+# Target-side implementation work list
 
-This document tracks target-side code, writes, patches, and hooks that are
-selected for Stealth. The architecture is decided and **built**: an
+This document is the work list of target-side code, writes, patches, and hooks that
+are selected for Stealth. The architecture is decided and **built**: an
 external controller installs Stealth-owned target code without a
 conventional injected DLL. This is still injection. What follows records both what
-now exists in `py4gw/game_thread/` and what is still deferred on top of it; nothing
-listed as deferred is treated as complete. See
+now exists in `py4gw/game_thread/` and what is still to port on top of it, each
+entry naming its next step; nothing below is treated as complete. See
 [`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md) for the source inventory
 and resumable overall plan.
 
 This is also the register that [`PORTING_RULES.md`](PORTING_RULES.md) points to:
-when a ported member cannot work externally because it needs target-side code,
-its refusal goes here rather than in a list of its own. Single-member refusals
-that are not capability gaps stay in that module's port doc.
+when a ported member needs target-side code, its entry goes here rather than in a
+list of its own. Single-member entries that are not capability gaps stay in that
+module's port doc.
 
 ## Current boundary
 
@@ -32,7 +32,7 @@ functions: only through a descriptor a caller registered for that exact function
 argument form, which is how the live call test ran `ui.send_ui_message_func` and
 `agent.change_target_func`. The client's code and memory
 are modified while connected, so this is **payload injection** as defined above, and
-the sections below list what is deferred on top of it rather than instead of it.
+the sections below list what is still to port on top of it rather than instead of it.
 
 **Built, and now verified in a client.** The mechanism exists in the library: the
 shared block and its queue rules (`py4gw/game_thread/shared_block.py`), the
@@ -49,9 +49,17 @@ identical, so the nine-byte entry patch is the only client code ever written.
 That is **payload injection** as this document defines it. It is what
 `py4gw.connect()` installs by default and what `py4gw.disconnect()` removes, and the
 live tests run it from an elevated shell with a rollback they verify. What the call
-vocabulary still lacks is breadth — two typed forms where the sources need more,
-notably pointer arguments — and no ported member uses either form yet. The
-step-by-step record and the resume point are in
+vocabulary still lacks is breadth: seven forms now cover the source's own function
+declarations — no arguments, one, two, three and five words, a pointer to a four-float
+array, and a message with a packed payload — and the forms still missing are the ones
+with a **string** to place in the client rather than a pointer to one. A call's return
+value and a writable data region in the block are in use
+(`shared_block.COMMAND_OFFSET["value"]`, `data_offset`): the GW.dat read returns the
+client's record and buffer pointers through the first and hands over its hash string and
+size word through the second, live. The first eleven `Player` actions are ported onto the
+forms that exist. See
+[`PLAYER_PORT.md`](PLAYER_PORT.md) for that port and the members still to port
+within it, and
 [`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md).
 
 `External host` does not mean `non-injected` by itself. A payload that is
@@ -293,11 +301,15 @@ in Stealth's own form — not the reference's — and is live-verified.
 | Surface | Source behavior | Current status | Next source-backed step |
 | --- | --- | --- | --- |
 | Game-thread execution bridge | Native hooks `LeaveGameThread_Func` and dispatches queued work there. | **Implemented and live-verified.** `py4gw/game_thread/` hooks it, publishes commands, runs them on the game thread, reads results and events, and restores the bytes. | Broaden the call vocabulary: the typed forms the remaining source operations need, starting with pointer arguments. |
-| Decoded `ChatBuffer` history | Reforged queues `AsyncDecodeStr` on the Guild Wars game thread and uses the client's archive/string decoder. | Encoded ring messages are readable; the decoding call has not been ported. | Inventory the Native function contract and add it as a game-thread call. |
-| Native action and setter paths | Item, trade, guild, camera, party, agent, chat, and UI modules call internal functions or write client state. | The call mechanism exists and is verified; **no ported member uses it**, so these members still refuse. | Port only concrete Native operations, one at a time, with their exact ABI, parameters, thread rule, and recovery behavior. |
+| Observation **after** a hooked client call returns, and a copy of the string it named | `GW::ui::RegisterUIMessageCallback(..., 0x1)` registers the dialog's handlers at altitude `0x1` (`dialog.cpp:1273-1292`), and `SendUIMessage` runs `altitude > 0` callbacks **after** the original send returns (`ui_methods.cpp:1390-1404`) — which is where `DupWideStringSafe(info->message)` copies a button's label (`dialog.cpp:639`). | **Implemented and live-verified, both halves.** `hooker.build_stub(..., post_payload=True)` / `Hooker.install(..., after=True)` take the hooked function's return address off the stack, call the trampoline so the body still returns into this project's code, run the payload there, and return to the client's caller with the body's value and stack intact; `POST_DEPTH` frames make a re-entrant send safe. The observer then **copies the string** that message declares — `DialogButtonInfo.message` at four, `DialogBodyInfo.message_enc` at eight (`ui.h:54-65`) — into the event record (`EVENT_TEXT_WORDS`, terminator included), because the client's own call is the only moment the string is the client's. `tests/test_hooker_offline.py` executes the stub against a synthetic patched function; `tests/test_payload_offline.py` executes the observer's copy (its bound, its terminator, its slot, its guard words); live, 2026-09-25, `tests/test_live_dat.py` is 10/10 with the client restored, the body's copy word-for-word equal to the host's own read, and both button labels copying to strings that decode to their real captions. | No action required. The dialog's own use of it is **done too**: `_on_button` takes the copy as the source's `encoded_copy` and runs `dialog.cpp:641-708` as written, and the captions the module answers are the client's own decoder's text for the labels the client announced (live, 2026-09-25). |
+| Decoded `ChatBuffer` history | Reforged queues `AsyncDecodeStr` on the Guild Wars game thread and uses the client's archive/string decoder. | Encoded ring messages are readable; the decoding call has not been ported. Both decode resolvers are in the catalog (`ui.async_decode_string_func`, `ui.validate_async_decode_str_func`), and the ABI takes a **callback function pointer** — so the missing piece is a callback stub and a text area in the block, not the search. The dialog and button labels still need the same piece. **Route A does not need it**: the game's own string table, read out of `gw.dat` and decrypted on the host, renders the same codepoints with no callback at all (`py4gw/internals/string_table.py`, `docs/STRING_DECODE_PLAN.md`). | Add the decode callback as a game-thread stub, then hand the decoded text back through the block. |
+| The **ImGui text measure** `PyImGui.calc_text_size` (and the style push/pop around it) | `Utils.TokenizeMarkupText` (`py4gwcorelib_src/Utils.py:280-408`) wraps markup text to a pixel width by measuring it: it pulls a `PyImGui.StyleConfig()`, zeroes `CellPadding`/`ItemSpacing` for the duration (`284-290`, restored `404-406`), and asks `PyImGui.calc_text_size(...)` for every word and protected colour block (`339`, `363`). | **Not built, and it is the first member in this port that needs the client's ImGui at all.** `PyImGui` is an in-client binding module; the port has no call into the client's ImGui, no text-measure resolver, and no string-in form for it. The member raises and names this (`py4gw/py4gwcorelib_src/utils.py`, `docs/UTILS_PORT.md`). | Establish how the client's ImGui is reached from outside — the measure is a pure function of a string, a font and the current style, so the question is the call's address, ABI and string form, not state — then port `TokenizeMarkupText` against it. The same call is what `Map`'s `IsMouseOver` and click-coordinate members will need, so it is worth taking once, deliberately. |
+| **Control actions** — `ui::Keydown`/`Keyup`/`Keypress` | `ui::Keypress(key)` (`ui_methods.cpp:1408-1426`) is `SendFrameUIMessage(GetButtonActionFrame(), kKeyDown, &packet::KeyAction{key})` followed by a `game_thread::Enqueue` of the matching `kKeyUp`; `packet::KeyAction` is the 4-byte control-action id. Skills go through it: `GW::skillbar::UseSkill`/`PointBlankUseSkill` press `ControlAction_UseSkill1 + slot` (`skillbar_methods.cpp:439-447`), and the hero form presses `ControlAction_HeroNSkill1 + skill` (`skillbar_bindings.cpp:88-115`). | **Not built.** The pieces exist separately and are not joined: `ui.send_frame_ui_message_func` is in the catalog, the port's UI-message call form and its block data region can carry a 4-byte payload, and the frame array's `frame_id_by_hash` is the lookup `GetButtonActionFrame()` needs. What is missing is the control-action values, the button-action frame's identity, and the key-pairing on the game thread. Three `SkillBar` members raise for exactly this (`py4gw/skillbar.py`, `docs/SKILLBAR_PORT.md`). | Port `ui::Keydown`/`Keyup`/`Keypress` and the control-action table where native declares them, then the three `SkillBar` members. **A live client is required to verify it**: pressing a control action moves the game, so the test is a deliberate, user-present operation like the `Player` action suite. |
+| GW.dat reader (the string table Route A decodes from) | `GWDatReader::ReadDatFile` (`gw_dat_reader.cpp:1441-1461`): `FileHashToFileId` → `FileHashToRecObj` (or `OpenFileByFileId`) → `ReadFileBuffer(rec, &size)` → a bounded copy out → `FreeFileBuffer` → `CloseRecObj`. | **The archive read is ported and live**: `py4gw/dat_reader.py` (the port of `PyDatReader`) issues all five calls on the client's own thread, and `tests/test_live_dat.py` read a real file (91,114 bytes, 1024 entries) and rendered a real dialog body from it. The block it needs is version 3 — the command record gained `arg4`/`arg5` for `OpenFileByFileId`'s five words — and that block was installed live for the first time in the same run. **`UnpackGWDat` is not on this path** (nothing here decompresses; the direct-file path uses it, for linked icon textures). **The rest of `GWDatReader` is not ported**: image decode, the D3D9 texture cache and dye blending (`gw_dat_reader.cpp:160-1439`), which need a device inside the client. | Port the texture half where the sources take the device from — an `EndScene`/`Reset` detour, the same one `GwDxContext` waits on (below). |
+| Native action and setter paths | Item, trade, guild, camera, party, agent, chat, and UI modules call internal functions or write client state. | The call mechanism exists and is verified, and the first eleven are ported: `Player`'s target, interaction, movement, faction, title, dialog and status actions call their functions through it. The rest are still to port. | Port only concrete Native operations, one at a time, with their exact ABI, parameters, thread rule, and recovery behavior. |
 | Packet layer (CToS / StoC) | Native and Reforged send and observe client-to-server and server-to-client packets; salvage option selection is packet-driven (`0x7A` materials, `0x7B` upgrade). | Not implemented in Stealth; the packet struct family is the largest block of unported declared data. | Port the packet struct declarations first (read-only), then decide which sends are in scope. |
 | Callback-owned context pointers | Reforged Native captured `WorldMapContext`, `MissionMapContext`, and `SalvageSessionInfo` through UI callbacks. | **Resolved without injection.** Both map contexts are live-verified read-only through the frame array, open and closed; `SalvageSessionInfo` resolves the same way but its open/close handoff is untested. | No action required. See [`UI_FRAME_TREE.md`](UI_FRAME_TREE.md). |
-| `GwDxContext` render state | Native captures it from `EndScene`/`Reset` detours (`src/GW/render/render.cpp:75-111`); it is not a frame callback. | The structure is declared; the pointer needs target-side code, and render-state pointer work is outside the required in-game context scope. | Deferred indefinitely; revisit only if render state becomes an in-scope feature. |
+| `GwDxContext` render state | Native captures it from `EndScene`/`Reset` detours (`src/GW/render/render.cpp:75-111`); it is not a frame callback. | The structure is declared (`py4gw/context/render_context.py`, `GwDxContextStruct`, 0x11A0); the pointer is not read yet, because native's own `Context::GetRenderContext()` is the `g_dx_context` **its detours assign** (`context_methods.cpp:315-316`) and nothing else publishes it. **A member now waits on it**: `Map.MissionMap.GetScale` is `frame_info.viewport_scale()` (`FrameTree/frame.py:1381-1398`) over `viewport_scale_x/y`, which Reforged does not read from a record — native *computes* them in `FramePosition::GetViewportScale` (`include/GW/ui/ui.h:553-561`) as `render.GetViewportWidth()/Height()` divided by the frame's own viewport size, and those two come from the DX context. `Utils.GwinchToPixels` and `Utils.PixelsToGwinch` raise from `Map.MissionMap.GetScale` for exactly this reason ([`UTILS_PORT.md`](UTILS_PORT.md)). | Port the capture where the source captures it: the two detour targets are already resolvable (`offsets/render.json`: `end_scene_func`, `reset_func`), the hook machinery exists in `py4gw/game_thread` (`hooker.build_stub(..., post_payload=True)` / `Hooker.install(..., after=True)` is the shape an `EndScene` capture wants — the context pointer is the hook's first argument), and the block has room for the pointer. Then `Map.MissionMap.GetScale` and the two `Utils` conversions follow. Needs a live client to verify. |
 
 ## What remains active
 

@@ -41,13 +41,13 @@ from .context.party_context import (
 from .context.world_context import PetInfoStruct, WorldContextStruct
 
 
-def _disabled(member: str, requirement: str) -> NotImplementedError:
-    """Build the error raised by a member that needs code inside the client."""
+def _unported(member: str, requirement: str) -> NotImplementedError:
+    """Build the error raised by a member that is not ported yet."""
 
     return NotImplementedError(
-        f"Party.{member} is not available from an external reader: {requirement}. "
+        f"Party.{member} is not ported yet: {requirement}. "
         "It exists for source parity so a ported script fails at the call site "
-        "and names the missing mechanism instead of returning a wrong value."
+        "and names what it still needs instead of returning a wrong value."
     )
 
 
@@ -250,7 +250,7 @@ class Party:
         context instead.
         """
 
-        raise _disabled(
+        raise _unported(
             "party_instance",
             "it returns a PyParty native binding object, which only exists "
             "inside the client",
@@ -576,19 +576,19 @@ class Party:
     def SetHardMode() -> None:
         """Disabled: mode changes are requested through the client."""
 
-        raise _disabled("SetHardMode", "it asks the client to change difficulty")
+        raise _unported("SetHardMode", "it asks the client to change difficulty")
 
     @staticmethod
     def SetNormalMode() -> None:
         """Disabled: mode changes are requested through the client."""
 
-        raise _disabled("SetNormalMode", "it asks the client to change difficulty")
+        raise _unported("SetNormalMode", "it asks the client to change difficulty")
 
     @staticmethod
     def ReturnToOutpost() -> None:
         """Disabled: returning to an outpost runs a client action."""
 
-        raise _disabled(
+        raise _unported(
             "ReturnToOutpost", "it calls the client's own return-to-outpost action"
         )
 
@@ -596,13 +596,13 @@ class Party:
     def LeaveParty() -> None:
         """Disabled: leaving the party runs a client action."""
 
-        raise _disabled("LeaveParty", "it asks the client to leave the party")
+        raise _unported("LeaveParty", "it asks the client to leave the party")
 
     @staticmethod
     def SearchParty(search_type: object, advertisement: object) -> None:
         """Disabled: party search is dispatched inside the client."""
 
-        raise _disabled(
+        raise _unported(
             "SearchParty", "it dispatches a party-search UI message"
         )
 
@@ -610,7 +610,7 @@ class Party:
     def SearchPartyCancel() -> None:
         """Disabled: cancelling a party search is dispatched inside the client."""
 
-        raise _disabled(
+        raise _unported(
             "SearchPartyCancel", "it dispatches a party-search UI message"
         )
 
@@ -618,7 +618,7 @@ class Party:
     def SearchPartyReply(accept: bool = True) -> None:
         """Disabled: replying to a party search is dispatched inside the client."""
 
-        raise _disabled(
+        raise _unported(
             "SearchPartyReply", "it dispatches a party-search UI message"
         )
 
@@ -626,7 +626,7 @@ class Party:
     def RespondToPartyRequest(party_id: int, accept: bool) -> None:
         """Disabled: responding to an invite is dispatched inside the client."""
 
-        raise _disabled(
+        raise _unported(
             "RespondToPartyRequest", "it dispatches a party-invite UI message"
         )
 
@@ -634,19 +634,19 @@ class Party:
     def SetTickasToggle(enable: bool) -> None:
         """Disabled: ticking is dispatched inside the client."""
 
-        raise _disabled("SetTickasToggle", "it dispatches a tick UI message")
+        raise _unported("SetTickasToggle", "it dispatches a tick UI message")
 
     @staticmethod
     def SetTicked(ticked: bool) -> None:
         """Disabled: ticking is dispatched inside the client."""
 
-        raise _disabled("SetTicked", "it dispatches a tick UI message")
+        raise _unported("SetTicked", "it dispatches a tick UI message")
 
     @staticmethod
     def ToggleTicked() -> None:
         """Disabled: ticking is dispatched inside the client."""
 
-        raise _disabled("ToggleTicked", "it dispatches a tick UI message")
+        raise _unported("ToggleTicked", "it dispatches a tick UI message")
 
     class Players:
         """Reforged's ``Party.Players`` namespace."""
@@ -697,7 +697,7 @@ class Party:
             reader cannot produce the name.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Players.GetPlayerNameByLoginNumber",
                 "it needs the client's encoded-name decoder for arbitrary agents",
             )
@@ -706,7 +706,7 @@ class Party:
         def InvitePlayer(agent_id_or_name: object) -> None:
             """Disabled: invites are dispatched inside the client."""
 
-            raise _disabled(
+            raise _unported(
                 "Players.InvitePlayer", "it dispatches a party-invite UI message"
             )
 
@@ -714,7 +714,7 @@ class Party:
         def KickPlayer(login_number: int) -> None:
             """Disabled: kicks are dispatched inside the client."""
 
-            raise _disabled(
+            raise _unported(
                 "Players.KickPlayer", "it dispatches a party-kick UI message"
             )
 
@@ -883,37 +883,37 @@ class Party:
         def AddHero(hero_id: int) -> None:
             """Disabled: adding a hero runs a client action."""
 
-            raise _disabled("Heroes.AddHero", "it asks the client to add a hero")
+            raise _unported("Heroes.AddHero", "it asks the client to add a hero")
 
         @staticmethod
         def AddHeroByName(hero_name: str) -> None:
             """Disabled: adding a hero runs a client action."""
 
-            raise _disabled("Heroes.AddHeroByName", "it asks the client to add a hero")
+            raise _unported("Heroes.AddHeroByName", "it asks the client to add a hero")
 
         @staticmethod
         def KickHero(hero_id: int) -> None:
             """Disabled: kicking a hero runs a client action."""
 
-            raise _disabled("Heroes.KickHero", "it asks the client to kick a hero")
+            raise _unported("Heroes.KickHero", "it asks the client to kick a hero")
 
         @staticmethod
         def KickHeroByName(hero_name: str) -> None:
             """Disabled: kicking a hero runs a client action."""
 
-            raise _disabled("Heroes.KickHeroByName", "it asks the client to kick a hero")
+            raise _unported("Heroes.KickHeroByName", "it asks the client to kick a hero")
 
         @staticmethod
         def KickAllHeroes() -> None:
             """Disabled: kicking heroes runs a client action."""
 
-            raise _disabled("Heroes.KickAllHeroes", "it asks the client to kick its heroes")
+            raise _unported("Heroes.KickAllHeroes", "it asks the client to kick its heroes")
 
         @staticmethod
         def UseSkill(hero_agent_id: int, slot: int, target_id: int) -> None:
             """Disabled: it drives a hero skill through the client's keybinds."""
 
-            raise _disabled(
+            raise _unported(
                 "Heroes.UseSkill",
                 "it enqueues a client control action for a hero skill",
             )
@@ -922,7 +922,7 @@ class Party:
         def SetSkillAIEnabled(hero_agent_id: int, slot: int, enabled: bool) -> None:
             """Disabled: it changes hero skill AI inside the client."""
 
-            raise _disabled(
+            raise _unported(
                 "Heroes.SetSkillAIEnabled", "it changes hero skill AI in the client"
             )
 
@@ -930,31 +930,31 @@ class Party:
         def FlagHero(hero_id: int, x: float, y: float) -> None:
             """Disabled: flagging runs a client action."""
 
-            raise _disabled("Heroes.FlagHero", "it asks the client to flag a hero")
+            raise _unported("Heroes.FlagHero", "it asks the client to flag a hero")
 
         @staticmethod
         def FlagAllHeroes(x: float, y: float) -> None:
             """Disabled: flagging runs a client action."""
 
-            raise _disabled("Heroes.FlagAllHeroes", "it asks the client to flag its heroes")
+            raise _unported("Heroes.FlagAllHeroes", "it asks the client to flag its heroes")
 
         @staticmethod
         def UnflagHero(hero_id: int) -> None:
             """Disabled: unflagging runs a client action."""
 
-            raise _disabled("Heroes.UnflagHero", "it asks the client to unflag a hero")
+            raise _unported("Heroes.UnflagHero", "it asks the client to unflag a hero")
 
         @staticmethod
         def UnflagAllHeroes() -> None:
             """Disabled: unflagging runs a client action."""
 
-            raise _disabled("Heroes.UnflagAllHeroes", "it asks the client to unflag its heroes")
+            raise _unported("Heroes.UnflagAllHeroes", "it asks the client to unflag its heroes")
 
         @staticmethod
         def SetHeroBehavior(hero_agent_id: int, behavior: int) -> None:
             """Disabled: it changes hero behavior inside the client."""
 
-            raise _disabled(
+            raise _unported(
                 "Heroes.SetHeroBehavior", "it changes hero behavior in the client"
             )
 
@@ -965,7 +965,7 @@ class Party:
         def AddHenchman(henchman_id: int) -> None:
             """Disabled: adding a henchman runs a client action."""
 
-            raise _disabled(
+            raise _unported(
                 "Henchmen.AddHenchman", "it asks the client to add a henchman"
             )
 
@@ -973,7 +973,7 @@ class Party:
         def KickHenchman(henchman_id: int) -> None:
             """Disabled: kicking a henchman runs a client action."""
 
-            raise _disabled(
+            raise _unported(
                 "Henchmen.KickHenchman", "it asks the client to kick a henchman"
             )
 
@@ -1028,7 +1028,7 @@ class Party:
         def SetPetBehavior(behavior: int, lock_target_id: int) -> None:
             """Disabled: it changes pet behavior inside the client."""
 
-            raise _disabled(
+            raise _unported(
                 "Pets.SetPetBehavior", "it changes pet behavior in the client"
             )
 

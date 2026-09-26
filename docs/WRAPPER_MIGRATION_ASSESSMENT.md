@@ -1,11 +1,13 @@
 # Wrapper-class migration assessment
 
-Status: **assessment only; nothing ported.** This document was rewritten after
+Status: **assessment, kept current.** Its counts and verdicts describe the wrapper
+classes as they stand — `Map`, `Player`, `Party`, `Scanner` and `Dialog` are ported, and
+each one's remaining members are named in its own port doc. This document was rewritten after
 an initial version recommended `Dialog` as a pilot. That recommendation was
 wrong and the reasons are recorded below, because the mistake identifies the
 real problem.
 
-## Scope conflict that has to be resolved first
+## Scope entry that needs updating
 
 `docs/SCOPE.md:141` lists, under **"Out of scope for the current capability"**:
 
@@ -16,8 +18,8 @@ current position plainly: **"full source/API parity has been achieved for no
 context"**, and existing readers are "verified external read slices with
 documented gaps". `SCOPE.md:15-17` calls the work capability-by-capability.
 
-So migrating wrappers is a **scope expansion**, not the next documented step.
-Before any wrapper work starts, `SCOPE.md` needs to say that the wrapper layer
+So the wrapper layer is outstanding porting work, and `SCOPE.md` still records it
+under out of scope. `SCOPE.md` needs to say that the wrapper layer
 is in scope and where it sits relative to the unfinished context work.
 
 ## Why the first recommendation was wrong
@@ -32,7 +34,7 @@ inference and it is false.** The chain was:
 | `GetActiveDialog` reads game structures | `dialog.cpp:1627-1630`: `std::scoped_lock lock(dialog_mutex); return active_dialog_cache;` |
 
 `GetActiveDialog` returns a **cache held inside the in-process project**. The
-data is captured in the DLL, not stored anywhere Stealth can read. Two things
+data is captured in the DLL, not stored in a game structure Stealth reads. Two things
 named "dialog" was a coincidence, and I treated it as evidence.
 
 The same pattern appears in `Quest`. `request_quest_name`,
@@ -53,8 +55,8 @@ The classification each wrapper method needs is:
 | --- | --- | --- |
 | `context` | a structure Stealth already reads | implementable now |
 | `computed` | pure calculation over other values | implementable now |
-| `capture` | in-process cache filled by a hook, callback, or async reply | **needs target-side machinery** — the hook and callback layer exists in `py4gw/game_thread/`, but no wrapper member is wired to it |
-| `action` | a game call, UI click, packet, queue, or memory write | **mechanism partly exists** (a game-thread call and a UI message); no wrapper member is ported onto it |
+| `capture` | in-process cache filled by a hook, callback, or async reply | **partly in use** — the hook and callback layer exists in `py4gw/game_thread/`, and `Player.GetTargetID` and the dialog module's state read values the connection captured from the client's own messages; the other wrappers' captures are not wired |
+| `action` | a game call, UI click, packet, queue, or memory write | **in use for `Player`** — eleven members are ported onto the game-thread call path; the other wrappers' actions are not ported yet |
 
 `capture` is the dangerous one, because it is invisible in the Python layer: the
 wrapper looks read-only and the cost only appears when the native binding is
@@ -114,30 +116,34 @@ what each mechanism needs and what Stealth has of it today.
 
 | Mechanism | Example | Path | Mechanically reachable? |
 | --- | --- | --- | --- |
-| **A** game function via a game-thread queue | `Player.Move`, `DepositFaction`, `SkipCinematic` | `NativeFunction` (pattern-scanned address) -> `PyGameThread.enqueue` -> `ctypes` call | **yes, mechanism exists** — the emitted dispatcher calls a registered game function on the client's own thread, live-verified with `agent.change_target_func`. No wrapper member is ported onto it yet |
-| **B** native binding call | `SkillBar.UseSkill`, `Inventory.SalvageItem`, `Trading.BuyItem` | `PySkillbar.Skillbar().UseSkill(...)`, `PyInventory.PyInventory().Salvage(...)` | **no** — the binding is Reforged's own DLL code, not a game function we can resolve |
+| **A** game function via a game-thread queue | `Player.Move`, `DepositFaction`, `SkipCinematic` | `NativeFunction` (pattern-scanned address) -> `PyGameThread.enqueue` -> `ctypes` call | **in use** — the emitted dispatcher calls a registered game function on the client's own thread. `Player` has eleven such members ported onto it (`Move`, `DepositFaction`, `ChangeTarget`, `CallTarget`, `Interact`, `SetActiveTitle`, `RemoveActiveTitle`, `SendRawDialog`, `SendDialog`, `SendAutomaticDialog`, `SetPlayerStatus`); the rest of the wrappers' actions are not ported yet |
+| **B** native binding call | `SkillBar.UseSkill`, `Inventory.SalvageItem`, `Trading.BuyItem` | `PySkillbar.Skillbar().UseSkill(...)`, `PyInventory.PyInventory().Salvage(...)` | **not ported** — the binding is Reforged's own DLL code, not a game function we can resolve |
 | **C** UI-message dispatch | chat, travel, target, dialog | `UIManager.SendUIMessage` -> `PyUIManager` -> game's own message handler, which emits the CtoS packet | **yes, mechanism exists** — the `UI_MESSAGE` call form reaches the client's own `send_ui_message_func`, live-verified |
 | **D** frame click | `Frame.click()`, `SalvageOptionsWindow.SelectOption` | `PyUIManager.UIManager.button_click(frame_id)` | **not established** — it is a call into the engine's frame/mouse handler, so the same call mechanism would apply, but its address and ABI have not been resolved or verified |
 | **E** memory write | guild-hall key copy, `Frame.set_text` | writes into the game struct, or a native binding that writes it | **transport exists, nothing ported** — `py4gw/win32/write_access.py` writes; no ported member writes through it |
 
 ### The frame click is not simulated input
 
-This is worth stating separately because it closes a path that looks open.
+This is worth stating separately because it rules out the obvious substitute.
 `Frame.click()` is `PyUIManager.UIManager.button_click(self.frame_id)`
 (`FrameTree/frame.py:1260-1263`), and `mouse_action` is
 `test_mouse_action(frame_id, ...)`. There is **no `SendInput`, `PostMessage`,
 `SetCursorPos`, or `mouse_event` anywhere in that path** — it is a direct
 in-process call into the engine's frame/mouse handler.
 
-So UI automation cannot be reproduced externally by synthesising Windows input,
-and `UIManager`, `GWUI`, and the salvage-dialog helpers are not reachable that
-way.
+So the route to UI automation is that in-process frame/mouse call itself, not
+synthesised Windows input; `UIManager`, `GWUI`, and the salvage-dialog helpers
+are not ported yet, and that call is what they need.
 
-Consequence for the four-class table above: a wrapper method is only
-implementable now when it is `context` or `computed`. An `action` method needs a
-call vocabulary entry for its exact function and argument form, and a `capture`
-method needs its source mechanism ported onto the hook and callback layer. Neither
-has happened for any wrapper member yet, which is why they refuse.
+Consequence for the four-class table above: an `action` method needs a call
+vocabulary entry for its exact function and argument form, and a `capture` method
+needs its source mechanism ported onto the hook and callback layer. The call
+vocabulary now covers the shapes `Player`'s actions need, and eleven of them are
+ported; `Player`'s remaining members are waiting on a string buffer, a
+value-returning form, or two unported modules rather than on the call path itself.
+A `capture` member is ported onto the callback layer now: `Player.GetTargetID` reads
+the target the connection captured from the client's own `kChangeTarget` notice, and
+`Dialog` reads its agent and button state from two more of the client's messages.
 
 ## Caching: the `frame_cache` decorator and `FrameCache`
 
@@ -202,29 +208,32 @@ invalidation, no size bound and no lock.** Correctness comes entirely from the
 per-frame wipe, and the cost model assumes an in-process frame loop where a read
 is expensive and a tick is free.
 
-### Decision: the decorator is dropped, not adapted
+### Decision: the class is Reforged's, and this port is not frame-based
 
-**Resolved. This section previously listed candidate designs for "what supplies
-the tick". The answer is none of them and the question is closed.** The rule is
-in [`PORTING_RULES.md`](PORTING_RULES.md); the contract is in `AGENTS.md`.
+**Resolved: nothing here supplies a tick, because there is no frame to tie one to.**
+`@frame_cache` is a Reforged feature of a frame-based environment. The rule is in
+[`PORTING_RULES.md`](PORTING_RULES.md); the contract is in `AGENTS.md`.
 
-The dictionary, the key normalisation and the decorator would be a direct port
-with no dependency — the only in-process coupling in the file is the invalidation
-trigger, `PyCallback.Phase.PreUpdate`. That coupling is decisive:
+The dictionary, the key normalisation and the decorator would be a direct port with no
+dependency — the only coupling is the invalidation trigger,
+`PyCallback.Phase.PreUpdate`. That coupling is decisive:
 
-- Stealth is **not run every frame** and is **not throttled**. It reads the client
-  **on demand**, at the call site.
-- A ported `FrameCache` would **never be cleared**: the `PreUpdate` callback cannot
-  be registered read-only, so no tick would ever fire.
+- **Stealth is not frame-based.** Nothing runs per frame, nothing is throttled by
+  frame, and there is no frame boundary to key a memo to. Reads happen on demand, at
+  the call site.
+- A copy of the decorator would **never be cleared**: there is no frame tick to fire
+  its invalidation, so the memo would outlive the thing it describes.
 - An uncleared memo of a map-scoped read is a stale-data bug, not a performance
   win. It would also silently defeat the `Map.IsMapReady()` gating, which is
   re-evaluated per read precisely so that a map change is noticed by re-asking the
   client rather than by a timer expiring.
 
-So ported members carry **no** `@frame_cache`, and no substitute tick — no TTL, no
-throttle, no refresh timer, no `with py4gw.frame():` block, no caller-driven
-`cache.reset()`. Caching is still permitted for large structures whose contents
-are expensive to re-read; what is forbidden is caching *as a frame-throttle*.
+**Not now, not never:** if this port ever gains a frame-driven mode, `FrameCache` is the
+class to use — `py4gwcorelib_src/FrameCache.py` as written — and nothing invented here.
+Until then ported members carry no `@frame_cache` and no substitute of our own: no TTL,
+no refresh timer, no `with py4gw.frame():` block, no caller-driven `cache.reset()`.
+Caching is still permitted for large structures whose contents are expensive to
+re-read; what is not this port's model is caching *as a frame-throttle*.
 
 Recorded in three places on purpose, because this is the question most likely to
 be asked again: `AGENTS.md` (the contract), [`PORTING_RULES.md`](PORTING_RULES.md)
@@ -259,13 +268,14 @@ This matters for the "simpler approach" and is easy to mistake for one system.
 
 Layer 2 is roughly 4,600 lines that re-implement layer 1's API surface plus
 throttling and queueing. The mirror exists to batch in-process reads behind a
-game-frame tick, and Stealth has no frame loop to batch against.
+game-frame tick, and this port has no frame loop to batch against.
 
-**Neither layer is ported.** Layer 2 is out because it is a throttled mirror of
-layer 1, and layer 1 is out because its only invalidation is the frame tick (see
-the decision above). The port surface for caching is therefore **nothing** — the
-members read on demand. Neither the 4,600-line `GlobalCache` tree nor the 165-line
-`FrameCache` is needed.
+**Neither layer is used here, for the same single reason: they are frame-based, and this
+port is not.** Layer 2 is a throttled mirror of layer 1, and layer 1's only invalidation
+is the frame tick (see the decision above). The caching surface for the port is
+therefore **nothing** — the members read on demand. Neither the 4,600-line `GlobalCache`
+tree nor the 165-line `FrameCache` is needed for that. If a frame-driven mode ever
+arrives, both are Reforged's to use as written.
 
 Note the framing this replaces: an earlier draft of this document concluded that
 "layer 1 alone gives the source-visible behaviour — the value is memoised for the
@@ -297,8 +307,12 @@ reads contexts, but three agent identity calls are not equivalent:
 | `GW::agent::GetObservingId()` | `Context::GetObservingId()` -> `*g_player_agent_id_addr`, a pattern-resolved game address (`context_methods.cpp:115`) | `context` |
 | `GW::agent::GetTargetId()` | `return g_current_target_id;` — a DLL global set from a `kChangeTarget` UI-message hook (`agent.cpp:60, 163`) | **`capture`** |
 
-`Player.GetTargetID` therefore cannot be implemented externally, even though it
-looks like a plain field read. The rest of `GetContext()`
+The classification was right and the conclusion drawn from it was wrong. `capture` does
+not mean "cannot be implemented externally"; it means the value arrives on a message
+rather than sitting in a context — and this project now has a hook, an event region and
+a registry, so it can listen to the same message the runtime listens to. **Ported and
+live-verified**: the client announced target `16` and `Player.GetTargetID()` read `16`
+(`docs/PLAYER_PORT.md`). The rest of `GetContext()`
 (`player_methods.cpp:141-195`) reads `Context::GetWorldContext`,
 `Context::GetCharContext` (`player_email`, `player_uuid`), `world->accountInfo`
 (name, wins, losses, rating, qualifier points, rank, tournament points),
@@ -308,8 +322,9 @@ structures Stealth already reads.
 **Full Player split (68 methods):** 41 `context`, 4 `computed`, 3 `capture`,
 20 `action`.
 
-Blockers: `GetTargetID`, `GetChatHistory`, `IsChatHistoryReady` (the last two
-read `g_chat_history` / `g_chat_ready`, DLL globals behind an async fetch).
+Not yet ported: `GetChatHistory`, `IsChatHistoryReady` (both read `g_chat_history` /
+`g_chat_ready`, DLL globals behind an async fetch — the decode increment). The third
+`capture`, `GetTargetID`, is ported; it is the worked example of the class.
 
 ## Other wrappers with no execute or write methods
 
@@ -331,8 +346,8 @@ makes them candidates after Player:
 1. **`request_*` methods are not plain reads.** `Item.RequestName`,
    `Quest.request_quest_*`, `Player.RequestChatHistory` and similar call native
    asynchronous fetch/decode bindings. They mutate nothing and send no packet,
-   but they are native calls with no external equivalent, so they belong to the
-   `capture` class rather than `read`.
+   but they are native calls whose fetch/decode side is not ported yet, so they
+   belong to the `capture` class rather than `read`.
 2. **`Party.IsPlayerLoaded` is a no-op stub** (`Party.py:249`, a bare `pass`),
    and 19 `Agent` methods are constant-returning stubs with the logic commented
    out. Those should be declared for parity but must not be presented as working.
@@ -360,8 +375,8 @@ whole surface is declared, its `context` and `computed` methods work, and its
 3. **Run a provenance audit before choosing a pilot.** For a candidate wrapper,
    trace every method into its native binding and classify it `context`,
    `computed`, `capture`, or `action`. The pilot must have no `capture` methods,
-   because a `capture` method cannot be implemented at all without target-side
-   machinery.
+   because a `capture` method needs target-side machinery, which the wrapper port
+   has not reached yet.
 4. **Then migrate one wrapper at a time**, with the same sign-off gate the
    contexts used.
 
@@ -374,8 +389,8 @@ whole surface is declared, its `context` and `computed` methods work, and its
    [`PORTING_RULES.md`](PORTING_RULES.md). `GlobalCache/*` is ~4,600 lines with no
    Stealth counterpart, and it is a throttled mirror of a layer that is itself
    not ported.
-3. **`capture` methods**: should they be declared with an explicit unavailable
-   status (the current contract), or does the owner want some of them to wait
-   for the Phase 5 payload work?
+3. **`capture` methods**: should they keep an explicit not-yet-ported status
+   (the current contract), or does the owner want some of the capture work
+   taken next?
 4. **Pilot choice**: after the provenance audit, which wrapper is accepted
    first.

@@ -57,8 +57,8 @@ as loading, which is why an undeclared value is refused rather than trusted.
 ## What the members read
 
 `GWContext.X.IsValid()` in Reforged is `X.GetContext() is not None`, tested
-against facade objects its injected callbacks maintain. This project has no
-callbacks, so the equivalent is whether the reader resolved the context on that
+against facade objects its injected callbacks maintain. This project's readers take
+no callbacks, so the equivalent is whether the reader resolved the context on that
 read. Each `_char_context()`, `_map_context()`, `_instance_info_context()` and
 `_world_context()` helper returns `None` when the read fails, and that `None` is
 what `IsMapDataLoaded()` tests.

@@ -4,10 +4,16 @@
 with the same name and signature, so a ported script reads ``Player.GetLevel()``
 exactly as before. What differs is which members can produce a value:
 
-* implemented -- the value comes from a game context this project can read;
-* disabled    -- the value lives in DLL-owned state, or the member performs an
-  action. Calling one raises ``NotImplementedError`` naming the missing
-  mechanism, rather than returning a wrong value.
+* reading    -- the value comes from a game context this project can read;
+* acting     -- the member changes the game by calling the client's own function
+  on the client's own thread through ``py4gw/game_thread``;
+* refused    -- the value lives in DLL-owned state, or the mechanism that would
+  carry the action is not ported. Calling one raises ``NotImplementedError``
+  naming the missing mechanism, rather than returning a wrong value.
+
+This example reads, then shows refused members refusing. It does **not** call an
+action member: those change the game, so exercising one is a deliberate operation
+with someone watching the client.
 
 ``Player`` resolves the selected client the way the context readers do, so call
 ``py4gw.connect(...)`` first. No options argument is needed: unlike the contexts,
@@ -113,19 +119,54 @@ print(f"status name      0 -> {Player.GetPlayerStatusNameFromValue(0)!r}")
 print(f"status name      'dnd' -> {Player.GetPlayerStatusNameFromValue('dnd')!r}")
 print(f"format chat      {Player.FormatChatMessage('hello', 255, 128, 0)!r}")
 
-# ── disabled members ──────────────────────────────────────────────────────
+# ── refused members ───────────────────────────────────────────────────────
 print()
-print("disabled members raise instead of returning a wrong value:")
+print("refused members raise instead of returning a wrong value:")
 
 for label, call in (
-    ("Move", lambda: Player.Move(0.0, 0.0)),
-    ("ChangeTarget", lambda: Player.ChangeTarget(1)),
-    ("GetTargetID", Player.GetTargetID),
+    ("player_instance", Player.player_instance),
+    ("GetInstanceUptime", Player.GetInstanceUptime),
+    ("RequestChatHistory", Player.RequestChatHistory),
+    ("IsChatHistoryReady", Player.IsChatHistoryReady),
     ("GetChatHistory", Player.GetChatHistory),
+    # The Balthazar default path is the source's chain with one missing piece behind it: the PvP
+    # remap reads Skill.ExtraData.GetIDPvP, so the raise comes from Utils where the source calls it.
+    ("UnlockBalthazarSkill", lambda: Player.UnlockBalthazarSkill(1)),
 ):
     try:
         call()
     except NotImplementedError as error:
-        print(f"  {label:<16} NotImplementedError: {error}")
+        print(f"  {label:<20} NotImplementedError: {error}")
+
+# ── action members ────────────────────────────────────────────────────────
+# Not called here. These eighteen change the game — Move moves the character,
+# ChangeTarget targets, the chat sends reach the client's own sender — so exercising
+# one is a deliberate operation with someone watching the client, not something an
+# example does on its way past. Two of them need their argument to be useful rather
+# than merely safe: BuySkill and UnlockBalthazarSkill want a real skill id, and the
+# interaction members want an agent.
+print()
+print("action members (not called by this example):")
+for label in (
+    "ChangeTarget(agent_id)",
+    "CallTarget(agent_id)",
+    "Interact(agent_id, call_target=False)",
+    "Move(x, y, zPlane=0)",
+    "DepositFaction(faction_id)",
+    "SetActiveTitle(title_id)",
+    "RemoveActiveTitle()",
+    "SendRawDialog(dialog_id)",
+    "SendDialog(dialog_id)",
+    "SendAutomaticDialog(button_number)",
+    "SetPlayerStatus(status)",
+    "BuySkill(skill_id)",
+    "UnlockBalthazarSkill(skill_id, use_pvp_remap=True)",
+    "SendChatCommand(command)",
+    "SendChat(channel, message)",
+    "SendWhisper(name, message)",
+    "SendFakeChat(channel, message)",
+    "SendFakeChatColored(channel, message, r, g, b)",
+):
+    print(f"  Player.{label}")
 
 py4gw.disconnect()

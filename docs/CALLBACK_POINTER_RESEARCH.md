@@ -7,8 +7,8 @@
 > is retained for the work that still needs target-side code. That code has since
 > been built elsewhere and for different targets: `py4gw/game_thread/` installs
 > two entry hooks, an emitted dispatcher and an observer, and `py4gw.connect()`
-> installs it by default. **The WorldMap callback detour this document specifies is
-> still not built**, because the frame-array route reaches the same pointer without
+> installs it by default. **The WorldMap callback detour this document specifies has
+> not been ported yet**, because the frame-array route reaches the same pointer without
 > one; the mechanism it was waiting on now exists.
 
 ## Direction
@@ -51,7 +51,7 @@ but its open/close handoff is untested.
 
 This does not retire the payload plan below. It removes the map and salvage
 surfaces as features that forced the mechanism to exist before it was needed,
-and it leaves the payload for the cases that genuinely require target-side
+and it leaves the payload for the cases that still need target-side
 code: game-thread operations, the `GwDxContext` `EndScene`/`Reset` detour, and
 any future context whose owner is not readable.
 
@@ -87,9 +87,9 @@ flag's live transition has not yet been tested in Stealth.
 ### Intent and scope
 
 Make the already-ported `WorldMapContext` reader receive its real root address
-from the same UI callback route used by Native. Work on one callback only; do
-not add `MissionMapContext`, commands, or other in-game actions until this
-path is proven. Stealth remains independent: its own controller installs and
+from the same UI callback route used by Native. Work on one callback only;
+`MissionMapContext`, commands, and other in-game actions come after this path is
+proven. Stealth remains independent: its own controller installs and
 removes the target-side code, and it does not use Reforged's DLL or shared
 memory.
 
@@ -368,4 +368,4 @@ clearly. That path is not implemented, so no map manipulation is needed yet.
 The current source-by-source context inventory is in
 [`CONTEXT_PARITY_AUDIT.md`](CONTEXT_PARITY_AUDIT.md). Runtime-changing work and
 its approval gate are recorded in
-[`DEFERRED_INJECTION.md`](DEFERRED_INJECTION.md).
+[`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md).

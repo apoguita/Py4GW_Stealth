@@ -22,24 +22,25 @@ context.** Existing readers are verified external read slices with documented
 gaps, not completed Reforged/native context replacements.
 
 **Where the port stands.** Reforged and Reforged Native are complete, working
-libraries that ship and run in production. Stealth is the port of them, and the
-port is at an early stage: contexts can be loaded and read. The ported library is
-read-only in every path it executes; a separate capability layer,
+libraries that ship and run in production. Stealth is the port of them. The ported
+library is read-only in every path it executes; a separate capability layer,
 `py4gw/game_thread/`, places code in the client and is live-verified doing it.
 **Hooks, execution on the game's own thread, and callbacks all exist**, installed by
-`py4gw.connect()` and removed by `py4gw.disconnect()`. What is thin is breadth: two
-typed call forms where the sources need more, and a callback kind per hooked
+`py4gw.connect()` and removed by `py4gw.disconnect()`. What is left is breadth of
+porting: six typed call forms are implemented, and the forms the sources' remaining
+declarations need — a pointer to a string, a structure to place in the client, a value
+brought back — are the next work on that layer, along with a callback kind per hooked
 function. No ported context consumes any of it yet, which is why a member whose
-source registers a callback still refuses — the read-only readers are unchanged and
-still read only.
+source registers a callback is still to port — the read-only readers are unchanged
+and still read only.
 
 **The structure is ported complete regardless.** Every member of a ported class is
 declared in the source's own shape and nesting, including the members whose bodies
-cannot run yet, so that a capability arriving later is ported into a slot that
-already exists instead of forcing the class to be re-cut. A refused member is a
-placeholder carrying its name, its source line and the mechanism that blocks it —
-never a prompt to write a substitute. See
-[`PORTING_RULES.md`](PORTING_RULES.md) for the mandate and the refusal procedure.
+are not yet ported, so that a capability arriving later is ported into a slot that
+already exists instead of forcing the class to be re-cut. A member that is still to
+port is a placeholder carrying its name, its source line and the capability it
+needs — never a prompt to write a substitute. See
+[`PORTING_RULES.md`](PORTING_RULES.md) for the mandate and the recording procedure.
 
 When a context is migrated, the target is parity with the active behavior in
 `Py4GW_Reforged_Native` and `Py4GW_Reforged`. We migrate fields and helpers
@@ -202,8 +203,9 @@ contract and live harness.
 
 The current implementation does not:
 
-- reproduce Py4GW's native `Py*` binding modules, its UI widgets, or the game
-  actions its wrappers perform;
+- reproduce Py4GW's native `Py*` binding modules or its UI widgets; the game
+  actions its wrappers perform are in scope and are ported one at a time onto the
+  capability layer;
 - select a client by character, map, or memory signature; or
 - promise compatibility with every Reforged feature.
 
@@ -211,24 +213,31 @@ Writes are in scope only through the one documented mechanism:
 `py4gw/game_thread/`, installed by `py4gw.connect()`. Nothing else writes. The
 capability layer creates no remote thread, loads no DLL, and calls a Guild Wars
 function only through a descriptor registered for that exact function and argument
-form; the two call forms implemented so far are the ones the live tests exercise.
+form; the six call forms implemented so far are the ones the source's own
+declarations need, and the first eleven `Player` actions are ported onto them.
 
-The distinction that matters is between a wrapper's **data surface**, which is
-in scope, and its **bindings and actions**, which are not:
+The distinction that matters is between a wrapper's **data surface**, which is in
+scope as reads, and its **bindings and actions**, which are in scope as calls into
+the client's own functions — or as members still to port:
 
 | Surface | Status |
 | --- | --- |
 | Reforged wrapper data members (`Player.GetLevel`, `Player.GetAgent`, ...) | **in scope** — ported as read-only accessors over the context readers |
 | Accessor classes ported from Reforged and Native (`Map`, `Party`, `Player`) | **in scope** — ported member for member, see [`PORTING_RULES.md`](PORTING_RULES.md) |
-| Native `Py*` binding modules (`PyPlayer`, `PyInventory`, ...) | **out of scope** — they are Reforged's own DLL code, not a game function this project can resolve |
+| Native `Py*` binding modules (`PyPlayer`, `PyInventory`, ...) | **out of scope** — they are Reforged's own DLL binding objects, and this project loads no DLL; the members they wrap are ported, or still to port, in the wrapper classes above |
 | UI widgets, ImGui panels, and the host framework | **out of scope** |
-| Wrapper action members (`Player.Move`, `Player.SendChat`, ...) | **out of scope** — ported as members that refuse, so a migrated script fails at the call site |
+| Wrapper action members (`Player.Move`, `Player.SendChat`, ...) | **out of scope as reads** — each is ported as either an action that calls the client's own function on its own thread, or a member that is still to port. Which one an individual member is, is recorded in its port doc. |
 
-Ported action members are present but disabled; they raise and never execute.
-The reason a wrapper class is worth porting even when many of its members
-refuse is that the *names and signatures* are the migration contract: a script
-moves over unchanged, and the members that cannot work say so instead of
-returning a plausible wrong value. See
+An action member that is not yet ported is present but inert: it raises and never
+executes. An action member that is ported executes, and does it by calling the
+client's own function on the client's own thread through `py4gw/game_thread` —
+`Player` has eleven of those and twelve still to port. Nothing in between exists: a
+member either reads, acts through that layer, or raises for the capability it still
+needs.
+The reason a wrapper class is worth porting even when many of its members are
+still to port is that the *names and signatures* are the migration contract: a
+script moves over unchanged, and the members that are not yet ported say so
+instead of returning a plausible wrong value. See
 [`PLAYER_PORT.md`](PLAYER_PORT.md) for the reference implementation.
 
 Target-side writes, code, and patches are part of the architecture, not an open

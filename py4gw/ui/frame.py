@@ -307,6 +307,11 @@ assert FrameStruct.tooltip_info.offset == 0x1AC
 _FRAME_SENTINEL = 0xFFFFFFFF
 _MIN_POINTER = 0x10000
 
+#: The project's documented string ceiling, used as the bound for one wide-string read.
+#: A label is a line of UI text; the ceiling exists so a pointer that is not a string costs
+#: a bounded number of reads instead of an unbounded one.
+_LABEL_CODE_UNIT_LIMIT = 32768
+
 
 def is_valid_frame_pointer(pointer: int) -> bool:
     """Return whether a frame-array slot holds a usable frame pointer.
@@ -467,6 +472,34 @@ class FrameArray:
                 return frame_id
         return None
 
+    def frame_id_by_hash(self, frame_hash: int) -> int:
+        """``GetFrameIDByHash`` (``ui_methods.cpp:575-587``): first frame with this hash.
+
+        The source walks the array comparing ``frame->relation.frame_hash_id`` and
+        returns the index, with **``0`` meaning "not found"** — its callers refuse a
+        zero id before using it. Only valid slots are considered, which is the source's
+        ``IsFrameValid`` filter.
+
+        Two notes on the shape. The source reads each frame whole in-process; this port
+        reads the single hash field per slot, because every slot is a separate
+        ``ReadProcessMemory`` here. And the source's ``__try``-guarded callers treat an
+        unreadable frame as invalid rather than as an error, so a slot whose hash cannot
+        be read is skipped rather than raised — the same outcome the source's fault
+        handling produces.
+        """
+
+        if not frame_hash:
+            return 0
+        hash_offset = FrameStruct.relation.offset + FrameRelationStruct.frame_hash_id.offset
+        for frame_id, pointer in self.iter_slots():
+            try:
+                value = self.read_u32(pointer + hash_offset)
+            except OSError:
+                continue
+            if value == frame_hash:
+                return frame_id
+        return 0
+
     def read_u32(self, address: int) -> int:
         """Read one 32-bit little-endian target value."""
 
@@ -545,6 +578,74 @@ class FrameArray:
             if context >= _MIN_POINTER:
                 return context
         return 0
+
+    # -- text labels (``TextLabelFrame::GetEncodedLabel`` / ``GetDecodedLabel``) ----
+
+    #: ``WIDE_CHAR_SIZE``: the client's labels are UTF-16 code units on disk and in memory.
+    _WIDE_CHAR_SIZE = 2
+
+    def read_wide_string(self, address: int, limit: int) -> str:
+        """Read a NUL-terminated UTF-16 string, at most ``limit`` code units.
+
+        The read stops at the terminator or the limit, whichever comes first, so a pointer
+        that is not a string costs a bounded number of reads rather than an unbounded one.
+        An unreadable address raises, which is the reader's own behaviour.
+        """
+
+        if address < _MIN_POINTER or limit <= 0:
+            return ""
+        units: list[int] = []
+        for index in range(limit):
+            unit = self.read_u32(address + index * self._WIDE_CHAR_SIZE) & 0xFFFF
+            if unit == 0:
+                break
+            units.append(unit)
+        return "".join(chr(unit) for unit in units)
+
+    def encoded_label(self, frame: FrameStruct) -> str:
+        """``TextLabelFrame::GetEncodedLabel`` (``ui_methods.cpp:2216-2222``).
+
+        The frame's context holds ``[+4] a pointer to the encoded label`` and ``[+0xC]`` a
+        size word that is zero when there is no label. The encoded string is what the
+        client stores; :meth:`decoded_label` is the rendered one.
+        """
+
+        context = self.frame_context_address(frame)
+        if not context:
+            return ""
+        if self.read_u32(context + 0xC) == 0:
+            return ""
+        encoded_pointer = self.read_u32(context + 0x4)
+        return self.read_wide_string(encoded_pointer, _LABEL_CODE_UNIT_LIMIT)
+
+    def decoded_label(self, frame: FrameStruct) -> str:
+        """``TextLabelFrame::GetDecodedLabel`` (``ui_methods.cpp:2224-2234``).
+
+        The client keeps the **decoded** label in the same allocation, immediately after
+        the encoded one: the source computes ``len = wcslen(enc) + 1`` and returns
+        ``enc + len``, guarded by the size word at ``[+0xC]``. This is a read of what the
+        client has already rendered, which is why it needs no decoder here.
+
+        Returns ``""`` where the source returns ``nullptr``: no context, a zero size word,
+        or a decoded copy that does not fit inside the size word.
+        """
+
+        context = self.frame_context_address(frame)
+        if not context:
+            return ""
+        size = self.read_u32(context + 0xC)
+        if size == 0:
+            return ""
+        encoded_pointer = self.read_u32(context + 0x4)
+        encoded = self.read_wide_string(encoded_pointer, _LABEL_CODE_UNIT_LIMIT)
+        # ``wcslen`` counts UTF-16 code units, and ``Python`` strings count code points,
+        # so the length is taken from the encoded form rather than from ``len(str)``.
+        length = len(encoded.encode("utf-16-le")) // self._WIDE_CHAR_SIZE + 1
+        if length >= size:
+            return ""
+        return self.read_wide_string(
+            encoded_pointer + length * self._WIDE_CHAR_SIZE, _LABEL_CODE_UNIT_LIMIT
+        )
 
 
 FramePosition = FramePositionStruct

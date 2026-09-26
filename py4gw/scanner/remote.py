@@ -40,6 +40,12 @@ class RemoteScanner:
     _SECTION_SIZE = 40
     _DEFAULT_CHUNK_SIZE = 0x10000
 
+    #: ``kGwImageBase`` (``dialog_patterns.cpp:23``): the base the client's symbols were
+    #: linked against, and the one ``ToRuntimeAddress`` rebases hardcoded addresses from.
+    #: It is a constant of the sources, not a field of the module: see
+    #: :meth:`initialize` for what this client's header says instead.
+    _LINK_IMAGE_BASE = 0x00400000
+
     def __init__(
         self,
         reader: _memory_reader,
@@ -106,6 +112,19 @@ class RemoteScanner:
         if optional_magic != self._PE32_MAGIC:
             raise ValueError("Target module does not contain a PE32 optional header.")
 
+        # ``ToRuntimeAddress`` (``dialog_patterns.cpp:23-31``) rebases a hardcoded client
+        # address with the **constant** ``kGwImageBase = 0x00400000``:
+        #
+        #     return GetModuleHandleW(nullptr) + (va - kGwImageBase);
+        #
+        # The module's own ``OptionalHeader.ImageBase`` is not what it uses, and on this
+        # client it cannot be: the live image's header reads ``0x610000`` — the address the
+        # image was loaded at, rewritten by the client's own loader — while the file on disk
+        # reads ``0x400000``. A rebase that used the header would therefore be a no-op, which
+        # is exactly what it was until 2026-09-25, when it put a call 0x210000 below the
+        # address the sources mean and faulted the client (``docs/RESEARCH.md``). Measured
+        # read-only by ``tests/probe_dialog_loader_address.py``.
+
         section_offset = optional_offset + optional_size
         section_table_size = section_count * self._SECTION_SIZE
         if section_offset + section_table_size > self._module_size:
@@ -137,6 +156,26 @@ class RemoteScanner:
             raise ValueError("Target module has no .text section.")
         self._sections = sections
         return dict(sections)
+
+    @property
+    def image_base(self) -> int:
+        """Return the base the module's symbols were linked against.
+
+        ``kGwImageBase`` — the constant the sources rebase with — not the module's own
+        ``OptionalHeader.ImageBase``, which this client's loader rewrites to the load address.
+        """
+
+        return self._LINK_IMAGE_BASE
+
+    def to_module_address(self, va: int) -> int:
+        """Rebase one link-time virtual address onto the live module.
+
+        The counterpart of Native's ``ToRuntimeAddress``
+        (``dialog_patterns.cpp:25-31``): a hardcoded address from the client's own
+        link-time layout becomes a live one.
+        """
+
+        return self._module_base + (va - self.image_base)
 
     def get_section_range(self, section: str) -> SectionRange:
         """Return one initialized section range by name."""
@@ -405,7 +444,25 @@ class RemoteScanner:
         return None
 
     def to_function_start(self, address: int, scan_range: int = 0xFF) -> int | None:
-        """Find the last x86 ``push ebp; mov ebp, esp`` before an address."""
+        """``Scanner::ToFunctionStart`` (``scanner.cpp:205-210``): the nearest prologue behind it.
+
+        The source is three lines — scan backward for ``55 8B EC`` from ``address`` to
+        ``address - scan_range`` and answer the first hit — and this is exactly that.
+        **It used to add a second candidate, and that addition is what broke a call:** a ``jmp``
+        whose destination leaves the module was treated as a patched function entry, and the
+        nearest candidate of the two won. On this build ``chat.send_chat_func``'s call-site pattern
+        matches at ``0x0082D65E``; the byte ``e9`` at ``0x0082D64F`` is *inside the instruction
+        before it*, and its displacement happens to leave the module, so it passed the test and won
+        the race against the real prologue at ``0x0082D620``. The port then handed the host an
+        address in the middle of an instruction — inside ``.text``, so the section check that stops
+        the older crash could not catch it — which is the crash of 2026-09-25, reproduced offline by
+        ``tools/resolve_offline.py``.
+
+        A recovery that must survive this library's own leftover patch (**which is what the second
+        candidate was for**) belongs to the recovery path, where the address's expected bytes are
+        known and the restore can be verified: ``py4gw/client.py``, ``_stale_patch_before``. A
+        resolver step that guesses it cannot be verified at all, and the source does not guess.
+        """
 
         if address <= 0:
             return None
@@ -416,9 +473,9 @@ class RemoteScanner:
         end = max(section.start, min(section.end, address - scan_range))
         if start <= end:
             return None
-        pattern = Pattern(b"\x55\x8B\xEC", "xxx")
-        matches = self.find_in_range(pattern, start, end)
-        return matches[0] if matches else None
+
+        candidates = self.find_in_range(Pattern(b"\x55\x8B\xEC", "xxx"), start, end, limit=1)
+        return candidates[0] if candidates else None
 
     def _validate_target_range(self, start: int, end: int) -> None:
         """Reject ranges outside the selected module."""

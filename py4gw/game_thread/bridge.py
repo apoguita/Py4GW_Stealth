@@ -25,16 +25,21 @@ from __future__ import annotations
 
 import os
 import struct
+import threading
 import time
 from collections.abc import Mapping, Sequence
 
 from .hooker import Hooker, WritableTarget
 from .patcher import PAGE_EXECUTE_READ
-from .payload import build_dispatcher, build_observer
+from .payload import build_decoder_stub, build_dispatcher, build_observer
 from .shared_block import (
     BLOCK_SIZE,
     COMMAND_DEPTH,
     COMMAND_SIZE,
+    DECODE_DEPTH,
+    DECODE_OUTPUT_SIZE,
+    DECODE_SLOT_LENGTH_OFFSET,
+    DECODE_SLOT_STATE_OFFSET,
     DESCRIPTOR_DEPTH,
     DESCRIPTOR_SIZE,
     EVENT_DEPTH,
@@ -46,11 +51,19 @@ from .shared_block import (
     WATCH_SIZE,
     BlockHeader,
     CommandRecord,
+    DecodeState,
     Descriptor,
     EventKind,
     EventRecord,
     Operation,
     command_offset,
+    data_offset,
+    decode_input_offset,
+    decode_output_offset,
+    decode_slot_image,
+    decode_slot_offset,
+    decode_state_from_word,
+    decode_text_from_bytes,
     descriptor_offset,
     empty_block,
     event_offset,
@@ -69,6 +82,13 @@ OBSERVER_NAME = "observe"
 #: are the message id and its packet. Its payload pops the block and those two,
 #: so this number and the observer's epilogue have to agree.
 OBSERVER_ARGUMENTS = 2
+
+#: The observer is placed in its **post-call** form: what it records is read where the
+#: source reads it, after the client's own send has run and before its caller gets
+#: control back (``SendUIMessage`` runs the altitude-``0x1`` callbacks after the
+#: original returns, ``ui_methods.cpp:1390-1404``; the dialog registers at that
+#: altitude, ``dialog.cpp:1273-1292``). The entry form is the dispatcher's.
+OBSERVER_AFTER = True
 
 #: How long a command gets to complete, for callers that do not say.
 DEFAULT_TIMEOUT_MS = 2000
@@ -113,8 +133,21 @@ class Bridge:
         self._watch_address = 0
         self._dispatcher_address = 0
         self._observer_address = 0
+        self._decoder_address = 0
         self._hooker: Hooker | None = None
         self._observer_hooker: Hooker | None = None
+        #: One use of the command ring at a time. Every publish goes through :meth:`publish`,
+        #: and a call holds this across its wait as well, so two threads cannot interleave
+        #: their publishes. It is **reentrant** because a call *is* a publish: ``call`` takes
+        #: the ring and then publishes into it on the same thread. The payload is not party to
+        #: any of this — the lock is the host's, held for the length of a call.
+        self._call_lock = threading.RLock()
+        #: The decode slots in flight, and the ones whose completion has already been handed to
+        #: the host. Both threads touch these — a caller starts a decode, the listener reports
+        #: what finished — so they are behind the one lock this side owns. Nothing in the client
+        #: takes it: it is the host's own bookkeeping, not the transport's.
+        self._decode_lock = threading.Lock()
+        self._decode_slots: dict[int, bool] = {}
 
     # -- what it is --------------------------------------------------------
 
@@ -175,6 +208,17 @@ class Bridge:
 
         return self._dispatcher_address
 
+    @property
+    def decoder_address(self) -> int:
+        """Return where the decoder stub is, or zero before it is placed.
+
+        This is the address the client's decoder calls with the text it produced, so it is what
+        a decode call is handed as its callback — the port of the ``DecodeStr_Callback`` native
+        passes to ``AsyncDecodeStr``.
+        """
+
+        return self._decoder_address
+
     # -- placing and taking back -------------------------------------------
 
     def install(
@@ -185,7 +229,7 @@ class Bridge:
         calls: Mapping[int, Descriptor] | None = None,
         module_base: int = 0,
         module_size: int = 0,
-        watch: Sequence[int] = (),
+        watch: Sequence[tuple[int, int]] = (),
         observing: tuple[int, bytes] | None = None,
     ) -> None:
         """Place the block, the call table, the dispatcher and the hook.
@@ -201,10 +245,10 @@ class Bridge:
         the one thing this bridge does that the client did not ask for, so it
         happens only inside a declared range.
 
-        ``watch`` is a list of message ids, and ``observing`` is the function to
-        watch them on as ``(target, displaced)``. With those, that function gets a
-        second hook whose payload records a watched call as an event — which is
-        how this project reads something the client only ever says once.
+        ``watch`` is a list of ``(message id, string offset)`` entries and ``observing`` is the
+        function to watch them on as ``(target, displaced)``. With those, that function gets a
+        second hook whose payload records a watched call as an event, **and copies the string the
+        message names** — read there because that is the only moment it is the client's own.
         """
 
         if self._hooker is not None:
@@ -216,6 +260,7 @@ class Bridge:
         watch_address = 0
         observer_address = 0
         dispatcher_address = 0
+        decoder_address = 0
         try:
             self._place_block(block_address, session)
             table_address = self._place_call_table(calls or {})
@@ -225,6 +270,16 @@ class Bridge:
             self._access.write(dispatcher_address, code)
             self._access.protect(dispatcher_address, len(code), PAGE_EXECUTE_READ)
             self._access.flush_instruction_cache(dispatcher_address, len(code))
+
+            # The decoder stub is placed whether or not this install observes anything: it is
+            # the callback a decode is handed, and a decode is something a *caller* asks for
+            # later, not something this install knows about yet. Native's equivalent is compiled
+            # into its runtime and always there.
+            decoder = build_decoder_stub()
+            decoder_address = self._access.allocate(len(decoder))
+            self._access.write(decoder_address, decoder)
+            self._access.protect(decoder_address, len(decoder), PAGE_EXECUTE_READ)
+            self._access.flush_instruction_cache(decoder_address, len(decoder))
 
             hooker = Hooker(
                 self._access,
@@ -260,6 +315,7 @@ class Bridge:
                     observe_target,
                     observe_displaced,
                     forwarded_arguments=OBSERVER_ARGUMENTS,
+                    after=OBSERVER_AFTER,
                 )
         except BaseException:
             # The entry patches are the last steps and they did not complete, so
@@ -267,6 +323,7 @@ class Bridge:
             for address in (
                 observer_address,
                 watch_address,
+                decoder_address,
                 dispatcher_address,
                 table_address,
                 block_address,
@@ -280,6 +337,7 @@ class Bridge:
         self._watch_address = watch_address
         self._dispatcher_address = dispatcher_address
         self._observer_address = observer_address
+        self._decoder_address = decoder_address
         self._hooker = hooker
         self._observer_hooker = observer_hooker
 
@@ -290,11 +348,16 @@ class Bridge:
         the client calls constantly, so it is the one worth removing soonest.
 
         ``free_allocations`` releases everything this bridge placed — the block,
-        the call table, the watch list, the dispatcher, the observer and the
+        the call table, the watch list, the dispatcher, the observer, the decoder stub and the
         hooker's own generated code. A caller that connects and disconnects as a
         routine asks for it, so connecting does not accumulate memory in a client
         that outlives the controller. The default leaves everything mapped, which
         is what a one-off install wants and what the hooker's reasoning describes.
+
+        **A decode still in flight is refused here, not freed underneath.** The decoder stub is
+        the callback the client will call, and freeing it while the client still holds its
+        address is how a controller takes the client down with it; the caller drains first
+        (``ConnectedClient.close`` does, through the dialog module's own shutdown).
         """
 
         if self._observer_hooker is not None and self.observing:
@@ -302,9 +365,17 @@ class Bridge:
         self.require_hooker().remove(HOOK_NAME, free_code=free_allocations)
 
         if free_allocations:
+            in_flight = self.decodes_in_flight()
+            if in_flight:
+                raise RuntimeError(
+                    f"pid {self._pid}: {in_flight} string decodes are still in flight, and "
+                    "the decoder stub the client will call cannot be freed while they are. "
+                    "Drain them before removing the bridge."
+                )
             for address in (
                 self._observer_address,
                 self._watch_address,
+                self._decoder_address,
                 self._dispatcher_address,
                 self._call_table_address,
                 self._block_address,
@@ -313,6 +384,7 @@ class Bridge:
                     self._access.free(address)
             self._observer_address = 0
             self._watch_address = 0
+            self._decoder_address = 0
             self._dispatcher_address = 0
             self._call_table_address = 0
             self._block_address = 0
@@ -339,6 +411,8 @@ class Bridge:
         arg1: int = 0,
         arg2: int = 0,
         arg3: int = 0,
+        arg4: int = 0,
+        arg5: int = 0,
     ) -> int:
         """Publish one command and return the sequence number it was given.
 
@@ -346,34 +420,44 @@ class Bridge:
         so a payload reading below that counter can never see a half-written
         command. A command's sequence number *is* that counter, which is why its
         slot is the sequence's low bits.
+
+        The six words are the record's whole argument area. A ``CALL``'s ``arg0`` is the
+        call table slot, so a call carries five words — which is the widest source
+        declaration the vocabulary covers today.
+
+        The publish itself is serialised with every other use of the ring (see ``call``); the
+        wait that follows a bare publish is the caller's own, and reads only its own record.
         """
 
-        header = self.header()
-        if free_slots(
-            header.command_written, header.command_taken, COMMAND_DEPTH
-        ) < 1:
-            raise RuntimeError(
-                f"pid {self._pid}: all {COMMAND_DEPTH} command slots are "
-                "outstanding; the payload has not taken what it was given."
-            )
+        with self._call_lock:
+            header = self.header()
+            if free_slots(
+                header.command_written, header.command_taken, COMMAND_DEPTH
+            ) < 1:
+                raise RuntimeError(
+                    f"pid {self._pid}: all {COMMAND_DEPTH} command slots are "
+                    "outstanding; the payload has not taken what it was given."
+                )
 
-        sequence = header.command_written
-        record = CommandRecord(
-            sequence=sequence,
-            operation=int(operation),
-            arg0=arg0,
-            arg1=arg1,
-            arg2=arg2,
-            arg3=arg3,
-        )
-        self._access.write(
-            self._block_address + command_offset(sequence % COMMAND_DEPTH),
-            record.to_bytes(),
-        )
-        self._write_uint32(
-            HEADER_OFFSET["command_written"], header.command_written + 1
-        )
-        return sequence
+            sequence = header.command_written
+            record = CommandRecord(
+                sequence=sequence,
+                operation=int(operation),
+                arg0=arg0,
+                arg1=arg1,
+                arg2=arg2,
+                arg3=arg3,
+                arg4=arg4,
+                arg5=arg5,
+            )
+            self._access.write(
+                self._block_address + command_offset(sequence % COMMAND_DEPTH),
+                record.to_bytes(),
+            )
+            self._write_uint32(
+                HEADER_OFFSET["command_written"], header.command_written + 1
+            )
+            return sequence
 
     def wait(self, sequence: int, timeout_ms: int | None = None) -> CommandRecord:
         """Return the record for ``sequence``, once the payload is finished.
@@ -411,25 +495,42 @@ class Bridge:
         arg1: int = 0,
         arg2: int = 0,
         arg3: int = 0,
+        arg4: int = 0,
+        arg5: int = 0,
         timeout_ms: int | None = None,
     ) -> CommandRecord:
-        """Publish one command and wait for its result."""
+        """Publish one command and wait for its result.
 
-        return self.wait(
-            self.publish(operation, arg0, arg1, arg2, arg3), timeout_ms
-        )
+        Held across both, for the same reason ``call`` is: the pair is one use of the ring, and
+        a second publisher slipping in between would take the next slot while this one waits.
+        """
+
+        with self._call_lock:
+            return self.wait(
+                self.publish(operation, arg0, arg1, arg2, arg3, arg4, arg5), timeout_ms
+            )
 
     def publish_call(
-        self, slot: int, arg1: int = 0, arg2: int = 0, arg3: int = 0
+        self,
+        slot: int,
+        arg1: int = 0,
+        arg2: int = 0,
+        arg3: int = 0,
+        arg4: int = 0,
+        arg5: int = 0,
     ) -> int:
         """Publish a call to one table slot and return its sequence number.
 
-        ``slot`` names the descriptor, and the three words are the form's: the
-        descriptor says what they mean, so the same three words are a message id
-        and two packed fields for one form and something else for the next.
+        ``slot`` names the descriptor, and the five words are the form's: the
+        descriptor says what they mean, so the same words are a message id and two
+        packed fields for one form and something else for the next.
+
+        The sequence is the ``command_written`` counter's value **before** it
+        advances, so the first command published through a block is sequence
+        ``0``. Anything waiting on a completion event has to allow for that.
         """
 
-        return self.publish(Operation.CALL, slot, arg1, arg2, arg3)
+        return self.publish(Operation.CALL, slot, arg1, arg2, arg3, arg4, arg5)
 
     def call(
         self,
@@ -437,13 +538,21 @@ class Bridge:
         arg1: int = 0,
         arg2: int = 0,
         arg3: int = 0,
+        arg4: int = 0,
+        arg5: int = 0,
         timeout_ms: int | None = None,
     ) -> CommandRecord:
-        """Call through one table slot and wait for the call to complete."""
+        """Call through one table slot and wait for the call to complete.
 
-        return self.wait(
-            self.publish_call(slot, arg1, arg2, arg3), timeout_ms
-        )
+        Held for the whole publish-and-wait, because the command ring carries one call at a
+        time: the dialog's body decode is issued from the listener thread while a caller may be
+        calling something else, and two publishes into that ring would interleave.
+        """
+
+        with self._call_lock:
+            return self.wait(
+                self.publish_call(slot, arg1, arg2, arg3, arg4, arg5), timeout_ms
+            )
 
     def events(self) -> list[EventRecord]:
         """Return the events published since the last call, oldest first.
@@ -451,6 +560,12 @@ class Bridge:
         Reading them is what advances the host's counter, so a caller that never
         calls this leaves the payload's event region filling up — at which point
         the payload drops events rather than waiting.
+
+        What the payload's own machine code recorded comes first, and then whatever string
+        decodes the client has finished since the last read (``_decode_events``). Both are
+        events the client produced; the second kind is read out of its slot rather than the
+        event ring, because the code that fills it is the client's callback and not this
+        project's payload.
         """
 
         header = self.header()
@@ -473,6 +588,7 @@ class Bridge:
             )
         if count:
             self._write_uint32(HEADER_OFFSET["event_taken"], header.event_taken + count)
+        records.extend(self._decode_events())
         return records
 
     def completions(self) -> list[EventRecord]:
@@ -513,26 +629,30 @@ class Bridge:
 
     # -- internals ---------------------------------------------------------
 
-    def _place_watch_list(self, messages: Sequence[int]) -> int:
-        """Write the message ids the observer records, and return their address.
+    def _place_watch_list(self, watch: Sequence[tuple[int, int]]) -> int:
+        """Write the watch entries the observer compares and copies by, and return their address.
 
-        The list lives in the client and its address is emitted into the observer,
-        so no message id travels through the queue either. More ids than the list
-        holds is refused rather than silently truncated.
+        An entry is a message id and the byte offset of the ``wchar_t*`` field that message
+        carries, or zero for a message that carries no string — the observer copies that string
+        out with the event, because the moment it runs is the only moment the string is the
+        client's own. The list lives in the client and its address is emitted into the observer,
+        so neither word travels through the queue. More entries than the list holds is refused
+        rather than silently truncated.
         """
 
-        if len(messages) > WATCH_DEPTH:
+        if len(watch) > WATCH_DEPTH:
             raise ValueError(
-                f"a watch list holds {WATCH_DEPTH} message ids; "
-                f"{len(messages)} were given."
+                f"a watch list holds {WATCH_DEPTH} entries; {len(watch)} were given."
             )
 
         address = self._access.allocate(WATCH_DEPTH * WATCH_SIZE)
         self._access.write(address, bytes(WATCH_DEPTH * WATCH_SIZE))
-        for index, message in enumerate(messages):
+        for index, (message, string_offset) in enumerate(watch):
             self._access.write(
                 address + index * WATCH_SIZE,
-                struct.pack("<I", message & _UINT32_MAX),
+                struct.pack(
+                    "<II", message & _UINT32_MAX, string_offset & _UINT32_MAX
+                ),
             )
         return address
 
@@ -583,6 +703,33 @@ class Bridge:
             struct.pack("<I", value & _UINT32_MAX),
         )
 
+    # -- the data region ---------------------------------------------------
+
+    def data_address(self, offset: int, size: int = 0) -> int:
+        """Return the client address of a span inside the block's data region.
+
+        A caller needs the address itself when a function it calls takes a **pointer**: the
+        source's own callers hand over the address of one of their stack variables, and this
+        project's equivalent is a span of the block, because the block is memory inside the
+        client. The span is bounds-checked against the region, so a mistake here is a
+        refusal rather than a write over the event ring.
+        """
+
+        self._require_block()
+        return self._block_address + data_offset(offset, size)
+
+    def write_data(self, offset: int, payload: bytes) -> int:
+        """Write bytes into the data region, and return their address in the client."""
+
+        address = self.data_address(offset, len(payload))
+        self._access.write(address, payload)
+        return address
+
+    def read_data(self, offset: int, size: int) -> bytes:
+        """Read a span back out of the data region."""
+
+        return self._access.read(self.data_address(offset, size), size)
+
     def _require_block(self) -> None:
         """Refuse to read a block that was never placed."""
 
@@ -590,3 +737,171 @@ class Bridge:
             raise RuntimeError(
                 f"pid {self._pid}: the bridge has no block; install it first."
             )
+
+    # -- strings the client decodes ----------------------------------------
+
+    def begin_decode(self, encoded: bytes) -> int:
+        """Place one encoded string for the client to decode, and return its slot.
+
+        This is the half of native's ``AsyncDecodeStr`` this side can do: the string is put
+        where the client can read it, and the slot it went into is the ``param`` the client's
+        callback will be handed. The call itself belongs to the caller, because it needs the
+        resolved address of the client's decoder — a catalog name this bridge does not know.
+
+        Every slot busy is a refusal, and it is the same refusal native makes with its own cap
+        on pending labels (``kMaxDecodedButtonLabelPending``, ``dialog.cpp:674``): a caller is
+        told nothing was queued rather than handed a request that will never complete.
+        """
+
+        self._require_block()
+        with self._decode_lock:
+            free = [
+                slot for slot in range(DECODE_DEPTH) if slot not in self._decode_slots
+            ]
+            if not free:
+                raise RuntimeError(
+                    f"pid {self._pid}: all {DECODE_DEPTH} decode slots are in flight, so "
+                    f"this string was not queued."
+                )
+            slot = free[0]
+            self._decode_slots[slot] = False
+        self._access.write(
+            self._block_address + decode_slot_offset(slot),
+            decode_slot_image(slot, encoded),
+        )
+        return slot
+
+    def decode_input_address(self, slot: int) -> int:
+        """Return the client address of the string one slot is holding."""
+
+        self._require_block()
+        return self._block_address + decode_input_offset(slot)
+
+    def decode_slot_address(self, slot: int) -> int:
+        """Return the client address of a slot, which is the ``param`` its callback is given."""
+
+        self._require_block()
+        return self._block_address + decode_slot_offset(slot)
+
+    def complete_decode(self, slot: int, text: str) -> None:
+        """Write a decode's answer into its slot without a call having been made.
+
+        Three of the client's decoder's own refusals answer the callback themselves
+        (``ui_methods.cpp:2583-2598``: no decoder, not an encoded string, no text parser). Here
+        that answer is written where the callback would have written it, so a caller reads one
+        kind of completion whichever way the decode ended — and the completion is delivered as
+        an event like any other, because the slot is still marked unreported.
+        """
+
+        self._require_block()
+        payload = text.encode("utf-16-le")
+        if len(payload) > DECODE_OUTPUT_SIZE:
+            raise ValueError(
+                f"a decode answer of {len(payload)} bytes does not fit a "
+                f"{DECODE_OUTPUT_SIZE}-byte slot."
+            )
+        start = self._block_address + decode_slot_offset(slot)
+        self._access.write(self._block_address + decode_output_offset(slot), payload)
+        self._access.write(
+            start + DECODE_SLOT_LENGTH_OFFSET, struct.pack("<I", len(text))
+        )
+        self._access.write(
+            start + DECODE_SLOT_STATE_OFFSET, struct.pack("<I", DecodeState.DONE)
+        )
+
+    def release_decode(self, slot: int) -> None:
+        """Give a slot back when the decode it was holding will never happen.
+
+        ``SafeAsyncDecodeStr``'s false, on this side of the boundary: nothing was asked of the
+        client, so nothing will call back, and the slot must not be left in flight.
+        """
+
+        self._require_block()
+        start = self._block_address + decode_slot_offset(slot)
+        self._access.write(
+            start + DECODE_SLOT_STATE_OFFSET, struct.pack("<I", DecodeState.FREE)
+        )
+        with self._decode_lock:
+            self._decode_slots.pop(slot, None)
+
+    def decode_state(self, slot: int) -> DecodeState:
+        """Return what has happened to one decode slot, without taking anything from it."""
+
+        self._require_block()
+        raw = self._access.read(
+            self._block_address + decode_slot_offset(slot) + DECODE_SLOT_STATE_OFFSET, 4
+        )
+        return decode_state_from_word(struct.unpack("<I", raw)[0])
+
+    def take_decoded_string(self, slot: int) -> tuple[str, bool]:
+        """Read the text the client decoded, and put the slot back to free.
+
+        Called once per completion, which is what native's ``Release...DecodeRequest`` is: the
+        request is finished with as soon as its answer has been taken.
+        """
+
+        self._require_block()
+        start = self._block_address + decode_slot_offset(slot)
+        (length,) = struct.unpack(
+            "<I",
+            self._access.read(start + DECODE_SLOT_LENGTH_OFFSET, 4),
+        )
+        payload = self._access.read(
+            self._block_address + decode_output_offset(slot), DECODE_OUTPUT_SIZE
+        )
+        text, truncated = decode_text_from_bytes(payload, length)
+        self._access.write(start + DECODE_SLOT_STATE_OFFSET, struct.pack("<I", DecodeState.FREE))
+        self._access.write(start + DECODE_SLOT_LENGTH_OFFSET, struct.pack("<I", 0))
+        with self._decode_lock:
+            self._decode_slots.pop(slot, None)
+        return text, truncated
+
+    def decodes_in_flight(self) -> int:
+        """Return how many decodes have been asked for and not yet taken."""
+
+        with self._decode_lock:
+            return len(self._decode_slots)
+
+    def _decode_events(self) -> list[EventRecord]:
+        """Return one completion event for every decode the client has finished.
+
+        Native is told by the client calling back; this side is told by reading the slot the
+        callback wrote. The event is reported **once** — a report is not the same as taking the
+        text, which the handler does through :meth:`take_decoded_string` — so a poll that sees
+        the same finished slot twice does not deliver the same callback twice.
+        """
+
+        with self._decode_lock:
+            outstanding = list(self._decode_slots.items())
+
+        events: list[EventRecord] = []
+        for slot, reported in outstanding:
+            if reported:
+                continue
+            raw = self._access.read(
+                self._block_address + decode_slot_offset(slot) + DECODE_SLOT_STATE_OFFSET,
+                4,
+            )
+            state = decode_state_from_word(struct.unpack("<I", raw)[0])
+            if state is DecodeState.FREE or state is DecodeState.IN_FLIGHT:
+                continue
+            (length,) = struct.unpack(
+                "<I",
+                self._access.read(
+                    self._block_address
+                    + decode_slot_offset(slot)
+                    + DECODE_SLOT_LENGTH_OFFSET,
+                    4,
+                ),
+            )
+            events.append(
+                EventRecord(
+                    kind=EventKind.STRING_DECODED,
+                    sequence=slot,
+                    arg0=length,
+                    arg1=1 if state is DecodeState.FAILED else 0,
+                )
+            )
+            with self._decode_lock:
+                self._decode_slots[slot] = True
+        return events

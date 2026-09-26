@@ -1,0 +1,48 @@
+{
+  "namespace": "dialog",
+  "patterns": {},
+  "resolvers": {
+    "event_handler_base": {
+      "module": "dialog",
+      "steps": [
+        { "name": "rebase", "op": "module_relative", "value": "0x00913918", "out": "candidate" },
+        { "name": "validate", "op": "validate_section", "in": "candidate", "section": "data", "out": "final" }
+      ]
+    },
+    "frame_type_base": {
+      "module": "dialog",
+      "steps": [
+        { "name": "rebase", "op": "module_relative", "value": "0x0091391C", "out": "candidate" },
+        { "name": "validate", "op": "validate_section", "in": "candidate", "section": "data", "out": "final" }
+      ]
+    },
+    "flags_base": {
+      "module": "dialog",
+      "steps": [
+        { "name": "rebase", "op": "module_relative", "value": "0x00913920", "out": "candidate" },
+        { "name": "validate", "op": "validate_section", "in": "candidate", "section": "data", "out": "final" }
+      ]
+    },
+    "content_id_base": {
+      "module": "dialog",
+      "steps": [
+        { "name": "rebase", "op": "module_relative", "value": "0x00913924", "out": "candidate" },
+        { "name": "validate", "op": "validate_section", "in": "candidate", "section": "data", "out": "final" }
+      ]
+    },
+    "property_id_base": {
+      "module": "dialog",
+      "steps": [
+        { "name": "rebase", "op": "module_relative", "value": "0x00913928", "out": "candidate" },
+        { "name": "validate", "op": "validate_section", "in": "candidate", "section": "data", "out": "final" }
+      ]
+    },
+    "dialog_loader_get_text_func": {
+      "module": "dialog",
+      "steps": [
+        { "name": "rebase", "op": "module_relative", "value": "0x0079EEF0", "out": "candidate" },
+        { "name": "validate", "op": "validate_section", "in": "candidate", "section": "text", "out": "final" }
+      ]
+    }
+  }
+}

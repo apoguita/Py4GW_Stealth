@@ -76,7 +76,7 @@ class LiveCameraTests(unittest.TestCase):
             f"distance={snapshot.distance:.3f}"
         )
 
-    def test_source_facade_getters_and_disabled_actions(self) -> None:
+    def test_source_facade_getters_and_not_ported_actions(self) -> None:
         """Source facade getters read remotely; action wrappers never write."""
 
         snapshot = self.camera.camera_instance()

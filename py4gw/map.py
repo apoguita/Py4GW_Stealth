@@ -5,12 +5,12 @@ two nested projections, 178 members in total. This module ports that surface in
 the source's own shape and nesting -- ``Map.MissionMap.MapProjection`` and
 ``Map.MiniMap.MapProjection`` are nested, not top-level.
 
-Members whose read works from outside ``Gw.exe`` read the client. Members whose
-read does not are declared and refuse, naming what blocks them, so a ported script
-fails at the call site instead of returning a wrong value. Two kinds of refusal
-are distinguished in the docstrings: ``not ported yet`` (the route exists and is
-scheduled) and a named in-process mechanism (the member needs code in the client
-and keeps refusing until this project can run it).
+Members whose read works from outside ``Gw.exe`` read the client. Members whose read does not are
+declared and refuse, naming the work item they are waiting on, so a ported script fails at the call
+site instead of returning a wrong value. The docstrings distinguish two kinds of refusal: a table or
+route this port has not built yet, and a named in-process mechanism this project cannot run yet.
+Either way the source's member is complete and working — the refusal describes this port's
+outstanding work and never the source.
 
 Four sources only, all of them the source's own:
 
@@ -33,13 +33,17 @@ from .context.instance_info_context import (
 )
 
 
-def _disabled(member: str, requirement: str) -> NotImplementedError:
-    """Build the error raised by a member that cannot read what it needs."""
+def _unported(member: str, requirement: str) -> NotImplementedError:
+    """Build the error raised by a member this port has not built yet.
+
+    The source's member is complete and working, so the message names the work item this port still
+    owes and nothing about the source.
+    """
 
     return NotImplementedError(
-        f"Map.{member} is not available yet: {requirement}. It is declared for "
-        "source parity so a ported script fails at the call site and names the "
-        "missing mechanism instead of returning a wrong value."
+        f"Map.{member} is declared but not built here yet: it needs {requirement}. "
+        "The source's member works; this port raises at the call site and names the work "
+        "item instead of returning a wrong value."
     )
 
 
@@ -157,7 +161,7 @@ class Map:
         ``enums_src/Map_enums.py`` (278 entries) is Stage 2.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetOutpostIDs", "the map and outpost name tables are not ported yet"
         )
 
@@ -168,7 +172,7 @@ class Map:
         Not ported yet: same ``outposts`` table as ``GetOutpostIDs``.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetOutpostNames", "the map and outpost name tables are not ported yet"
         )
 
@@ -179,7 +183,7 @@ class Map:
         Not ported yet: the ``outposts`` and ``explorables`` tables are Stage 2.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetMapName", "the map and outpost name tables are not ported yet"
         )
 
@@ -190,7 +194,7 @@ class Map:
         Not ported yet: the name-to-id catalog is built from the tables, Stage 2.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetMapIDByName", "the map and outpost name tables are not ported yet"
         )
 
@@ -201,7 +205,7 @@ class Map:
         Not ported yet: ``map_variants_to_base`` is Stage 2.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetBaseMapID", "the map variant table is not ported yet"
         )
 
@@ -212,7 +216,7 @@ class Map:
         Not ported yet: ``base_to_all_variants`` is Stage 2.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetAllMapVariants", "the map variant table is not ported yet"
         )
 
@@ -224,7 +228,7 @@ class Map:
         from Stage 2.
         """
 
-        raise _disabled(
+        raise _unported(
             "IsMapIDMatch", "the map variant table is not ported yet"
         )
 
@@ -237,7 +241,7 @@ class Map:
         Not ported yet: the account-agent context's instance timer is Stage 3.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetInstanceUptime",
             "the account-agent context's instance timer is not ported yet",
         )
@@ -250,7 +254,7 @@ class Map:
         are Stages 2 and 3.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetRegion",
             "the server-region context read and its name table are not ported yet",
         )
@@ -275,7 +279,7 @@ class Map:
         Not ported yet: the char context's district number is Stage 3.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetDistrict",
             "the char context's district number is not ported yet",
         )
@@ -288,7 +292,7 @@ class Map:
         are Stages 2 and 3.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetLanguage",
             "the char context's language and its name table are not ported yet",
         )
@@ -300,7 +304,7 @@ class Map:
         Not ported yet: the world context's player array is Stage 3.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetAmountOfPlayersInInstance",
             "the world context's player array is not ported yet",
         )
@@ -350,7 +354,7 @@ class Map:
         Not ported yet: the world context's foe counter is Stage 3.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetFoesKilled", "the world context's foe counter is not ported yet"
         )
 
@@ -361,7 +365,7 @@ class Map:
         Not ported yet: the world context's foe counter is Stage 3.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetFoesToKill", "the world context's foe counter is not ported yet"
         )
 
@@ -372,7 +376,7 @@ class Map:
         Not ported yet: it needs ``GetFoesToKill``, which is Stage 3.
         """
 
-        raise _disabled(
+        raise _unported(
             "IsVanquishCompleted",
             "the world context's foe counter it reads is not ported yet",
         )
@@ -469,7 +473,7 @@ class Map:
         Not ported yet: it needs ``GetFoesToKill``, which is Stage 3.
         """
 
-        raise _disabled(
+        raise _unported(
             "IsVanquishComplete",
             "the world context's foe counter it reads is not ported yet",
         )
@@ -481,7 +485,7 @@ class Map:
         Not ported yet: the world context's unlocked-map bitfield is Stage 3.
         """
 
-        raise _disabled(
+        raise _unported(
             "IsMapUnlocked",
             "the world context's unlocked-map bitfield is not ported yet",
         )
@@ -695,7 +699,7 @@ class Map:
         Not ported yet: the global ``AreaInfo`` array scan is Stage 4.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetUnloadedMapInfo",
             "the global AreaInfo array scan is not ported yet",
         )
@@ -707,7 +711,7 @@ class Map:
         Not ported yet: the cancel-enter-mission frame lookup is Stage 5.
         """
 
-        raise _disabled(
+        raise _unported(
             "IsEnteringChallenge",
             "the enter-challenge frame lookup is not ported yet",
         )
@@ -720,7 +724,7 @@ class Map:
         (Stage 3).
         """
 
-        raise _disabled(
+        raise _unported(
             "GetMapWorldMapBounds",
             "the AreaInfo icon bounds composition is not ported yet",
         )
@@ -732,7 +736,7 @@ class Map:
         Not ported yet: the map context's start and end positions are Stage 3.
         """
 
-        raise _disabled(
+        raise _unported(
             "GetMapBoundaries",
             "the map context's start and end positions are not ported yet",
         )
@@ -743,7 +747,7 @@ class Map:
     def SkipCinematic() -> None:
         """Disabled: it calls the client's own skip-cinematic function."""
 
-        raise _disabled(
+        raise _unported(
             "SkipCinematic",
             "it calls the client's own skip-cinematic function from the game thread",
         )
@@ -752,7 +756,7 @@ class Map:
     def Travel(map_id: int) -> None:
         """Disabled: travel is requested through the client's own path."""
 
-        raise _disabled(
+        raise _unported(
             "Travel",
             "it asks the client to travel, which emits the CtoS packet",
         )
@@ -763,7 +767,7 @@ class Map:
     ) -> None:
         """Disabled: district travel is requested through the client."""
 
-        raise _disabled(
+        raise _unported(
             "TravelToDistrict",
             "it asks the client to travel, which emits the CtoS packet",
         )
@@ -774,7 +778,7 @@ class Map:
     ) -> None:
         """Disabled: region travel is requested through the client."""
 
-        raise _disabled(
+        raise _unported(
             "TravelToRegion",
             "it asks the client to travel, which emits the CtoS packet",
         )
@@ -783,7 +787,7 @@ class Map:
     def TravelGH() -> None:
         """Disabled: guild-hall travel is requested through the client."""
 
-        raise _disabled(
+        raise _unported(
             "TravelGH", "it asks the client to travel to the guild hall"
         )
 
@@ -791,13 +795,13 @@ class Map:
     def LeaveGH() -> None:
         """Disabled: leaving the guild hall is requested through the client."""
 
-        raise _disabled("LeaveGH", "it asks the client to leave the guild hall")
+        raise _unported("LeaveGH", "it asks the client to leave the guild hall")
 
     @staticmethod
     def EnterChallenge() -> None:
         """Disabled: entering a challenge is a client dialog action."""
 
-        raise _disabled(
+        raise _unported(
             "EnterChallenge", "it dispatches the enter-challenge UI message"
         )
 
@@ -805,7 +809,7 @@ class Map:
     def CancelEnterChallenge() -> None:
         """Disabled: cancelling a challenge is a client dialog action."""
 
-        raise _disabled(
+        raise _unported(
             "CancelEnterChallenge",
             "it dispatches the cancel-enter-challenge UI message",
         )
@@ -814,7 +818,7 @@ class Map:
     def ConfirmEnterChallenge() -> None:
         """Disabled: confirming a challenge is a client dialog action."""
 
-        raise _disabled(
+        raise _unported(
             "ConfirmEnterChallenge",
             "it dispatches the confirm-enter-challenge UI message",
         )
@@ -832,7 +836,7 @@ class Map:
             named fallback, is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.GetFrame", "the frame lookup is not ported yet"
             )
 
@@ -843,7 +847,7 @@ class Map:
             Not ported yet: the mission-map context's frame id is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.GetFrameID",
                 "the mission-map context's frame id is not ported yet",
             )
@@ -855,7 +859,7 @@ class Map:
             Not ported yet: it reads the frame's existence (Stage 5).
             """
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.IsWindowOpen", "the frame lookup is not ported yet"
             )
 
@@ -863,7 +867,7 @@ class Map:
         def OpenWindow() -> None:
             """Disabled: it queues the open-mission-map keybind."""
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.OpenWindow",
                 "it queues a keybind on the client's own game thread",
             )
@@ -872,7 +876,7 @@ class Map:
         def CloseWindow() -> None:
             """Disabled: the source queues the same keybind as ``OpenWindow``."""
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.CloseWindow",
                 "it queues a keybind on the client's own game thread",
             )
@@ -881,7 +885,7 @@ class Map:
         def IsMouseOver() -> bool:
             """Disabled: it reads the client's per-frame ImGui input state."""
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.IsMouseOver",
                 "it reads the client's per-frame ImGui input state, which only "
                 "exists with code inside Gw.exe",
@@ -891,7 +895,7 @@ class Map:
         def GetLastClickCoords() -> tuple[float, float]:
             """Disabled: the frame IO-event list is filled in-process."""
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.GetLastClickCoords",
                 "the client's frame IO-event list is filled by an in-process "
                 "callback that reads ImGui, so the events cannot be observed "
@@ -902,7 +906,7 @@ class Map:
         def GetLastRightClickCoords() -> tuple[float, float]:
             """Disabled: the frame IO-event list is filled in-process."""
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.GetLastRightClickCoords",
                 "the client's frame IO-event list is filled by an in-process "
                 "callback that reads ImGui, so the events cannot be observed "
@@ -916,7 +920,7 @@ class Map:
             Not ported yet: the frame rect read is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.GetMissionMapWindowCoords",
                 "the frame rect read is not ported yet",
             )
@@ -928,7 +932,7 @@ class Map:
             Not ported yet: the frame content-rect read is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.GetMissionMapContentsCoords",
                 "the frame content-rect read is not ported yet",
             )
@@ -940,7 +944,7 @@ class Map:
             Not ported yet: the frame viewport scale read is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.GetScale",
                 "the frame viewport scale read is not ported yet",
             )
@@ -949,13 +953,14 @@ class Map:
         def GetZoom() -> float:
             """Get the zoom level of the mission map. (source 1032)
 
-            Not ported yet: the gameplay context's mission-map zoom is Stage 5.
+            ``Gameplay.GetContext().mission_map_zoom``, and ``1.0`` when the context is
+            unavailable — the source's own default (``Map.py:1031-1036``). ``Utils.GwinchToPixels``
+            and ``Utils.PixelsToGwinch`` read it (``py4gwcorelib_src/Utils.py:156,168``).
             """
 
-            raise _disabled(
-                "MissionMap.GetZoom",
-                "the gameplay context's mission-map zoom is not ported yet",
-            )
+            if not (gameplay_ctx := GWContext.Gameplay.GetContext()):
+                return 1.0
+            return gameplay_ctx.mission_map_zoom
 
         @staticmethod
         def GetAdjustedZoom(_zoom: float, zoom_offset: float = 0.0) -> float:
@@ -965,7 +970,7 @@ class Map:
             verified against a real zoom value.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.GetAdjustedZoom",
                 "the zoom adjustment is not ported yet",
             )
@@ -977,7 +982,7 @@ class Map:
             Not ported yet: it composes the contents coordinates (Stage 5).
             """
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.GetCenter",
                 "the frame content-rect read is not ported yet",
             )
@@ -991,7 +996,7 @@ class Map:
             ``(0.0, 0.0)``, which is behaviour to preserve when it lands.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.GetPanOffset",
                 "the mission-map sub-context's pan offset is not ported yet",
             )
@@ -1003,7 +1008,7 @@ class Map:
             Not ported yet: it composes the contents coordinates (Stage 5).
             """
 
-            raise _disabled(
+            raise _unported(
                 "MissionMap.GetMapScreenCenter",
                 "the frame content-rect read is not ported yet",
             )
@@ -1018,7 +1023,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.GamePosToWorldMap",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1030,7 +1035,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.WorldMapToGamePos",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1044,7 +1049,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.WorldMapToScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1058,7 +1063,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.ScreenToWorldMap",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1072,7 +1077,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.GameMapToScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1086,7 +1091,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.ScreenToGameMap",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1098,7 +1103,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.NormalizedScreenToScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1112,7 +1117,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.ScreenToNormalizedScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1126,7 +1131,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.NormalizedScreenToWorldMap",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1138,7 +1143,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.NormalizedScreenToGamePos",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1150,7 +1155,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.GamePosToNormalizedScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1164,7 +1169,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.GamePosToScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1178,7 +1183,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.ScreenToGamePos",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1192,7 +1197,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.WorldPosToMissionMapScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1206,7 +1211,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MissionMap.MapProjection.ScreenToWorldPos",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1223,7 +1228,7 @@ class Map:
             Not ported yet: the compass frame lookup is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.GetFrame", "the compass frame lookup is not ported yet"
             )
 
@@ -1234,7 +1239,7 @@ class Map:
             Not ported yet: the compass frame lookup is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.GetFrameID", "the compass frame lookup is not ported yet"
             )
 
@@ -1245,7 +1250,7 @@ class Map:
             Not ported yet: it reads the frame's existence (Stage 5).
             """
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.IsWindowOpen", "the compass frame lookup is not ported yet"
             )
 
@@ -1253,7 +1258,7 @@ class Map:
         def OpenWindow() -> None:
             """Disabled: it asks the client to set the compass window visible."""
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.OpenWindow",
                 "it asks the client to set a window visible from inside Gw.exe",
             )
@@ -1262,7 +1267,7 @@ class Map:
         def CloseWindow() -> None:
             """Disabled: it asks the client to set the compass window visible."""
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.CloseWindow",
                 "it asks the client to set a window visible from inside Gw.exe",
             )
@@ -1271,7 +1276,7 @@ class Map:
         def IsMouseOver() -> bool:
             """Disabled: it reads the client's per-frame ImGui input state."""
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.IsMouseOver",
                 "it reads the client's per-frame ImGui input state, which only "
                 "exists with code inside Gw.exe",
@@ -1281,7 +1286,7 @@ class Map:
         def GetLastClickCoords() -> tuple[float, float]:
             """Disabled: the frame IO-event list is filled in-process."""
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.GetLastClickCoords",
                 "the client's frame IO-event list is filled by an in-process "
                 "callback that reads ImGui, so the events cannot be observed "
@@ -1292,7 +1297,7 @@ class Map:
         def GetLastRightClickCoords() -> tuple[float, float]:
             """Disabled: the frame IO-event list is filled in-process."""
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.GetLastRightClickCoords",
                 "the client's frame IO-event list is filled by an in-process "
                 "callback that reads ImGui, so the events cannot be observed "
@@ -1306,7 +1311,7 @@ class Map:
             Not ported yet: the frame rect read is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.GetWindowCoords",
                 "the frame rect read is not ported yet",
             )
@@ -1320,7 +1325,7 @@ class Map:
             reachable read-only is determined in Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.IsLocked",
                 "the client's bool-preference read has no established external "
                 "route yet",
@@ -1334,7 +1339,7 @@ class Map:
             landed as-is with Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.GetPanOffset", "the mini-map geometry is not ported yet"
             )
 
@@ -1347,7 +1352,7 @@ class Map:
             Not ported yet: the mini-map geometry is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.GetScale", "the mini-map geometry is not ported yet"
             )
 
@@ -1359,7 +1364,7 @@ class Map:
             external route is determined in Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.GetRotation",
                 "the compass lock and camera yaw read is not ported yet",
             )
@@ -1372,7 +1377,7 @@ class Map:
             with Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.GetZoom", "the mini-map geometry is not ported yet"
             )
 
@@ -1385,7 +1390,7 @@ class Map:
             Not ported yet: the mini-map geometry is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "MiniMap.GetMapScreenCenter",
                 "the mini-map geometry is not ported yet",
             )
@@ -1400,7 +1405,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.GamePosToWorldMap",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1412,7 +1417,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.WorldMapToGamePos",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1424,7 +1429,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.WorldMapToScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1438,7 +1443,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.ScreenToWorldMap",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1450,7 +1455,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.GameMapToScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1462,7 +1467,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.ScreenToGameMap",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1474,7 +1479,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.NormalizedScreenToScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1488,7 +1493,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.ScreenToNormalizedScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1500,7 +1505,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.NormalizedScreenToWorldMap",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1512,7 +1517,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.NormalizedScreenToGamePos",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1524,7 +1529,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.GamePosToNormalizedScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1536,7 +1541,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.GamePosToScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1548,7 +1553,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.ScreenToGamePos",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1560,7 +1565,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.WorldPosToMiniMapScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1574,7 +1579,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.ScreenToWorldPos",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1588,7 +1593,7 @@ class Map:
                 Not ported yet: the projection arithmetic is Stage 6.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "MiniMap.MapProjection.ComputedPathingGeometryToScreen",
                     "the projection arithmetic is not ported yet",
                 )
@@ -1605,7 +1610,7 @@ class Map:
             Not ported yet: the world-map context's frame id is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "WorldMap.GetFrameID",
                 "the world-map context's frame id is not ported yet",
             )
@@ -1617,7 +1622,7 @@ class Map:
             Not ported yet: the frame lookup is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "WorldMap.GetFrame", "the frame lookup is not ported yet"
             )
 
@@ -1628,7 +1633,7 @@ class Map:
             Not ported yet: it reads the frame's existence (Stage 5).
             """
 
-            raise _disabled(
+            raise _unported(
                 "WorldMap.IsWindowOpen", "the frame lookup is not ported yet"
             )
 
@@ -1636,7 +1641,7 @@ class Map:
         def OpenWindow() -> None:
             """Disabled: it queues the open-world-map keybind."""
 
-            raise _disabled(
+            raise _unported(
                 "WorldMap.OpenWindow",
                 "it queues a keybind on the client's own game thread",
             )
@@ -1645,7 +1650,7 @@ class Map:
         def CloseWindow() -> None:
             """Disabled: the source queues the same keybind as ``OpenWindow``."""
 
-            raise _disabled(
+            raise _unported(
                 "WorldMap.CloseWindow",
                 "it queues a keybind on the client's own game thread",
             )
@@ -1654,7 +1659,7 @@ class Map:
         def IsMouseOver() -> bool:
             """Disabled: it reads the client's per-frame ImGui input state."""
 
-            raise _disabled(
+            raise _unported(
                 "WorldMap.IsMouseOver",
                 "it reads the client's per-frame ImGui input state, which only "
                 "exists with code inside Gw.exe",
@@ -1664,7 +1669,7 @@ class Map:
         def GetLastClickCoords() -> tuple[float, float]:
             """Disabled: the frame IO-event list is filled in-process."""
 
-            raise _disabled(
+            raise _unported(
                 "WorldMap.GetLastClickCoords",
                 "the client's frame IO-event list is filled by an in-process "
                 "callback that reads ImGui, so the events cannot be observed "
@@ -1675,7 +1680,7 @@ class Map:
         def GetLastRightClickCoords() -> tuple[float, float]:
             """Disabled: the frame IO-event list is filled in-process."""
 
-            raise _disabled(
+            raise _unported(
                 "WorldMap.GetLastRightClickCoords",
                 "the client's frame IO-event list is filled by an in-process "
                 "callback that reads ImGui, so the events cannot be observed "
@@ -1689,7 +1694,7 @@ class Map:
             Not ported yet: the world-map context's corners are Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "WorldMap.GetWindowCoords",
                 "the world-map context's corners are not ported yet",
             )
@@ -1701,7 +1706,7 @@ class Map:
             Not ported yet: the world-map context's zoom is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "WorldMap.GetZoom",
                 "the world-map context's zoom is not ported yet",
             )
@@ -1713,7 +1718,7 @@ class Map:
             Not ported yet: the world-map context's param array is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "WorldMap.GetParams",
                 "the world-map context's parameter array is not ported yet",
             )
@@ -1728,7 +1733,7 @@ class Map:
             structure's own address.
             """
 
-            raise _disabled(
+            raise _unported(
                 "WorldMap.GetExtraData",
                 "the world-map context field read is not ported yet",
             )
@@ -1745,7 +1750,7 @@ class Map:
             Not ported yet: the pre-game context's frame id is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pregame.GetFrameID",
                 "the pre-game context's frame id is not ported yet",
             )
@@ -1757,7 +1762,7 @@ class Map:
             Not ported yet: the frame lookup is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pregame.GetFrame", "the frame lookup is not ported yet"
             )
 
@@ -1768,7 +1773,7 @@ class Map:
             Not ported yet: it reads the frame's existence (Stage 5).
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pregame.IsWindowOpen", "the frame lookup is not ported yet"
             )
 
@@ -1779,7 +1784,7 @@ class Map:
             Not ported yet: the pre-game context's preview index is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pregame.GetChosenCharacterIndex",
                 "the pre-game context's character index is not ported yet",
             )
@@ -1791,7 +1796,7 @@ class Map:
             Not ported yet: the pre-game context read is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pregame.GetContextStruct",
                 "the pre-game context read is not ported yet",
             )
@@ -1803,7 +1808,7 @@ class Map:
             Not ported yet: the pre-game context's character list is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pregame.GetCharList",
                 "the pre-game context's character list is not ported yet",
             )
@@ -1815,7 +1820,7 @@ class Map:
             Not ported yet: the available-character array is Stage 5.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pregame.GetAvailableCharacterList",
                 "the available-character array read is not ported yet",
             )
@@ -1824,7 +1829,7 @@ class Map:
         def InCharacterSelectScreen() -> bool:
             """Disabled: it calls into the client through ``PySystem``."""
 
-            raise _disabled(
+            raise _unported(
                 "Pregame.InCharacterSelectScreen",
                 "it calls into the client's own runtime through PySystem",
             )
@@ -1833,7 +1838,7 @@ class Map:
         def LogoutToCharacterSelect() -> None:
             """Disabled: it queues a logout UI message on the game thread."""
 
-            raise _disabled(
+            raise _unported(
                 "Pregame.LogoutToCharacterSelect",
                 "it queues a logout UI message on the client's own game thread",
             )
@@ -1852,7 +1857,7 @@ class Map:
             which this project has no route to yet.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.GetPathingMaps",
                 "the live pathing read is not ported yet",
             )
@@ -1864,7 +1869,7 @@ class Map:
             Not ported yet: the live map-context read is Stage 7.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.GetPathingMapsRaw",
                 "the live pathing read is not ported yet",
             )
@@ -1881,7 +1886,7 @@ class Map:
             it does here is determined in Stage 7.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.ClearPathingCache",
                 "it clears the source project's own pathing caches, which this "
                 "port does not create",
@@ -1891,7 +1896,7 @@ class Map:
         def ForceReloadNavMesh() -> None:
             """Disabled: it builds the navmesh inside the client."""
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.ForceReloadNavMesh",
                 "it builds the navmesh inside Gw.exe",
             )
@@ -1904,7 +1909,7 @@ class Map:
             itself still needs the DAT/FFNA capability.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.GetAvailableMapIds",
                 "the FFNA map-id table is not ported yet",
             )
@@ -1919,7 +1924,7 @@ class Map:
             branch needs the DAT/FFNA capability.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.GetSpawns", "the live pathing read is not ported yet"
             )
 
@@ -1931,7 +1936,7 @@ class Map:
             branch needs the DAT/FFNA capability.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.GetTravelPortals",
                 "the live pathing read is not ported yet",
             )
@@ -1940,7 +1945,7 @@ class Map:
         def WorldToScreen(x: float, y: float, z: float = 0.0) -> tuple[float, float]:
             """Disabled: it projects through the client's overlay kernel."""
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.WorldToScreen",
                 "it projects through the client's own overlay kernel",
             )
@@ -1955,7 +1960,7 @@ class Map:
                 Stage 7.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "Pathing.Quad.__init__", "the quad construction is not ported yet"
                 )
 
@@ -1965,7 +1970,7 @@ class Map:
                 Not ported yet: the quad construction is Stage 7.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "Pathing.Quad.GetPoints", "the quad construction is not ported yet"
                 )
 
@@ -1975,7 +1980,7 @@ class Map:
                 Not ported yet: the quad construction is Stage 7.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "Pathing.Quad.GetScreenPoints",
                     "the quad construction is not ported yet",
                 )
@@ -1986,7 +1991,7 @@ class Map:
                 Not ported yet: the quad construction is Stage 7.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "Pathing.Quad.GetShiftedPoints",
                     "the quad construction is not ported yet",
                 )
@@ -1999,7 +2004,7 @@ class Map:
                 Not ported yet: the quad construction is Stage 7.
                 """
 
-                raise _disabled(
+                raise _unported(
                     "Pathing.Quad.GetShiftedScreenPoints",
                     "the quad construction is not ported yet",
                 )
@@ -2012,7 +2017,7 @@ class Map:
             (Stage 7).
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.GetComputedGeometry",
                 "the live pathing read is not ported yet",
             )
@@ -2025,7 +2030,7 @@ class Map:
             (Stage 7).
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.GetScreenComputedGeometry",
                 "the live pathing read is not ported yet",
             )
@@ -2040,7 +2045,7 @@ class Map:
             (Stage 7).
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.GetShiftedComputedGeometry",
                 "the live pathing read is not ported yet",
             )
@@ -2055,7 +2060,7 @@ class Map:
             (Stage 7).
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.GetshiftedScreenComputedGeometry",
                 "the live pathing read is not ported yet",
             )
@@ -2067,7 +2072,7 @@ class Map:
             Not ported yet: the quad test is Stage 7.
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing._point_in_quad", "the quad test is not ported yet"
             )
 
@@ -2079,7 +2084,7 @@ class Map:
             (Stage 7).
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.GetMapQuads", "the live pathing read is not ported yet"
             )
 
@@ -2091,7 +2096,7 @@ class Map:
             (Stage 7).
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.IsPointInPathing",
                 "the live pathing read is not ported yet",
             )
@@ -2104,7 +2109,7 @@ class Map:
             (Stage 7).
             """
 
-            raise _disabled(
+            raise _unported(
                 "Pathing.IsScreenPointInPathing",
                 "the live pathing read is not ported yet",
             )

@@ -1,0 +1,155 @@
+test_a_coloured_fake_chat_line_is_written_too (tests.test_live_agent_chat._LiveAgentChatTests.test_a_coloured_fake_chat_line_is_written_too)
+``Player.SendFakeChatColored`` runs the formatter and writes the coloured line. ... ERROR
+test_a_fake_chat_line_is_written_by_the_client_s_own_function (tests.test_live_agent_chat._LiveAgentChatTests.test_a_fake_chat_line_is_written_by_the_client_s_own_function)
+``Player.SendFakeChat`` reaches the client, and the client reports the line. ... ERROR
+test_a_living_agents_enum_backed_members_answer_the_source_s_arithmetic (tests.test_live_agent_chat._LiveAgentChatTests.test_a_living_agents_enum_backed_members_answer_the_source_s_arithmetic)
+Each member is checked against the record it reads and the table the source uses. ... ERROR
+test_the_command_channel_reaches_the_client_s_sender (tests.test_live_agent_chat._LiveAgentChatTests.test_the_command_channel_reaches_the_client_s_sender)
+``Player.SendChatCommand`` calls this build's real send function, and the client lives. ... ERROR
+test_the_players_own_professions_and_allegiance_are_readable (tests.test_live_agent_chat._LiveAgentChatTests.test_the_players_own_professions_and_allegiance_are_readable)
+The player's record is the one a caller checks by eye, so print what it answers. ... ERROR
+
+======================================================================
+ERROR: test_a_coloured_fake_chat_line_is_written_too (tests.test_live_agent_chat._LiveAgentChatTests.test_a_coloured_fake_chat_line_is_written_too)
+``Player.SendFakeChatColored`` runs the formatter and writes the coloured line.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_live_agent_chat.py", line 377, in test_a_coloured_fake_chat_line_is_written_too
+    Player.SendFakeChatColored(ChatChannel.CHANNEL_ALL, COLOURED_MARKER, 255, 128, 0)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\player.py", line 1488, in SendFakeChatColored
+    chat.SendFakeChatColored(channel, message, r, g, b)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\chat.py", line 388, in SendFakeChatColored
+    WriteChat(ChatChannel(int(channel)), Player.FormatChatMessage(message, r, g, b), None, True)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\chat.py", line 278, in WriteChat
+    WriteChatEnc(
+    ~~~~~~~~~~~~^
+        channel,
+        ^^^^^^^^
+    ...<2 lines>...
+        transient,
+        ^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\chat.py", line 329, in WriteChatEnc
+    client.send_ui_message(WRITE_TO_CHAT_LOG, param_address, 0)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\client.py", line 783, in send_ui_message
+    return self.bridge.call(slot, message_id, wparam, lparam)
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\bridge.py", line 553, in call
+    return self.wait(
+           ~~~~~~~~~^
+        self.publish_call(slot, arg1, arg2, arg3, arg4, arg5), timeout_ms
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\bridge.py", line 484, in wait
+    raise TimeoutError(
+    ...<3 lines>...
+    )
+TimeoutError: pid 48116: command 0 did not complete within 2000 ms. Slot 0 holds sequence 0 in state RUNNING.
+
+======================================================================
+ERROR: test_a_fake_chat_line_is_written_by_the_client_s_own_function (tests.test_live_agent_chat._LiveAgentChatTests.test_a_fake_chat_line_is_written_by_the_client_s_own_function)
+``Player.SendFakeChat`` reaches the client, and the client reports the line.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_live_agent_chat.py", line 363, in test_a_fake_chat_line_is_written_by_the_client_s_own_function
+    Player.SendFakeChat(ChatChannel.CHANNEL_ALL, MARKER)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\player.py", line 1474, in SendFakeChat
+    chat.SendFakeChat(channel, message)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\chat.py", line 374, in SendFakeChat
+    WriteChat(ChatChannel(int(channel)), message, None, True)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\chat.py", line 278, in WriteChat
+    WriteChatEnc(
+    ~~~~~~~~~~~~^
+        channel,
+        ^^^^^^^^
+    ...<2 lines>...
+        transient,
+        ^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\chat.py", line 329, in WriteChatEnc
+    client.send_ui_message(WRITE_TO_CHAT_LOG, param_address, 0)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\client.py", line 783, in send_ui_message
+    return self.bridge.call(slot, message_id, wparam, lparam)
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\bridge.py", line 553, in call
+    return self.wait(
+           ~~~~~~~~~^
+        self.publish_call(slot, arg1, arg2, arg3, arg4, arg5), timeout_ms
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\bridge.py", line 484, in wait
+    raise TimeoutError(
+    ...<3 lines>...
+    )
+TimeoutError: pid 48116: command 1 did not complete within 2000 ms. Slot 1 holds sequence 1 in state READY.
+
+======================================================================
+ERROR: test_a_living_agents_enum_backed_members_answer_the_source_s_arithmetic (tests.test_live_agent_chat._LiveAgentChatTests.test_a_living_agents_enum_backed_members_answer_the_source_s_arithmetic)
+Each member is checked against the record it reads and the table the source uses.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_live_agent_chat.py", line 234, in test_a_living_agents_enum_backed_members_answer_the_source_s_arithmetic
+    player_id = self.client.read_player_agent_id().player_agent_id
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'PlayerAgentIdStruct' object has no attribute 'player_agent_id'
+
+======================================================================
+ERROR: test_the_command_channel_reaches_the_client_s_sender (tests.test_live_agent_chat._LiveAgentChatTests.test_the_command_channel_reaches_the_client_s_sender)
+``Player.SendChatCommand`` calls this build's real send function, and the client lives.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_live_agent_chat.py", line 391, in test_the_command_channel_reaches_the_client_s_sender
+    self.assertTrue(Player.SendChatCommand("age"), "the send was refused before the call")
+                    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\player.py", line 1430, in SendChatCommand
+    chat.SendChat("/", command)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\chat.py", line 170, in SendChat
+    client.call_function(SEND_CHAT_FUNC, CallForm.U32_U32, address, 0)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\client.py", line 719, in call_function
+    return self.bridge.call(slot, arg1, arg2, arg3, arg4, arg5, timeout_ms)
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\bridge.py", line 553, in call
+    return self.wait(
+           ~~~~~~~~~^
+        self.publish_call(slot, arg1, arg2, arg3, arg4, arg5), timeout_ms
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\bridge.py", line 484, in wait
+    raise TimeoutError(
+    ...<3 lines>...
+    )
+TimeoutError: pid 48116: command 2 did not complete within 2000 ms. Slot 2 holds sequence 2 in state READY.
+
+======================================================================
+ERROR: test_the_players_own_professions_and_allegiance_are_readable (tests.test_live_agent_chat._LiveAgentChatTests.test_the_players_own_professions_and_allegiance_are_readable)
+The player's record is the one a caller checks by eye, so print what it answers.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_live_agent_chat.py", line 337, in test_the_players_own_professions_and_allegiance_are_readable
+    player_id = self.client.read_player_agent_id().player_agent_id
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'PlayerAgentIdStruct' object has no attribute 'player_agent_id'
+
+----------------------------------------------------------------------
+Ran 5 tests in 9.180s
+
+FAILED (errors=5)
+--- connected to pid 48116, module 0x00610000 (0xf49000 bytes), watching kWriteToChatLog ---
+--- code section after disconnect: 33984c4c6a98d23e… (0x538600 bytes); before: 33984c4c6a98d23e… ---
+--- the layer reinstalled and was removed again: entries are the originals ---
+EXIT=1 

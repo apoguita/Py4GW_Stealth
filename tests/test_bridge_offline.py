@@ -30,10 +30,18 @@ from py4gw.game_thread.shared_block import (
     BLOCK_SIZE,
     COMMAND_DEPTH,
     COMMAND_SIZE,
+    DATA_REGION_OFFSET,
+    DATA_SIZE,
+    DECODE_DEPTH,
+    DECODE_REGION_OFFSET,
+    DECODE_SLOT_SIZE,
     DESCRIPTOR_DEPTH,
     DESCRIPTOR_SIZE,
     EVENT_DEPTH,
+    EVENT_REGION_OFFSET,
+    EVENT_SIZE,
     HEADER_OFFSET,
+    HEADER_SIZE,
     CallForm,
     CommandRecord,
     CommandState,
@@ -42,6 +50,7 @@ from py4gw.game_thread.shared_block import (
     EventRecord,
     Operation,
     command_offset,
+    data_offset,
     descriptor_offset,
     event_offset,
 )
@@ -201,6 +210,71 @@ class BridgeTestCase(unittest.TestCase):
         self.payload = FakePayload(self.target, self.bridge)
 
 
+class DataRegionTests(BridgeTestCase):
+    """The block's data region: what a call is handed a pointer to.
+
+    A function that takes a pointer — a string to read, a word to write a result into —
+    needs an address in the client that outlives the call. The source's callers use their
+    own stack frames; this project uses a span of the block, which is the same thing from
+    the client's side: memory inside its own process.
+    """
+
+    def test_the_region_is_inside_the_block_and_after_the_events(self) -> None:
+        self.assertEqual(
+            data_offset(0, 0), EVENT_REGION_OFFSET + EVENT_DEPTH * EVENT_SIZE
+        )
+        self.assertEqual(DECODE_REGION_OFFSET, DATA_REGION_OFFSET + DATA_SIZE)
+        self.assertEqual(
+            BLOCK_SIZE,
+            DECODE_REGION_OFFSET + DECODE_DEPTH * DECODE_SLOT_SIZE,
+        )
+
+    def test_data_survives_a_write_and_a_read(self) -> None:
+        payload = b"Foreman"
+
+        address = self.bridge.write_data(0x40, payload)
+
+        self.assertEqual(
+            address, self.bridge.block_address + data_offset(0x40, len(payload))
+        )
+        self.assertEqual(self.bridge.read_data(0x40, len(payload)), payload)
+
+    def test_a_wide_string_can_be_placed_for_the_client_to_read(self) -> None:
+        """``FileHashToRecObj`` takes a ``const wchar_t*``; this is how it gets one."""
+
+        payload = "amet".encode("utf-16-le") + b"\x00\x00"
+        address = self.bridge.write_data(0, payload)
+
+        self.assertEqual(self.bridge.read_data(0, len(payload)), payload)
+        self.assertEqual(
+            address, self.bridge.block_address + data_offset(0, len(payload))
+        )
+
+    def test_a_span_past_the_region_is_refused(self) -> None:
+        """The alternative to refusing is writing over the event ring."""
+
+        with self.assertRaises(ValueError):
+            self.bridge.write_data(DATA_SIZE, b"\x00")
+        with self.assertRaises(ValueError):
+            self.bridge.read_data(DATA_SIZE - 2, 4)
+        with self.assertRaises(ValueError):
+            self.bridge.data_address(-1)
+
+    def test_the_region_cannot_reach_the_event_ring(self) -> None:
+        """Every span is inside the region, so the counters and events are untouched."""
+
+        self.bridge.write_data(0, bytes(DATA_SIZE))
+        before = self.target.read(self.bridge.block_address, HEADER_SIZE)
+        after = self.target.read(self.bridge.block_address, HEADER_SIZE)
+        self.assertEqual(before, after)
+
+    def test_a_bridge_without_a_block_refuses(self) -> None:
+        bridge = Bridge(self.target, PID, timeout_ms=200)
+
+        with self.assertRaises(RuntimeError):
+            bridge.write_data(0, b"\x00")
+
+
 class InstallTests(BridgeTestCase):
     """What install places, in what order, and what it does when it fails."""
 
@@ -342,6 +416,44 @@ class QueueTests(BridgeTestCase):
         record = self.bridge.wait(sequence, timeout_ms=2000)
         self.assertEqual(record.result, 7)
         self.assertGreaterEqual(time.monotonic() - started, 0.01)
+
+    def test_a_call_publishes_and_waits_without_deadlocking_itself(self) -> None:
+        """The ring is held for a whole call, and a call *is* a publish.
+
+        ``call`` takes the ring so no other thread can publish into it while it waits, and then
+        publishes on the same thread. A lock that is not reentrant makes that a deadlock on the
+        first call of the session — a hang no caller could diagnose — so the call is made on a
+        thread this test can give up on, and not completing is a failure rather than a hang.
+        """
+
+        def finish() -> None:
+            for _ in range(400):
+                header = self.bridge.header()
+                if header.command_written:
+                    self.payload.complete(header.command_written - 1, result=0x5A)
+                    return
+                time.sleep(0.005)
+
+        worker = threading.Thread(target=finish, daemon=True)
+        worker.start()
+
+        records: list[CommandRecord] = []
+        caller = threading.Thread(
+            target=lambda: records.append(
+                self.bridge.call(0, 0x3000000B, 42, 0, timeout_ms=2000)
+            ),
+            daemon=True,
+        )
+        caller.start()
+        caller.join(3.0)
+
+        self.assertFalse(
+            caller.is_alive(),
+            "the call never returned: the lock it holds for the ring is not reentrant",
+        )
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].state, CommandState.DONE)
+        self.assertEqual(records[0].result, 0x5A)
 
     def test_wait_times_out_and_says_what_it_saw(self) -> None:
         sequence = self.bridge.publish(Operation.PING)

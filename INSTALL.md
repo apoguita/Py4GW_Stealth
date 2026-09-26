@@ -16,8 +16,8 @@ bindings, shared-memory game state, widgets, hooks, and higher-level helpers.
 The native companion that builds the DLL is
 <https://github.com/apoguita/Py4GW_Reforged_Native>.
 
-Stealth is a capability-by-capability external counterpart to that system, not
-a promise that every in-process feature can be reproduced externally.
+Stealth is a capability-by-capability external counterpart to that system, and
+not every in-process feature has reached the port yet.
 
 The current implementation is intentionally small. It provides a `py4gw`
 Python package with a `Win32` process boundary and a read-only scanner that can:
@@ -34,9 +34,10 @@ the `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`,
 `GameplayContext`, `ServerRegion`, `InstanceInfo`, `TextParser`,
 `AvailableCharacterArray`, `PartyContext`, `GuildContext`, and
 `AccAgentContext` readers have also been
-verified against one live client build. Compatibility with other builds is not established. No read
-path writes anything, and no ported member calls a Guild Wars function.
-`py4gw/game_thread/` does, and `py4gw.connect()` installs that layer by default:
+verified against one live client build. Compatibility with other builds is not established. No *read*
+path writes anything; the members that act — eleven of `Player`'s, calling the client's own
+functions on the client's own thread — go through the layer below.
+`py4gw/game_thread/` places code in the client, and `py4gw.connect()` installs that layer by default:
 two entry hooks, a dispatcher emitted as machine code from Python that runs typed
 calls on the client's own thread, an observer, and a listener thread that delivers
 events to registered callbacks. `tests/test_live_bridge.py` and

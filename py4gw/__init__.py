@@ -1,6 +1,6 @@
 """Small external library for Guild Wars process and memory research."""
 
-from . import context, ui, win32
+from . import chat, context, ui, win32
 from .client import ConnectedClient, connect, current_client, disconnect
 from .scanner import (
     Pattern,

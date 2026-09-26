@@ -124,7 +124,7 @@ class FriendListOfflineTests(unittest.TestCase):
         self.assertEqual(context.get_number_of_friends(), 1)
         self.assertEqual(context.get_my_status(), FriendStatus.away)
 
-    def test_source_actions_are_declared_but_disabled(self) -> None:
+    def test_source_actions_are_declared_but_not_ported(self) -> None:
         """Mutating source API names are present but cannot write remotely."""
 
         reader = object.__new__(FriendList)

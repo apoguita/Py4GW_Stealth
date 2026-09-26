@@ -107,7 +107,7 @@ NESTED = (
 )
 
 #: Members Reforged refuses to run: they need code inside the client.
-DISABLED_MEMBERS = (
+NOT_PORTED_MEMBERS = (
     "party_instance",
     "SetHardMode",
     "SetNormalMode",
@@ -270,10 +270,10 @@ class DisabledMemberTests(unittest.TestCase):
                     call()
                 self.assertIn(label, str(caught.exception))
 
-    def test_disabled_names_are_real_members(self) -> None:
+    def test_not_ported_names_are_real_members(self) -> None:
         """Keep the disabled list honest: each name must exist."""
 
-        for name in DISABLED_MEMBERS:
+        for name in NOT_PORTED_MEMBERS:
             with self.subTest(member=name):
                 self.assertTrue(hasattr(Party, name))
         for label, _ in DISABLED_NESTED_CALLS:

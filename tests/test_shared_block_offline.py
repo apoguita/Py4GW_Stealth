@@ -20,6 +20,7 @@ from py4gw.game_thread import shared_block as block
 from py4gw.game_thread.shared_block import (
     BLOCK_SIZE,
     COMMAND_DEPTH,
+    COMMAND_OFFSET,
     COMMAND_SIZE,
     EVENT_DEPTH,
     EVENT_SIZE,
@@ -49,17 +50,54 @@ class LayoutTests(unittest.TestCase):
 
     def test_sizes_are_what_the_payload_expects(self) -> None:
         self.assertEqual(block.HEADER_SIZE, 64)
-        self.assertEqual(COMMAND_SIZE, 32)
-        self.assertEqual(EVENT_SIZE, 32)
+        self.assertEqual(COMMAND_SIZE, 64)
+        self.assertEqual(
+            EVENT_SIZE, block.EVENT_TEXT_OFFSET + block.EVENT_TEXT_WORDS * 2
+        )
         self.assertEqual(block.COMMAND_REGION_OFFSET, 64)
-        self.assertEqual(block.EVENT_REGION_OFFSET, 64 + 16 * 32)
-        self.assertEqual(BLOCK_SIZE, 64 + 16 * 32 + 64 * 32)
+        self.assertEqual(block.EVENT_REGION_OFFSET, 64 + 16 * 64)
+        self.assertEqual(
+            block.DECODE_REGION_OFFSET,
+            block.EVENT_REGION_OFFSET + 64 * EVENT_SIZE + block.DATA_SIZE,
+        )
+        self.assertEqual(
+            BLOCK_SIZE,
+            block.DECODE_REGION_OFFSET + block.DECODE_DEPTH * block.DECODE_SLOT_SIZE,
+        )
+        self.assertEqual(
+            block.DECODE_SLOT_SIZE,
+            block.DECODE_HEADER_SIZE
+            + block.DECODE_INPUT_SIZE
+            + block.DECODE_OUTPUT_SIZE,
+        )
 
-    def test_records_have_no_padding(self) -> None:
-        """Every field is four bytes, so the struct sizes are the field sums."""
+    def test_the_command_slot_is_a_power_of_two_the_emitter_can_shift(self) -> None:
+        """The dispatcher and the observer address a record by shifting its slot."""
 
-        self.assertEqual(len(CommandRecord(sequence=1, operation=2).to_bytes()), 32)
-        self.assertEqual(len(EventRecord(kind=1).to_bytes()), 32)
+        self.assertEqual(COMMAND_SIZE & (COMMAND_SIZE - 1), 0)
+        self.assertEqual(EVENT_SIZE & (EVENT_SIZE - 1), 0)
+
+    def test_the_event_text_starts_after_the_words_a_reader_reads(self) -> None:
+        """The copy the observer takes is its own area, past the record's ten words."""
+
+        # Ten words: the eight the record always had, then the state and length of the copy.
+        self.assertEqual(block.EVENT_TEXT_LENGTH_OFFSET + 4, 40)
+        self.assertEqual(block.EVENT_TEXT_OFFSET + block.EVENT_TEXT_SIZE, EVENT_SIZE)
+        self.assertEqual(block.EVENT_TEXT_SIZE, block.EVENT_TEXT_WORDS * 2)
+
+    def test_records_have_no_padding_except_the_command_slot(self) -> None:
+        """Event and header fields are four bytes each; the command keeps room it has not used.
+
+        Nine of the command slot's sixteen words are in use — the eight it always had plus
+        ``value`` — so the record is padded to the slot rather than sized to the fields, and
+        the round trip has to survive that. An event record is sized to its own room: its words,
+        six unused bytes, and the bounded copy of a string a watched message named.
+        """
+
+        record = CommandRecord(sequence=1, operation=2)
+        self.assertEqual(len(record.to_bytes()), COMMAND_SIZE)
+        self.assertEqual(CommandRecord.from_bytes(record.to_bytes()), record)
+        self.assertEqual(len(EventRecord(kind=1).to_bytes()), EVENT_SIZE)
         self.assertEqual(len(BlockHeader(session_id=1).to_bytes()), 64)
 
     def test_offsets_stay_inside_their_region(self) -> None:
@@ -69,7 +107,39 @@ class LayoutTests(unittest.TestCase):
             block.EVENT_REGION_OFFSET,
         )
         self.assertEqual(event_offset(0), block.EVENT_REGION_OFFSET)
-        self.assertEqual(event_offset(EVENT_DEPTH - 1) + EVENT_SIZE, BLOCK_SIZE)
+        self.assertEqual(
+            event_offset(EVENT_DEPTH - 1) + EVENT_SIZE, block.DATA_REGION_OFFSET
+        )
+        self.assertEqual(block.data_offset(0), block.DATA_REGION_OFFSET)
+        self.assertEqual(
+            block.data_offset(block.DATA_SIZE - 1, 1) + 1, block.DECODE_REGION_OFFSET
+        )
+        self.assertEqual(
+            block.decode_slot_offset(0), block.DECODE_REGION_OFFSET
+        )
+        self.assertEqual(
+            block.decode_slot_offset(block.DECODE_DEPTH - 1)
+            + block.DECODE_SLOT_SIZE,
+            BLOCK_SIZE,
+        )
+        self.assertEqual(
+            block.decode_input_offset(0),
+            block.DECODE_REGION_OFFSET + block.DECODE_SLOT_INPUT_OFFSET,
+        )
+        self.assertEqual(
+            block.decode_output_offset(0),
+            block.DECODE_REGION_OFFSET + block.DECODE_SLOT_OUTPUT_OFFSET,
+        )
+
+    def test_a_data_span_past_the_region_is_rejected(self) -> None:
+        """The region is bounded where it is addressed, not where it is written."""
+
+        with self.assertRaises(ValueError):
+            block.data_offset(block.DATA_SIZE, 1)
+        with self.assertRaises(ValueError):
+            block.data_offset(block.DATA_SIZE - 2, 4)
+        with self.assertRaises(ValueError):
+            block.data_offset(-1)
 
     def test_slot_out_of_range_is_rejected(self) -> None:
         for bad in (-1, COMMAND_DEPTH):
@@ -268,9 +338,40 @@ class CommandRecordTests(unittest.TestCase):
 
     def test_unknown_state_is_rejected(self) -> None:
         raw = bytearray(CommandRecord(sequence=1, operation=1).to_bytes())
-        struct.pack_into("<I", raw, 24, 99)
+        struct.pack_into("<I", raw, COMMAND_OFFSET["state"], 99)
         with self.assertRaises(ValueError):
             CommandRecord.from_bytes(bytes(raw))
+
+    def test_the_record_carries_six_argument_words(self) -> None:
+        """Six words, so a call can pass the five a source declaration takes."""
+
+        record = CommandRecord(
+            sequence=1,
+            operation=2,
+            arg0=0x1111,
+            arg1=0x2222,
+            arg2=0x3333,
+            arg3=0x4444,
+            arg4=0x5555,
+            arg5=0x6666,
+        )
+
+        self.assertEqual(CommandRecord.from_bytes(record.to_bytes()), record)
+
+    def test_the_argument_words_are_in_order_and_before_the_payload_words(self) -> None:
+        """A caller addresses these by offset, so their order is the contract."""
+
+        order = [
+            COMMAND_OFFSET[name]
+            for name in ("arg0", "arg1", "arg2", "arg3", "arg4", "arg5", "state")
+        ]
+
+        self.assertEqual(order, sorted(order))
+        self.assertEqual(
+            order,
+            [index * 4 for index in range(2, 9)],
+            "arg0 starts the third word and state follows the arguments",
+        )
 
     def test_wrong_size_is_rejected(self) -> None:
         with self.assertRaises(ValueError):

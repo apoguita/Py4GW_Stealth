@@ -304,6 +304,17 @@ IMPLEMENTED: frozenset[str] = frozenset(
     }
 )
 
+#: The nested members that read the client today, by qualified path. ``IMPLEMENTED`` above is a
+#: name-only set for the top-level class, which is why these are carried separately: ``GetZoom``
+#: exists in more than one namespace, and the one ported here is ``Map.MissionMap.GetZoom``
+#: (``Map.py:1031-1036``), the gameplay context's zoom — landed because ``Utils.GwinchToPixels`` and
+#: ``Utils.PixelsToGwinch`` read it (``py4gwcorelib_src/Utils.py:156,168``).
+NESTED_IMPLEMENTED: frozenset[str] = frozenset(
+    {
+        "Map.MissionMap.GetZoom",
+    }
+)
+
 #: Members that need code inside the client. These refuse permanently, so each
 #: one is called here to prove it names itself instead of returning a value.
 PERMANENT_REFUSALS: tuple[tuple[str, object], ...] = (
@@ -463,7 +474,7 @@ class RefusalTests(unittest.TestCase):
 
         Checked on the source of this module rather than by calling: arity varies
         per member, and a call-shaped test would drift. Every member that is not
-        in ``IMPLEMENTED`` must have a body that raises ``_disabled``.
+        in ``IMPLEMENTED`` must have a body that raises ``_unported``.
         """
 
         tree = ast.parse(Path(__file__).resolve().parent.parent.joinpath(
@@ -487,7 +498,7 @@ class RefusalTests(unittest.TestCase):
                 isinstance(first, ast.Raise)
                 and isinstance(first.exc, ast.Call)
                 and isinstance(first.exc.func, ast.Name)
-                and first.exc.func.id == "_disabled"
+                and first.exc.func.id == "_unported"
             )
 
         def visit(node: ast.AST, prefix: list[str]) -> None:
@@ -513,6 +524,7 @@ class RefusalTests(unittest.TestCase):
             every_path.update(f"Map.{path}.{name}" for name in members)
 
         implemented_paths = {f"Map.{name}" for name in IMPLEMENTED}
+        implemented_paths.update(NESTED_IMPLEMENTED)
         refusing_paths = set(refusing)
 
         self.assertEqual(
@@ -526,7 +538,7 @@ class RefusalTests(unittest.TestCase):
             "these members are listed as implemented but still refuse",
         )
         self.assertEqual(len(every_path), 178)
-        self.assertEqual(len(implemented_paths), 44)
+        self.assertEqual(len(implemented_paths), 45)
 
 
 if __name__ == "__main__":

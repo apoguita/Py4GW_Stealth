@@ -26,6 +26,8 @@ from .context import (
     PreGameContextStruct,
     ServerRegion,
     ServerRegionStruct,
+    SkillConstantArray,
+    SkillStruct,
     PlayerAgentId,
     PlayerAgentIdStruct,
     InstanceInfo,
@@ -75,13 +77,26 @@ from .context import (
 from .memory import ProcessMemoryReader
 from .perf_counter import PerfCounter
 from .scanner import PatternCatalog, RemoteScanner
-from .ui import FrameArray, FrameTree
+from .ui import CurrentTooltip, FrameArray, FrameTree, TooltipInfoStruct
 from .win32 import Win32
 from .win32.write_access import WriteAccess
 from .game_thread.bridge import Bridge
 from .game_thread.callbacks import Callbacks, EventListener
 from .game_thread.patcher import Patcher
-from .game_thread.shared_block import WATCH_DEPTH, WATCH_SIZE
+from . import chat
+from . import dialog
+from .dialog import DialogTables
+from .game_thread.shared_block import (
+    DESCRIPTOR_DEPTH,
+    WATCH_DEPTH,
+    WATCH_SIZE,
+    CallForm,
+    CommandRecord,
+    Descriptor,
+    EventKind,
+    EventRecord,
+    descriptor_offset,
+)
 
 #: The two client functions this library hooks when it connects. The first is the
 #: game thread's own per-frame function, which is where our work runs; the second
@@ -97,6 +112,45 @@ _GAME_THREAD_OBSERVE_BYTES = bytes.fromhex("55 8B EC 8B 45 08 83 F8 56")
 
 #: ``jmp rel32``, the first byte of an entry patch.
 _JMP_REL32 = 0xE9
+
+#: ``UIMessage::kDialogBody`` (``constants/ui.h:75``) and ``kDialogButton``
+#: (``constants/ui.h:74``): the two messages the dialog module's state comes from.
+#: A connection watches them and registers that module's capture, because the state
+#: belongs to the dialog module — where ``dialog.cpp`` keeps it — and not here.
+_DIALOG_BODY_MESSAGE = 0x100000A6
+_DIALOG_BUTTON_MESSAGE = 0x100000A3
+_DIALOG_MESSAGES = (_DIALOG_BODY_MESSAGE, _DIALOG_BUTTON_MESSAGE)
+
+#: ``UIMessage::kChangeTarget`` (``constants/ui.h:39``): the client's notice that its
+#: target changed. Its packet is ``ChangeTargetUIMsg``, whose **first** word is the
+#: manual target id (``context/ui.h:78-85``), so the observer copies it into ``arg0``.
+#:
+#: Reforged's runtime keeps this one too, as ``g_current_target_id``
+#: (``agent.cpp:161-165``), and that global is what its ``GetTargetId()`` returns —
+#: which is why this port's ``Player.GetTargetID`` had nothing to read.
+#:
+#: The client reports a **change**: given the target it already has, it says nothing.
+#: So the capture holds the last target the client *announced*, which is the same
+#: thing the source's global holds, and it starts at zero either way.
+#:
+#: The dialog state is **not** here: it belongs to the dialog module, which is where
+#: ``dialog.cpp`` keeps it, and this connection only feeds it (see ``py4gw/dialog.py``).
+_TARGET_CHANGE_MESSAGE = 0x10000020
+
+#: What the observer is told to watch: each message id, and the byte offset of the ``wchar_t*``
+#: field that message carries — the string the observer copies out **inside the client's call**,
+#: because that is the only moment it is the client's own (``docs/RESEARCH.md``, 2026-09-25).
+#:
+#: The offsets are the ported packet layouts: ``DialogBodyInfo {uint32 type; uint32 agent_id;
+#: wchar_t* message_enc}`` puts its string third (``context/ui.h:54-58``), the client's
+#: ``DialogButtonInfo {uint32 button_icon; wchar_t* message; uint32 dialog_id; uint32 skill_id}``
+#: puts its second (``context/ui.h:60-65``), and ``ChangeTargetUIMsg`` names no string at all
+#: (``context/ui.h:78-84``), which is what the zero says.
+_WATCHED_MESSAGES = (
+    (_DIALOG_BODY_MESSAGE, 8),
+    (_DIALOG_BUTTON_MESSAGE, 4),
+    (_TARGET_CHANGE_MESSAGE, 0),
+) + chat.watch_entries()
 
 
 
@@ -133,6 +187,15 @@ class ConnectedClient:
         self._listener: EventListener | None = None
         self._access: WriteAccess | None = None
         self._suspended_threads = 0
+        self._call_slots: dict[tuple[object, int], int] = {}
+        self._target_id = 0
+        #: ``GW::ui::SendUIMessage``'s address, resolved **once** and then held, the way the sources
+        #: hold the pointer they resolved at init. Installing the layer resolves it before it patches
+        #: that function's entry, so this is where a caller after that gets it from: resolving
+        #: ``ui.send_ui_message_func`` again would be resolving a *patched* entry, and its pattern's
+        #: ``to_function_start`` would walk back past the patched prologue to the function before it
+        #: (``docs/RESEARCH.md``, 2026-09-26).
+        self._ui_message_address = 0
 
         # Elevation is asserted here, once, rather than left to surface later as a
         # bare "Windows error 5" from the first operation that needs it. The pid is
@@ -160,6 +223,7 @@ class ConnectedClient:
             self._scanner.initialize()
             patterns = PatternCatalog.from_directory("offsets")
             self._patterns = patterns
+            self._dialog_tables = DialogTables(self._reader, self._scanner, patterns)
             self._game_context = GameContext(
                 self._reader,
                 self._scanner,
@@ -247,6 +311,18 @@ class ConnectedClient:
                 cache_context_validator=self._agent_array_cache_contexts_are_valid,
             )
             self._agent_array.initialize(perf_counter)
+            self._skill_constants = SkillConstantArray(
+                self._reader,
+                self._scanner,
+                patterns,
+            )
+            self._skill_constants.initialize()
+            self._current_tooltip = CurrentTooltip(
+                self._reader,
+                self._scanner,
+                patterns,
+            )
+            self._current_tooltip.initialize()
             self._context = CharContext(
                 self._reader,
                 self._scanner,
@@ -300,8 +376,13 @@ class ConnectedClient:
         the only recovery a client restart.
         """
 
+        global _current_client
+
         hook_target = self._resolve(_GAME_THREAD_HOOK)
         observe_target = self._resolve(_GAME_THREAD_OBSERVE)
+        # Held from here on: this is the address resolved *before* the entry is patched, which is
+        # what a caller of :meth:`send_ui_message` must use afterwards.
+        self._ui_message_address = observe_target
 
         access = WriteAccess(self._pid)
         try:
@@ -319,7 +400,7 @@ class ConnectedClient:
                 calls={},
                 module_base=self._module_base,
                 module_size=self._module_size,
-                watch=(),
+                watch=_WATCHED_MESSAGES,
                 observing=(observe_target, _GAME_THREAD_OBSERVE_BYTES),
             )
         except BaseException:
@@ -329,8 +410,57 @@ class ConnectedClient:
         self._access = access
         self._bridge = bridge
         self._callbacks = Callbacks(bridge)
-        self._listener = EventListener(bridge, self._callbacks)
-        self._listener.start()
+        # The dialog module keeps its own state, so it is initialised here and it is the
+        # module's capture that fills it — the connection only feeds it. ``Initialize`` also
+        # takes the map gate from the live map, which is what keeps the first dialog message
+        # from being dropped as if a map transition were in progress.
+        #
+        # That read reaches the client through the current-client registry, so the connection
+        # becomes current *before* the startup that reads it. Native has no such step: its
+        # runtime is in-process and ``Initialize`` reads the map directly. Measured live on
+        # 2026-09-25 with the publish left to :func:`connect`: ``Initialize`` found no client,
+        # took the gate as suspended on an observed map of ``0 / False``, and the first dialog
+        # the client announced — body and both buttons inside 1.5 ms — was refused whole,
+        # which left both journals empty while the dialog itself was open in the client.
+        _current_client = self
+        try:
+            dialog.PyDialog.initialize()
+            self._callbacks.register(EventKind.UI_MESSAGE, dialog._capture_message)
+            self._callbacks.register(EventKind.UI_MESSAGE, self._capture_target)
+            # The client's decoder calling back is what finishes a dialog string, so the
+            # module's completion for it is registered like its message capture — native
+            # registers its own callbacks in the same step (``dialog.cpp:1266-1295``).
+            self._callbacks.register(EventKind.STRING_DECODED, dialog._on_string_decoded)
+            # The chat history is kept the same way native's chat module watches the log message
+            # (``chat.cpp:205``): the connection watches ``kWriteToChatLog`` and the module decodes
+            # each line as it is announced, so the history exists without anyone asking for it.
+            chat.reset_live_history()
+            self._callbacks.register(EventKind.UI_MESSAGE, chat._on_chat_log_line)
+            self._callbacks.register(EventKind.STRING_DECODED, chat._on_string_decoded)
+            self._listener = EventListener(bridge, self._callbacks)
+            self._listener.start()
+        except BaseException:
+            # A connection that could not start is not a connection anything may read
+            # through, so it stops being the current one before it is raised.
+            _current_client = None
+            raise
+
+    def _capture_target(self, event: EventRecord) -> None:
+        """Note the last target the client announced.
+
+        The port of ``g_current_target_id``, which Reforged's runtime keeps from this
+        same message and its ``GetTargetId()`` returns (``agent.cpp:161-165``). The
+        packet's first word is the manual target id.
+
+        This one stays on the connection because nothing else owns it: the source
+        keeps it in the agent module, and this project has no agent module yet — the
+        same reason ``Player.GetTargetID`` reads it from here rather than from a
+        context. When the state does have a module of its own, it belongs there.
+        """
+
+        if event.sequence != _TARGET_CHANGE_MESSAGE:
+            return
+        self._target_id = int(event.arg0)
 
     def _resolve(self, name: str) -> int:
         """Resolve one address the way every other read in this project does."""
@@ -342,36 +472,93 @@ class ConnectedClient:
             )
         return int(result.value)
 
+    def resolves(self, name: str) -> bool:
+        """Return whether one catalog name resolves, without calling it.
+
+        The port of the injected runtime's ``EnsureHooks`` step: the sources resolve a
+        function once and hold the pointer, and a member that needs it answers "not there"
+        rather than calling a null pointer. Here the same question is asked of the pattern
+        catalog, and the caller decides what a missing function means for it.
+        """
+
+        return self._patterns.resolve(name, self._scanner).ok
+
     def _prepare_target(
         self, access: WriteAccess, name: str, address: int, expected: bytes
     ) -> None:
         """Check a target's entry bytes, repairing this library's own stale patch.
 
-        The patch is a relative jump; if the bytes are one whose destination is
-        outside the client's module, it is ours from a controller that died, and
-        the known original bytes go back. Anything else is refused: this does not
-        guess at another tool's patch.
+        The patch is a relative jump; if the bytes at the address are one whose destination is
+        outside the client's module, it is ours from a controller that died, and the known original
+        bytes go back. Anything else is refused: this does not guess at another tool's patch.
+
+        **The second case is this project's recovery, and it used to live in the resolver.**
+        ``Scanner::ToFunctionStart`` walks back to a prologue (``scanner.cpp:205-210``), so an entry
+        this library patched is *invisible* to it: the prologue is gone, and the walk answers the
+        function before it. The port used to paper over that inside ``to_function_start`` by also
+        treating a ``jmp`` that leaves the module as an entry — an inference that cannot be checked
+        without decoding, and that answered an address in the middle of an instruction for
+        ``chat.send_chat_func`` on this build, which is the crash of 2026-09-25
+        (``tools/resolve_offline.py``). The walk is the source's again; the recovery is here, where
+        the address's expected bytes are known, so the restore can be *verified* rather than
+        guessed.
         """
 
         current = access.read(address, len(expected))
         if current == expected:
             return
 
-        if current[0] == _JMP_REL32:
-            destination = (
-                address + 5 + struct.unpack_from("<i", current, 1)[0]
-            ) & 0xFFFFFFFF
-            if not (
-                self._module_base <= destination < self._module_base + self._module_size
-            ):
-                Patcher(access, self._pid).patch(address, current, expected)
-                return
+        if current[0] == _JMP_REL32 and self._leaves_the_module(address, current):
+            Patcher(access, self._pid).patch(address, current, expected)
+            return
+
+        stale = self._stale_patch_before(access, address, len(expected))
+        if stale is not None:
+            Patcher(access, self._pid).patch(stale, access.read(stale, len(expected)), expected)
+            return
 
         raise RuntimeError(
             f"pid {self._pid}: {name} at 0x{address:08X} starts with "
             f"{current.hex(' ')}, not {expected.hex(' ')}, and that is not a jump "
             "out of the module. Refusing to patch it."
         )
+
+    def _leaves_the_module(self, address: int, head: bytes) -> bool:
+        """Whether the ``jmp rel32`` at ``address`` lands outside the client's module."""
+
+        destination = (address + 5 + struct.unpack_from("<i", head, 1)[0]) & 0xFFFFFFFF
+        return not (
+            self._module_base <= destination < self._module_base + self._module_size
+        )
+
+    def _stale_patch_before(
+        self, access: WriteAccess, address: int, size: int, window: int = 0x1000
+    ) -> int | None:
+        """The leftover patch this library left at a target the resolver walked past.
+
+        A killed controller's patch is a ``jmp rel32`` whose destination points at the block that
+        died, so it leaves the module — and after ``ToFunctionStart`` has answered the function
+        *before* the target, that jump is ahead of the answer, not behind it. This looks for it
+        there, and the caller verifies the restore by writing the bytes it expects at the address
+        it finds.
+        """
+
+        end = min(address + window, self._module_base + self._module_size)
+        try:
+            window_bytes = access.read(address, end - address)
+        except OSError:
+            return None
+        for offset in range(0, max(0, len(window_bytes) - size + 1)):
+            if window_bytes[offset] != _JMP_REL32:
+                continue
+            candidate = address + offset
+            head = window_bytes[offset : offset + size]
+            if len(head) < 5:
+                break
+            if self._leaves_the_module(candidate, head):
+                return candidate
+        return None
+
 
     def _count_suspended_threads(self, access: WriteAccess) -> int:
         """Count client threads that are suspended, and leave every count as it was.
@@ -457,6 +644,29 @@ class ConnectedClient:
             )
         return self._access
 
+    @property
+    def target_id(self) -> int:
+        """Return the last target the client announced, or ``0`` for none.
+
+        The port of Reforged's ``g_current_target_id``: the runtime keeps it from the
+        client's own ``kChangeTarget`` notice (``agent.cpp:161-165``) and
+        ``GetTargetId()`` returns it. Kept up to date by the listener while the
+        connection is open, so a script reads it after the client has said what its
+        target is rather than by asking the client directly.
+
+        The client reports **changes**, so this is the last id it named: ``0`` before
+        the first change and after clearing, which is what the source's global holds
+        in both cases.
+        """
+
+        if self._callbacks is None:
+            raise RuntimeError(
+                "this connection was opened without the game thread: pass "
+                "game_thread=True to connect so the client's target changes can be "
+                "captured."
+            )
+        return self._target_id
+
     def watch(self, message: int) -> int:
         """Ask the observer to record one client message id, and return its slot.
 
@@ -493,6 +703,155 @@ class ConnectedClient:
                 return
         raise ValueError(f"pid {self._pid}: message {message:#x} is not watched.")
 
+    def call_function(
+        self,
+        name: str,
+        form: CallForm,
+        arg1: int = 0,
+        arg2: int = 0,
+        arg3: int = 0,
+        arg4: int = 0,
+        arg5: int = 0,
+        timeout_ms: int | None = None,
+    ) -> CommandRecord:
+        """Call one catalog function on the client's own thread, and wait for it.
+
+        ``name`` is a resolver name from ``offsets/`` and ``form`` says how the
+        words become its arguments, which is Native's own pairing: an address from the
+        pattern catalog plus a prototype that says how to call it. The slot is
+        allocated on first use and the address resolved once, so a member that calls
+        the same function repeatedly resolves it once — the same rule the readers
+        follow for anything a pattern produced.
+
+        The form decides how many of the five words the callee takes, so a form with
+        fewer arguments ignores the words it has no parameter for.
+
+        The dispatcher refuses a target outside the client module before it calls
+        anything, so a resolver that went wrong fails rather than jumping.
+        """
+
+        if form is CallForm.UI_MESSAGE:
+            raise ValueError(
+                "call_function drives the typed forms; a UI message carries a "
+                "packed payload and is published with publish_call instead."
+            )
+
+        slot = self._descriptor_slot((name, int(form)), self._resolve(name), form)
+        return self.bridge.call(slot, arg1, arg2, arg3, arg4, arg5, timeout_ms)
+
+    def call_address(
+        self,
+        target: int,
+        form: CallForm,
+        arg1: int = 0,
+        arg2: int = 0,
+        arg3: int = 0,
+        arg4: int = 0,
+        arg5: int = 0,
+        timeout_ms: int | None = None,
+    ) -> CommandRecord:
+        """Call one already-resolved address on the client's own thread, and wait for it.
+
+        The source reaches a few functions through a pointer it resolved rather than through a
+        name in a catalog. The dialog loader is one: its address is a hardcoded client virtual
+        address rebased onto the module (``dialog.h:94-99``, ``dialog_patterns.cpp``), not a
+        signature match, so there is no catalog name to resolve and none is invented here — the
+        caller resolved the address, which is what the source's own
+        ``SafeCallDialogLoader_GetText`` does with the pointer it holds.
+
+        Everything else is the same contract as :meth:`call_function`: a descriptor slot per
+        (target, form), and the dispatcher bounds the target to the client's module before it
+        calls anything.
+        """
+
+        if form is CallForm.UI_MESSAGE:
+            raise ValueError(
+                "call_address drives the typed forms; a UI message carries a "
+                "packed payload and is published with publish_call instead."
+            )
+
+        slot = self._descriptor_slot((int(target), int(form)), int(target), form)
+        return self.bridge.call(slot, arg1, arg2, arg3, arg4, arg5, timeout_ms)
+
+    def send_ui_message(
+        self, message_id: int, wparam: int = 0, lparam: int = 0
+    ) -> CommandRecord:
+        """Send one UI message through the client's own entry point.
+
+        ``GW::ui::SendUIMessage(UIMessage message, void* wparam = nullptr, void* lparam =
+        nullptr)`` (``ui_methods.cpp:1390-1404``) is how the client is told anything, and the
+        sources call it through a pointer they resolve **once**, at init. So does this: the address
+        is the one the connection resolved while installing the layer
+        (``ui.send_ui_message_func``, which is also the function this project observes messages
+        with), and it is held rather than resolved again. Resolving it again would run that
+        pattern's ``to_function_start`` against a **patched** entry — the port's hook is a jump at
+        its first byte — where the walk back for a prologue answers the function *before* it, an
+        address inside ``.text`` that the module bound cannot refuse (``docs/RESEARCH.md``,
+        2026-09-26).
+
+        The form is the packed one: the emitted dispatcher builds a zeroed two-word payload from
+        the command's second and third words and calls ``SendUIMessage(arg1, &payload, 0)``, so
+        ``message_id`` is the first argument, ``wparam`` the second and ``lparam`` the third. A
+        caller places that payload in the block's data region first, because the source hands the
+        client a pointer to a struct. ``chat.WriteChatEnc`` is the first caller
+        (``chat_methods.cpp:197``: ``ui::SendUIMessage(kWriteToChatLog, &param)``).
+        """
+
+        address = self._ui_message_address or self._resolve(_GAME_THREAD_OBSERVE)
+        slot = self._descriptor_slot(
+            (address, int(CallForm.UI_MESSAGE)), address, CallForm.UI_MESSAGE
+        )
+        return self.bridge.call(slot, message_id, wparam, lparam)
+
+    def _descriptor_slot(
+        self, key: tuple[object, int], target: int, form: CallForm
+    ) -> int:
+        """Return the call-table slot for one target and form, writing it on first use.
+
+        The connection installs the table empty, so the next free slot is the number of
+        descriptors already written into it, and a slot is written once per distinct
+        (target, form) pair — whether the target came from a catalog name or was resolved by
+        the caller.
+
+        **The target must be code, and that check is made here.** The dispatcher refuses a
+        target outside the client's module, which is not the same thing: an address inside the
+        module but outside its code section is data, and executing it does not fail — it runs
+        whatever bytes are there. On 2026-09-25 that is exactly what happened: the resolver for
+        ``chat.send_chat_func`` answered with an address that was not code, the dispatcher's
+        module bound passed it, and the client died at ``eip=462fd617`` with this project's
+        command record and its chat buffer in the registers. So the section is confirmed here,
+        where the address is still the host's to refuse, and the refusal names the address, the
+        section and what was expected — the dispatcher cannot do this, because inside the client
+        an address that is about to be executed is not distinguishable from one that is not.
+        """
+
+        slot = self._call_slots.get(key)
+        if slot is not None:
+            return slot
+
+        text = self._scanner.get_section_range("text")
+        if not text.start <= target < text.end:
+            raise RuntimeError(
+                f"pid {self._pid}: refusing to call 0x{target:08X} for {key[0]!r}: it is not "
+                f"inside the client's code section (0x{text.start:08X}..0x{text.end:08X}), so "
+                "executing it would run data. A resolver answered with an address that is not "
+                "a function."
+            )
+
+        if len(self._call_slots) >= DESCRIPTOR_DEPTH:
+            raise RuntimeError(
+                f"pid {self._pid}: the call table holds {DESCRIPTOR_DEPTH} "
+                "descriptors and every slot is taken."
+            )
+        slot = len(self._call_slots)
+        descriptor = Descriptor(target=target, form=form)
+        self.access.write(
+            self.bridge.call_table_address + descriptor_offset(slot),
+            descriptor.to_bytes(),
+        )
+        self._call_slots[key] = slot
+        return slot
+
     @property
     def pid(self) -> int:
         """Return the selected process ID."""
@@ -504,6 +863,17 @@ class ConnectedClient:
         """Return the process record used to create this connection."""
 
         return dict(self._process)
+
+    @property
+    def reader(self) -> ProcessMemoryReader:
+        """Return this connection's bounded read-only process-memory reader.
+
+        The ported ``internals`` helpers read at an address a structure handed them
+        (``read_wstr``); the sources do that with ``ctypes`` against their own address space
+        because they run inside the client, and the external reader is what stands in for it.
+        """
+
+        return self._reader
 
     @property
     def context(self) -> CharContext:
@@ -557,6 +927,31 @@ class ConnectedClient:
         """Read the salvage session, or ``None`` when no popup is open."""
 
         return self._salvage_session.read()
+
+    @property
+    def dialog_tables(self) -> DialogTables:
+        """Return the dialog metadata table resolver for this client.
+
+        Native keeps these tables in the module's own process and reaches them through
+        ``GW::dialog::GetDialogTables()``; here they are the client's, because
+        resolving them is a read of this process. What the resolver does with them —
+        the static rebase, the validation pass, the ``.rdata`` fallback — is the
+        port of ``dialog_patterns.cpp``.
+        """
+
+        return self._dialog_tables
+
+    @property
+    def frame_array(self) -> FrameArray:
+        """Return this client's global UI frame array reader.
+
+        Native's ``GW::ui::FrameArray()`` is an in-process global holding one entry per
+        frame id; here it is the same structure, reached through the
+        ``ui.frame_array_addr`` resolver. The frame tree reads through this array, and
+        so does anything that has to find a frame by its hash.
+        """
+
+        return self._frame_array
 
     @property
     def frame_tree(self) -> FrameTree:
@@ -897,6 +1292,34 @@ class ConnectedClient:
         return self._agent_array.read_agent_by_id(agent_id)
 
     @property
+    def skill_constants(self) -> SkillConstantArray:
+        """Return the external skill-constant-table reader for this client."""
+
+        return self._skill_constants
+
+    def read_skill(self, skill_id: int) -> SkillStruct | None:
+        """Read one skill constant record, matching native ``GetSkillConstantData``.
+
+        The table is the client's own static data (``GW::Context::GetSkillArray()``); the record is
+        the 0xA4-byte ``GW::Context::Skill``, indexed by the skill id the way the client's own
+        accessor indexes it. ``None`` is the source's null — native's binding leaves its fields at
+        their defaults when the record is missing (``skill_bindings.cpp:134-136``).
+        """
+
+        return self._skill_constants.read(skill_id)
+
+    @property
+    def current_tooltip(self) -> CurrentTooltip:
+        """Return the external current-tooltip reader for this client."""
+
+        return self._current_tooltip
+
+    def read_current_tooltip(self) -> TooltipInfoStruct | None:
+        """Read the tooltip the client is showing, or ``None`` when there is none."""
+
+        return self._current_tooltip.read()
+
+    @property
     def living_snapshot(self) -> LivingAgentSnapshot | None:
         """Return the latest complete living-agent snapshot, if refreshed."""
 
@@ -971,16 +1394,28 @@ class ConnectedClient:
 
         failure: BaseException | None = None
 
+        # ``Shutdown`` runs **before** the listener stops, and that order is the source's: the
+        # dialog module's drain waits for decodes the client is still running, and those are
+        # delivered by the listener, so stopping it first would make the drain wait for something
+        # that can no longer arrive. Native's own shutdown is called the same way — its callbacks
+        # are still registered while it drains, and the unregistration is a step *inside* it.
+        try:
+            dialog.PyDialog.terminate()
+        except BaseException as error:
+            failure = error
+
         listener, self._listener = self._listener, None
         if listener is not None:
             try:
                 listener.stop()
             except BaseException as error:
-                failure = error
+                failure = failure or error
 
         bridge, self._bridge = self._bridge, None
         access, self._access = self._access, None
         self._callbacks = None
+        self._call_slots.clear()
+        self._target_id = 0
         try:
             if bridge is not None and bridge.installed:
                 bridge.remove(free_allocations=True)
@@ -1022,6 +1457,12 @@ def connect(process: dict[str, Any] | int, game_thread: bool = True) -> Connecte
     thread and message sender are hooked, a listener thread starts, and both are
     given back by :func:`disconnect`. Pass ``False`` for a connection that only
     reads.
+
+    A capability-layer connection makes itself current while it is still being built,
+    because its own startup reads the client through this registry
+    (:meth:`ConnectedClient._install_game_thread`). This assignment is the one that
+    publishes a read-only connection, which installs no capability layer and therefore
+    has no startup of its own to get ahead of.
     """
 
     global _current_client

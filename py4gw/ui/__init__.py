@@ -35,8 +35,10 @@ from .frame_context import (
     locate_frame_published_context,
 )
 from .frame_tree import FrameTree
+from .tooltip import CurrentTooltip
 
 __all__ = [
+    "CurrentTooltip",
     "Frame",
     "FrameArray",
     "FrameContextCandidate",

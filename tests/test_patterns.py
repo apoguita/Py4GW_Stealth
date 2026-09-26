@@ -34,6 +34,12 @@ def fixture_directory(name: str) -> Iterator[Path]:
 class _TestScanner:
     """Small scanner double for resolver execution tests."""
 
+    #: The module the double stands in for, and the base it was linked against: the two
+    #: numbers ``module_relative`` turns a hardcoded client address back into a live one
+    #: with.
+    module_base = 0x00610000
+    image_base = 0x00400000
+
     def find(self, pattern: object, section: str = "text") -> int | None:
         """Return one deterministic scan address."""
 
@@ -96,6 +102,11 @@ class _TestScanner:
         """Return one deterministic pointer-sized value."""
 
         return address + 4
+
+    def to_module_address(self, va: int) -> int:
+        """Rebase one link-time address, as ``RemoteScanner`` does."""
+
+        return self.module_base + (va - self.image_base)
 
 
 class _AssertionScanner(_TestScanner):
@@ -166,6 +177,50 @@ class PatternCatalogTests(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertEqual(result.value, 0x1020)
         self.assertEqual([step.name for step in result.trace], ["scan", "adjust"])
+
+    def test_rebases_a_hardcoded_client_address_onto_the_module(self) -> None:
+        """``module_relative``: the op Native's note said the pattern system lacked.
+
+        ``dialog.h:80-85`` records that the dialog metadata tables are hardcoded client
+        virtual addresses that "cannot move into offsets/*.json because the pattern
+        system has no module-base-relative op". This is that op, and the arithmetic is
+        Native's ``ToRuntimeAddress``: ``module_base + (va - image_base)``.
+        """
+
+        with fixture_directory("pattern_fixture_module_relative") as directory:
+            path = directory / "demo.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "namespace": "demo",
+                        "patterns": {},
+                        "resolvers": {
+                            "table_base": {
+                                "steps": [
+                                    {
+                                        "name": "rebase",
+                                        "op": "module_relative",
+                                        "value": "0x00913920",
+                                        "out": "final",
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            catalog = PatternCatalog.from_directory(directory)
+
+        scanner = _TestScanner()
+        result = catalog.resolve("demo.table_base", scanner)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(
+            result.value,
+            scanner.module_base + (0x00913920 - scanner.image_base),
+        )
+        self.assertEqual(result.trace[0].operation, "module_relative")
 
     def test_passes_assertion_offset_from_json(self) -> None:
         """Assertion resolvers preserve the native JSON result offset."""

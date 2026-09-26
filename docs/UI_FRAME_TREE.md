@@ -16,10 +16,10 @@ payload, and no write of any kind.
 This is the frame-tree route. Stealth uses it to acquire three contexts that
 otherwise need an in-process callback: `WorldMapContext`,
 `MissionMapContext`, and `SalvageSessionInfo`. It does **not** replace the
-callback/payload plan; target-side code is still required for game-thread
-operations and for the one remaining hook-only pointer. See
+callback/payload plan; target-side code is what game-thread
+operations and the one remaining hook-only pointer still need. See
 [`CALLBACK_POINTER_RESEARCH.md`](CALLBACK_POINTER_RESEARCH.md) and
-[`DEFERRED_INJECTION.md`](DEFERRED_INJECTION.md).
+[`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md).
 
 ## The package
 
@@ -251,11 +251,11 @@ and so on. This confirms live that an offsets resolver for a UI callback yields
 the same address the client stores in `Frame.frame_callbacks`, which is the
 premise the whole route depends on.
 
-### `SalvageSessionInfo` — the route cannot reach it; a hook is required
+### `SalvageSessionInfo` — no frame publishes it; a hook is what it needs
 
 Recorded 2026-09-23 against PID 29520 with the operator's lesser-kit salvage
-window open. The conclusion is that **this context is not reachable through the
-frame array at all**, and the evidence is direct:
+window open. The conclusion is that **the frame array does not publish this
+context**, and the evidence is direct:
 
 | Check | Result |
 | --- | --- |
@@ -265,12 +265,12 @@ frame array at all**, and the evidence is direct:
 | Occurring **anywhere** in any frame record's `0x1C8` bytes | **none**, across 1141 scanned frames |
 | The open window's own frame | frame 1718, `child_offset_id = 111` (`LesserSalvageWindow`), visible; registers `0x0145EBA0` (thunk to `0x0145E8F0`) and `0x0145F100` (thunk to `0x0145ECC0`) — neither is the resolved handler |
 
-#### Why the two map contexts worked and this one cannot
+#### Why the two map contexts work through the frame array and this one needs a hook
 
 Hooking a function only requires that the function is **called**. Reading a
 pointer out of a frame requires that the address is **stored** in a frame.
 Reforged Native hooks by function address, so it never depends on the
-registration property; the source alone therefore cannot show which contexts
+registration property; the source alone therefore does not show which contexts
 have it. Live data shows the split:
 
 - `MissionMapContext`: the frame registers the resolved address directly.
@@ -278,7 +278,7 @@ have it. Live data shows the split:
 - `SalvageSessionInfo`: the resolved handler is **never stored in a frame**.
 
 The salvage handler is a message handler the client invokes, not an entry in
-`Frame.frame_callbacks`, so there is no frame-side path to its context.
+`Frame.frame_callbacks`, so the frame side is not where its context comes from.
 
 #### Salvage is also not one window
 
@@ -442,13 +442,13 @@ primitive's caching and rejection behavior.
    below.
 2. `GwDxContext` is the only remaining pointer that needs a hook
    (`src/GW/render/render.cpp:75-111`, an `EndScene`/`Reset` detour). It is not
-   a frame callback and this route does not reach it, so it stays deferred
-   with the game-thread and action work. The hook mechanism it needs now exists
+   a frame callback, so the frame route is not where it comes from; it stays
+   outstanding with the game-thread and action work. The hook mechanism it needs now exists
    in `py4gw/game_thread/`.
 3. `FrameTree.root` derives the root from the first parentless frame. The
-   native `ui.get_root_frame_func` resolver yields a *function*, which this
-   project cannot call without target-side execution, so the
-   derived root is the read-only equivalent rather than a temporary shortcut.
+   native `ui.get_root_frame_func` resolver yields a *function*, which the port
+   has not reached — calling it needs target-side execution — so the derived
+   root is the read-only equivalent rather than a temporary shortcut.
 4. The sibling `FrameRelation.siblings` list is read through `GWList`, but
    `children_of` scans the array because that is what the native code does.
    Replace it only if a live comparison shows the scan disagrees.

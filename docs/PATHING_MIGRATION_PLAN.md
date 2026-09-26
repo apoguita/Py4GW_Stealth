@@ -42,7 +42,7 @@ into each owning trapezoid array, not the pointer-to-pointer shape. Source
 inspection found that Reforged's snapshot leaves `sink_nodes` empty and the
 searched source contains no active consumer of those helpers. The source
 helpers remain represented and offline-tested for parity, but are not used to
-interpret the live field and are not a blocker for the active pathing reads.
+interpret the live field and do not affect the active pathing reads.
 Those offline tests verify only the implemented helper logic; they do not prove
 that the unused source interpretation matches the client. The raw live value
 is preserved as observed. Portal's pointer-to-pointer field
@@ -99,6 +99,6 @@ trapezoid indices. The raw SinkNode check found all 1,270 field values inside
 their owning trapezoid arrays, which conflicts with the source pointer-to-pointer
 declaration. The source snapshot leaves `sink_nodes` empty and the searched
 source has no active consumer of the helper properties, so this mismatch is
-recorded but does not block the active MapContext read paths. The snapshot pass
+recorded but does not affect the active MapContext read paths. The snapshot pass
 materialized 1,270 trapezoids and 164 portals and resolved all 164 portal pair
 indices. The source travel-portal helper returned 7 portals.

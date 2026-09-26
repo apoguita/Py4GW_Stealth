@@ -9,7 +9,7 @@ An inventory is not an implementation. It tells us what the native and
 Reforged Python sources declare, how the two projects name each surface, and
 what still needs an external reader. Every structure, field, property, and
 public method in a selected context is a porting requirement even when its
-operation later proves to require injection or game-thread execution.
+operation later proves to need in-client execution on the game thread.
 
 The reader migration order is recorded in [`docs/DESIGN.md`](DESIGN.md); this
 inventory records status. The detailed source-parity verdict for every migrated
@@ -253,10 +253,9 @@ keeps in another module.
 - `context.WorldContext`: the maintained 0x854-byte root layout reached through
   `GameContext.world_context`, all source-backed read-only child records, and
   bounded `GWArray` traversal. The injected-runtime pointer lifecycle helpers
-  are intentionally excluded.
+  are not yet ported.
 - `context.TradeContext`: direct `GameContext.trade_context` root with bounded
-  player/partner gold and offered-item reads. Trade actions remain out of
-  scope.
+  player/partner gold and offered-item reads. Trade actions are not yet ported.
 - `context.ItemContext`: direct `GameContext.item_context` root with the
   maintained 0x10C layout, every declared native item-context record (including
   `ItemData`), the `ItemArray`/`MerchItemArray` header aliases, and inventory
@@ -334,7 +333,7 @@ Each context reader still needs:
 The next read-only context-migration work follows the gap list in
 [`CONTEXT_PARITY_AUDIT.md`](CONTEXT_PARITY_AUDIT.md), which now carries a
 mechanical field-level sweep of every source context struct. Callback-owned map
-pointers are no longer blocked: both are resolved read-only through the frame
+pointers now have a read-only route: both are resolved through the frame
 array, per [`UI_FRAME_TREE.md`](UI_FRAME_TREE.md). The remaining target-side
 work is tracked in [`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md).
 
@@ -348,7 +347,7 @@ performance.
 ### Simple candidates
 
 The previously selected simple candidates and callback-owned context data
-ports are implemented. Their root-address sources remain unavailable:
+ports are implemented. Their root-address sources are still outstanding work:
 
 - `MissionMapContext.py` and `WorldMapContext.py` have source-matched
   structures and supplied-address readers; their callback-published root
@@ -374,15 +373,15 @@ until the smaller roots are available:
   active consumer was found in the searched source. The live target exposes
   direct pointers into trapezoid arrays, so Stealth preserves the raw values
   and does not apply those unused helpers. This discrepancy is documented,
-  not treated as an active read-data blocker; offline tests do not validate
+  not treated as an active read-data gap; offline tests do not validate
   that the unused source interpretation matches the client. Source-named facade/cache helpers
   are live-tested and caches are PID-scoped. Automatic callback registration
   is not ported; see
   [`PATHING_MIGRATION_PLAN.md`](PATHING_MIGRATION_PLAN.md).
 - `WorldContext` has a verified read-only slice; its native injected
-  pointer-lifecycle helpers remain intentionally out of scope.
+  pointer-lifecycle helpers are not yet ported.
 - `AgentContext.py` has a verified read-only external category/materialization
-  surface; injected cache lifecycle helpers remain intentionally out of scope.
+  surface; injected cache lifecycle helpers are not yet ported.
 
 Other native-only or distributed surfaces (the separate UI support API,
 salvage state, and related records) are outside this context port. Item
@@ -440,9 +439,9 @@ parity is recorded in
   and source-array reads verified; callback registration not ported; the
   separate native `AgentInfoArray` pointer source is unresolved
 - [~] `Camera` declaration parity complete; read facade verified; the source's
-  game-thread actions are declared and refuse
+  game-thread actions are declared but not yet ported
 - [~] `FriendList` declaration parity complete; read-only records verified;
-  game-thread mutations are declared and refuse
+  game-thread mutations are declared but not yet ported
 - [~] `ChatBuffer` declaration parity complete; raw encoded ring verified;
   decoded `PyPlayer.GetChatHistory` is a separate API
 - [~] `AccountContext` native root/nested structs match source names/order and
@@ -460,7 +459,7 @@ parity is recorded in
   `ItemArray`/`MerchItemArray` aliases, source-only records, and union views,
   match source names/order and checked x86 sizes/offsets. `InventoryTableEntry`
   remains declaration-only. Bag/item reads and native helpers are verified;
-  the external copied-record behavior and unavailable in-game actions remain
+  the external copied-record behavior and the not-yet-ported in-game actions remain
   explicit adaptations/limitations.
 - [~] `WorldContext` struct declarations match all 30 Reforged structures by
   class and field-name/order. Empty-array results, buffer shapes, player
@@ -474,7 +473,7 @@ parity is recorded in
   `sink_nodes` empty and no active consumer was found. The tested client has
   direct pointers into trapezoid arrays; Stealth preserves those raw values
   without applying the unused helpers. Source helper names and cache behavior
-  are implemented; automatic in-client callback registration is unavailable.
+  are implemented; automatic in-client callback registration is not yet ported.
 
 ### Callback-owned context runtime availability
 
@@ -487,8 +486,8 @@ parity is recorded in
 Both roots are obtained and live-verified through the client's UI frame array,
 which publishes the same addresses the source's callback does, so their context
 data ports and their pointer watch both stand.
-The unbuilt callback registration is not a reason to omit the context structures
-or readers.
+The callback registration is not yet ported, and it is not a reason to omit the
+context structures or readers.
 
 `GwDxContext` is a native render-state record and is not part of the required
 in-game context migration.
