@@ -181,6 +181,62 @@ change a row to `PASS` or `FAIL`.
 | UI support APIs | Outside context inventory — `ui.h` contains event/data records and accessors, but no `UIContext` structure | NOT AUDITED | Separate UI surface; not part of context-by-context parity |
 | Salvage actions | NOT AUDITED | NOT AUDITED | NOT AUDITED |
 
+## Class ledger (2026-09-27)
+
+The ledger above covers the **data layer** (the contexts). This one covers the **classes** — the surfaces
+a script calls — in the same form: a class is `PASS` only when every member of its source surface is
+represented and answers, and anything less says what is missing and why. Per-member detail is in each
+class's own port doc; `CLASS_PORT_MAP.md` carries the same verdicts beside the work queue.
+
+| Class | Module | Members | Answer | Certificate |
+| --- | --- | --- | --- | --- |
+| `Agent` | `py4gw/agent.py` | 148 declared | **145** | **COMPLETE for this port's purposes** — the 3 that do not answer are structural rather than outstanding work: `enable` and `_invalidate_property_cache` are Reforged's per-frame cache registration (this port has no frame loop, and a stand-in throttle is forbidden), and `GetProfessionsTexturePaths` is rooted in the injected runtime's own module directory (the third artifact member, with `Player.player_instance` and `Dialog._call_native_dialog_method`). The name walk was verified live on all four branches with 0 byte mismatches against an independent read, and the decode step is Native's since 2026-09-27 (`AsyncGetAgentName`'s route) |
+| `AgentArray` | `py4gw/agent_array.py` | 13 | **13** | **PASS** — no raising member (from the module's own AST); every member is the source's (the thirteen getters, both key sets, `Manipulation`, `Sort`, `Filter`) |
+| `AgentArray` context | `py4gw/context/agent_array.py` | source surface | all reads | **PASS — source-shaped**: no invented layer left; the source's own `raw_agents`, `_build_allegiance_cache`, `GetAgentByID` and the twelve `Get*Array` members, with record layouts read at native's `static_assert` sizes |
+| `Player` | `py4gw/player.py` | 70 | **69** | **COMPLETE for this port's purposes** — every member works except `player_instance`, the obsolete artifact whose values the class's own members answer; the chat history is kept by the connection's watched log |
+| `Dialog` | `py4gw/dialog.py` | 32 + 5 tables + 6 record types | 31 of 32 | **INCOMPLETE (owner-parked)** — `get_dialog_text_decoded` needs this build's loader; a button's caption *is* produced, both journals are ported, and the tables resolve with no catalog file |
+| `Effects` | `py4gw/effect.py` | 15 | 12 | INCOMPLETE — the alcohol level needs the entry hook (`TARGET_SIDE_WORK.md`); the alcohol time calls a binding member native does not implement |
+| `Skillbar` | `py4gw/skillbar.py` | 18 + 7 + 17 | 30 | INCOMPLETE — the `UseSkill`/`HeroUseSkill` group and the two template loaders (the control-action mechanism) |
+| `Skill` | `py4gw/skill.py` | 11 + 9 | 19 | INCOMPLETE — the descriptions/wiki group (Reforged's 1.98 MB `skill_descriptions.json`) and two enum tables |
+| `Party` | `py4gw/party.py` | 35 + 4 | 27 | INCOMPLETE — the action members |
+| `Map` | `py4gw/map.py` | 74 public (178 in the source) | — | INCOMPLETE — projection arithmetic, pathing reads, frame lookup |
+| `Utils` | `py4gw/py4gwcorelib_src/utils.py` | 40 | 37 | INCOMPLETE — the client's own text measure and the two Gwinch converters (the DX viewport) |
+| `Color` / `ColorPalette` | `py4gw/py4gwcorelib_src/color.py` | 41 + 4 | all | PASS |
+| `Scanner` | `py4gw/scanner.py` | source surface | all | PASS |
+| `Camera` | `py4gw/camera.py` | 46 | **46** | **PASS (2026-09-27)** -- every member answers and none raises: the 30 getters and the two arithmetic members read the ported `CameraStruct`; the 11 actions that change the record do it on the client's own thread (the payload's `WRITE_MEMORY`, the port's stand-in for `GW::game_thread::Enqueue`); `SetCameraUnlock`/`GetCameraUnlock`/`SetFog` toggle Native's two `MemoryPatcher`s at the catalog addresses with the bytes `camera_patterns.cpp:24-52` sets. Live: reads (median 5 us, real values), a write read back from the client's own struct, and the patch proven by the client's bytes |
+| `ConnectedClient` | `py4gw/client.py` | 89 | all | PASS — this project's own surface, not a ported class |
+
+**How these were taken:** member and raise counts from each module by `ast` on 2026-09-27 (public
+members; a raise counted when it is written in that member's own body — a member can also fail through
+one it calls, which is why `Dialog` shows no direct raise and is still INCOMPLETE, so the port doc's word
+is the one that counts). Live evidence for the three completed classes is in `AGENT_PORT.md`,
+`PLAYER_PORT.md` and `live_reports/`.
+
+### Classes at a glance
+
+The same rows, in plain words. Details are in the table above and in each class's port doc.
+
+**Done**
+- `Agent` — done. 145 of 148 members answer; the 3 that cannot are the frame-loop pair and the
+  runtime-path one.
+- `AgentArray` — done, nothing left.
+- `Player` — done, except the obsolete `player_instance`.
+- `Color` / `ColorPalette` — done.
+- `Scanner` — done.
+- `Camera` — done, nothing left.
+- `ConnectedClient` — done (this project's own surface, not a ported class).
+
+**Parked by you**
+- `Dialog` — one member left: the catalog dialog text loader for this client build.
+
+**Open (work with a name)**
+- `Effects` — the alcohol pair.
+- `Skillbar` — using skills and the two template loaders.
+- `Skill` — descriptions, wiki and two enum tables.
+- `Party` — the action members.
+- `Map` — projection, pathing and frame lookup.
+- `Utils` — the client's text measure and the two Gwinch converters.
+
 ## Current certification state
 
 `CharContext`, `GameContext`, `PreGameContext`, `Cinematic`, `GameplayContext`,

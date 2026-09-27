@@ -1,0 +1,24 @@
+{"stage": "connected", "pid": 35416}
+{"stage": "unlock", "enabled": true, "was": false}
+{"stage": "writer", "member": "SetPitch", "field": "pitch_to_go", "original": 0.4737190902233124, "expected": 0.4747190902233124, "observed": 0.4747190773487091, "landed": true, "call_ms": 8.987}
+{"stage": "restored", "field": "pitch_to_go", "value": 0.4737190902233124, "ok": true}
+{"stage": "writer", "member": "SetYaw", "field": "yaw and yaw_to_go", "original": 1.8698484897613525, "expected": 1.8708484897613524, "observed": [1.870848536491394, 1.870848536491394], "landed": true, "call_ms": null}
+{"stage": "restored", "field": "yaw and yaw_to_go", "value": [1.8698484897613525, 1.8698484897613525], "ok": true}
+{"stage": "writer", "member": "SetMaxDistance", "field": "max_distance2", "original": 900.0, "expected": 910.0, "observed": 900.0, "landed": false, "call_ms": 16.176}
+{"stage": "restored", "field": "max_distance2", "value": 900.0, "ok": true}
+{"stage": "writer", "member": "SetFieldOfView", "field": "field_of_view", "original": 1.7453292608261108, "expected": 1.7463292608261107, "observed": 1.7461634874343872, "landed": false, "call_ms": 15.784}
+{"stage": "restored", "field": "field_of_view", "value": 1.7453292608261108, "ok": true}
+{"stage": "writer", "member": "ForwardMovement", "field": "look_at_target", "original": [-6565.58837890625, -2360.7802734375, -421.2814025878906], "expected": [-6565.848, -2359.939, -420.808], "observed": [-6565.848, -2359.939, -420.808], "landed": false, "call_ms": null}
+{"stage": "writer", "member": "VerticalMovement", "field": "look_at_target.z", "original": -421.281, "expected": -420.281, "observed": -420.281, "landed": true, "call_ms": null}
+{"stage": "writer", "member": "SideMovement", "field": "look_at_target.x/y", "original": [-6565.588, -2360.78], "expected": [-6566.544, -2361.075], "observed": [-6566.544, -2361.075], "landed": false, "call_ms": null}
+{"stage": "writer", "member": "RotateMovement", "field": "yaw and look_at_target", "original": 1.8698, "expected": 1.8798, "observed": 1.8798, "landed": true, "call_ms": null}
+{"stage": "restored", "field": "yaw, look_at_target", "value": [1.87, [-6565.588, -2360.78, -421.281]], "ok": true}
+{"stage": "writer", "member": "SetCameraPosition", "field": "position.x", "original": -6461.929, "expected": -6460.929, "observed": -6460.929, "landed": true, "call_ms": null}
+{"stage": "restored", "field": "position", "value": [-6461.929, -2697.012, -601.658], "ok": true}
+{"stage": "writer", "member": "UpdateCameraPos", "field": "position", "expected": [-6463.001, -2693.534, -599.223], "observed": [-6463.001, -2693.534, -599.223], "landed": false, "call_ms": null}
+{"stage": "restored", "field": "position", "value": [-6461.929, -2697.012, -601.658], "ok": true}
+{"stage": "patch", "member": "SetFog", "was": null, "while_enabled": null}
+{"stage": "patch", "member": "SetFog", "after": null, "restored": true}
+{"stage": "patch", "member": "SetCameraUnlock", "was": true, "while_enabled": true}
+{"stage": "patch", "member": "SetCameraUnlock", "after": false, "restored": false}
+{"stage": "done"}

@@ -7,15 +7,18 @@ something stopped — not something to wait on.
 | | |
 | --- | --- |
 | **Goal** | `goal-f79c6454-c4a7-4aac-9e29-0e9d416aac38` — finish `Agent` + `AgentArray` faithfully |
-| **Round** | 12 (a name is decoded by the client: 15x faster than the dat route, and no dat record at all) |
+| **Round** | 13 (`Camera` ported whole: 46 members, none raising, and the payload gained the write operation it needed) |
+| **Round (prev)** | 12 (a name is decoded by the client: 15x faster than the dat route, and no dat record at all) |
 | **Round (prev)** | 11 (the dat handling moved off the call path: pre-cached at connect, on a worker) |
 | **Round (prev)** | 10 (the owner's second catch: the agent viewer's own scheme, and one name end to end) |
 | **Phase** | **a name is decoded by the client** (`Agent.GetNameByID` = Native's `AsyncGetAgentName` route): ~115 ms the first time, 0.09 ms cached, **no dat read at all**; the connect-time dat warm-up is off, `dialog._on_string_decoded` no longer steals other modules' decodes, and a disconnect gives unclaimed name slots back (1074 tests OK) |
 | **Phase (prev)** | **the GW.dat work is off the call path**: the connection starts the source's own load on one worker, the table is readable file by file, a decode asks for the one slot it needs instead of reading it, and `disconnect` joins the worker (1073 tests OK) |
 | **Phase (prev)** | live: the viewer's scheme read member by member; **one name tested alone** (agent 15, gadget, `\x0C6E` -> "Random Arenas"), six agents put through the port's decoder and the client's; the slot mapping verified live for the first time; the ring cost measured (~1.0 s per string file) |
 | **Phase (prev 2)** | live: names walked on all four branches with 0 byte mismatches; two client crashes traced to a killed run's orphaned patch |
-| **Verdicts** | **`Agent`: COMPLETE for this port's purposes** (148 declared, 145 answer; the 3 that raise are two frame-loop halves and the injected-runtime artifact) and **`AgentArray`: FULL** (no raising member) -- both from the modules' own AST, 2026-09-27 |
-| **Updated** | 2026-09-27 ~05:00 (round 12) |
+| **Phase** | **`Camera` is FULL**: 46/46 members answer, live-verified (reads median 5 us, a write read back from the client's own struct, the camera-unlock patch proven byte-for-byte); the payload gained `WRITE_MEMORY` so a member can change client state on the game's own thread, and the class now caches a patch's address *and* bytes the way `MemoryPatcher` does |
+| **Verdicts** | **`Agent`: COMPLETE for this port's purposes** (148 declared, 145 answer; the 3 that raise are two frame-loop halves and the injected-runtime artifact), **`AgentArray`: FULL**, **`Camera`: FULL (2026-09-27)** -- all from the modules' own AST |
+| **Verdicts (prev)** | **`Agent`: COMPLETE for this port's purposes** (148 declared, 145 answer; the 3 that raise are two frame-loop halves and the injected-runtime artifact) and **`AgentArray`: FULL** (no raising member) -- both from the modules' own AST, 2026-09-27 |
+| **Updated** | 2026-09-27 ~07:00 (round 13) |
 
 ## Now (round 12 - the client decodes the name, and it is 15x cheaper)
 

@@ -1,0 +1,6 @@
+{"stage": "image", "pid": 35416, "base": "0x610000", "size": 16027648}
+{"stage": "scan", "patch": "camera update (vs2017 attempt)", "patched": "eb 0c dd d9 89 56 04 dd", "hits": []}
+{"stage": "skip", "patch": "camera update (vs2017 attempt)", "reason": "no patched site"}
+{"stage": "scan", "patch": "camera update (vs2022 attempt)", "patched": "eb 0f e8 8b 4d ec 8b 55 f0", "hits": ["0x705ef6"]}
+{"stage": "restored", "patch": "camera update (vs2022 attempt)", "address": "0x705ef6", "wrote": "8b 45", "now": "8b 45", "ok": true}
+{"stage": "done"}

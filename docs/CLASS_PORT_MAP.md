@@ -39,6 +39,38 @@ themselves rather than waiting on work — `Player.player_instance` and
 owns in-process; every other remaining item in this document is work with a name, and no item here
 says a source feature is missing, because the sources are complete and working.
 
+## The migrated classes at a glance (2026-09-27)
+
+Every class this project has taken on, with what its own module says about it. **The counts are public
+members counted from the module by `ast` on 2026-09-27** (`_`-prefixed members are excluded, the
+`RequestName`-style aliases are not double-counted), and "raises" is a raise **written in that member's
+own body**. A member can also fail *through* a member it calls, so **the port doc's verdict is
+authoritative** wherever the two differ — the third column is only the shape of the code.
+
+| module | class | members | raises (in its own body) | verdict |
+| --- | --- | ---: | --- | --- |
+| `py4gw/agent.py` | `Agent` | 146 (148 declared with the two private frame-loop halves) | 3 — `enable`, `_invalidate_property_cache`, `GetProfessionsTexturePaths` | **COMPLETE for this port's purposes** (three structural members: the frame loop ×2, the injected-runtime artifact ×1) |
+| `py4gw/agent_array.py` | `AgentArray` | 13 | **0** | **FULL** |
+| `py4gw/context/agent_array.py` | the array context + facade | — | 0 raising (1 documented no-op: `enable`) | **FULL — source-shaped** (no invented layer left) |
+| `py4gw/player.py` | `Player` | 70 | 1 — `player_instance` (artifact) | **COMPLETE for this port's purposes** |
+| `py4gw/camera.py` | `Camera` | 46 | **0** | **FULL (2026-09-27)** -- the whole source surface, no raising member: 30 getters over the ported `CameraStruct` (~5 us, live), `GetCurrentYaw` and `IsPointInFOV` as the source writes them, the 11 field writers through the payload's `WRITE_MEMORY` operation on the client's own thread, and the two patch members (`SetCameraUnlock`/`GetCameraUnlock`, `SetFog`) toggling Native's own bytes. Live: a write landed on the client's struct and was read back; the patch went `8b 45` -> `eb 0f` -> `8b 45` (`live_reports/camera_live2.txt`) |
+| `py4gw/client.py` | `ConnectedClient` | 89 | 0 | FULL — the connection itself (this project's own surface, not a ported class) |
+| `py4gw/dialog.py` | `Dialog` + `DialogTables` + the six record types | 32 + 5 + 9 | 0 direct | **INCOMPLETE** — one member: `get_dialog_text_decoded` needs this build's dialog loader; the owner parked it for a later pass |
+| `py4gw/effect.py` | `Effects` + `PyEffects` | 15 + 10 | 1 — `GetAlcoholTimeRemaining` (a binding member that does not exist) | INCOMPLETE — 3: the alcohol level needs the entry hook (`TARGET_SIDE_WORK.md`), the alcohol time calls a member native does not implement |
+| `py4gw/skillbar.py` | `SkillBar` + `SkillbarSkill` + `PySkillbar` | 18 + 7 + 17 | 5 — `UseSkill`, `UseSkillTargetless`, `HeroUseSkill`, `LoadSkillTemplate`, `LoadHeroSkillTemplate` | INCOMPLETE — the control-action mechanism and the template decoder |
+| `py4gw/skill.py` | `Skill` + `SkillID`/`SkillType`/`SkillProfession`/`PySkill` | 11 + 2 + 2 + 3 + 2 | 1 — `GetCampaign` | INCOMPLETE — the descriptions/wiki group (Reforged's 1.98 MB `skill_descriptions.json`) and two enum tables |
+| `py4gw/party.py` | `Party` + `Hero` | 35 + 4 | 12 | INCOMPLETE — the action members |
+| `py4gw/map.py` | `Map` | 74 | 30 | INCOMPLETE — projection arithmetic, pathing reads and frame lookup |
+| `py4gw/py4gwcorelib_src/utils.py` | `Utils` | 40 | 1 — `TokenizeMarkupText` | INCOMPLETE — 3: the client's own text measure and the two Gwinch converters (they need the DX viewport) |
+| `py4gw/py4gwcorelib_src/color.py` | `Color` + `ColorPalette` | 41 + 4 | 0 | FULL |
+| `py4gw/perf_counter.py` | `PerfCounter` + `_MetricData` | 8 + 3 | 0 | FULL |
+| `py4gw/chat.py`, `py4gw/ui/*`, `py4gw/internals/*`, the contexts | — | functions and records, not classes | — | see `CONTEXT_INVENTORY.md` (data layer) and each port doc |
+
+**The three classes that are done and done**: `Agent` (every member that can exist outside the injected
+runtime), `AgentArray`, `Player` — each with its exception named above and a line saying why it cannot be
+otherwise. Everything else above is a work queue, and no entry in it says a source feature is missing:
+the sources are complete, and what is left is porting work with a name.
+
 ## Where a fresh session starts (handoff, 2026-09-26)
 
 Everything below is offline work unless it says otherwise. The `Utils` item is **done** (this

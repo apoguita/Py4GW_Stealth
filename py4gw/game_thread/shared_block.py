@@ -266,6 +266,13 @@ class Operation(IntEnum):
     ADD_U32 = 2
     ECHO_U32 = 3
     CALL = 5
+    #: Copy ``arg2`` bytes from the block's data region at ``arg1`` to the target address ``arg0``.
+    #: This is the port's stand-in for what Native does with ``GW::game_thread::Enqueue`` when it changes
+    #: client *state* rather than calling a client function -- ``camera->yaw = …`` and the rest of
+    #: ``GW::camera`` (``camera_methods.cpp:13-151``): the write happens on the game's own thread,
+    #: inside the function this project hooked, which is the point of doing it there at all. Six because
+    #: four is skipped by the earlier design (see the class docstring) and five is ``CALL``.
+    WRITE_MEMORY = 6
 
 
 class CallForm(IntEnum):

@@ -44,6 +44,7 @@ from .shared_block import (
     COMMAND_OFFSET,
     COMMAND_REGION_OFFSET,
     COMMAND_SIZE,
+    DATA_REGION_OFFSET,
     DECODE_CAPACITY,
     DECODE_SLOT_LENGTH_OFFSET,
     DECODE_SLOT_OUTPUT_OFFSET,
@@ -400,6 +401,7 @@ _OPERATIONS = (
     (Operation.ADD_U32, "add"),
     (Operation.ECHO_U32, "echo"),
     (Operation.CALL, "call"),
+    (Operation.WRITE_MEMORY, "write"),
 )
 
 #: The packed argument payload a UI message carries: sixteen words, all zero,
@@ -1032,6 +1034,32 @@ def build_dispatcher(
     code.label("echo")
     code.emit(_mov_r32_mem(_EDX, _ESI, COMMAND_OFFSET["arg0"]))
     code.emit(_mov_r32_imm32(_ECX, CommandState.DONE))
+    # Explicit, because ``store`` is no longer the next block: the write operation sits between them,
+    # and falling into it would make every command that is not a write perform one.
+    code.jump("store")
+
+    # ``WRITE_MEMORY``: copy ``arg2`` bytes from the block's data region (offset ``arg1``) to the target
+    # address ``arg0``, with no call and no other side effect. It is how a member that changes client
+    # *state* does it -- Native's ``GW::camera`` writes ``camera->yaw`` and the rest inside
+    # ``GW::game_thread::Enqueue``, i.e. on the game's own thread, because the client is reading the same
+    # struct; this runs in the same place, inside the function this project hooked. ``rep movsb`` is
+    # ``f3 a4`` and needs ESI/EDI, which is also where this dispatcher keeps the command record and the
+    # taken counter, so both are pushed around the copy and put back before ``store`` reads them.
+    code.label("write")
+    code.emit(_mov_r32_mem(_EDX, _ESI, COMMAND_OFFSET["arg0"]))
+    code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg1"]))
+    code.emit(_mov_r32_mem(_ECX, _ESI, COMMAND_OFFSET["arg2"]))
+    code.emit(b"\x56")  # push esi
+    code.emit(b"\x57")  # push edi
+    code.emit(_lea_r32_mem(_EAX, _EBX, DATA_REGION_OFFSET, _EAX))
+    code.emit(_mov_r32_r32(_ESI, _EAX))
+    code.emit(_mov_r32_r32(_EDI, _EDX))
+    code.emit(b"\xf3\xa4")  # rep movsb
+    code.emit(b"\x5f")  # pop edi
+    code.emit(b"\x5e")  # pop esi
+    code.emit(_mov_r32_imm32(_EDX, 0))
+    code.emit(_mov_r32_imm32(_ECX, CommandState.DONE))
+    code.jump("store")
 
     # The result and the terminal state land before the counter moves: a host
     # that sees a record taken is entitled to read it as a finished one.

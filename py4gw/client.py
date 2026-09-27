@@ -451,6 +451,13 @@ class ConnectedClient:
             from . import agent as agent_module
 
             agent_module._reset_name_state()
+
+            # The camera's two patches belong to one client and one build the same way: their
+            # addresses and bytes are forgotten here, which is what Native's camera ``Exit`` does
+            # (``camera.cpp:28-33``).
+            from . import camera as camera_module
+
+            camera_module._reset_patch_state()
             # The chat history is kept the same way native's chat module watches the log message
             # (``chat.cpp:205``): the connection watches ``kWriteToChatLog`` and the module decodes
             # each line as it is announced, so the history exists without anyone asking for it.
