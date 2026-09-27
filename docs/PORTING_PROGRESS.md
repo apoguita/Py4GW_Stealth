@@ -7,7 +7,8 @@ something stopped — not something to wait on.
 | | |
 | --- | --- |
 | **Goal** | `goal-f79c6454-c4a7-4aac-9e29-0e9d416aac38` — finish `Agent` + `AgentArray` faithfully |
-| **Round** | 13 (`Camera` ported whole: 46 members, none raising, and the payload gained the write operation it needed) |
+| **Round** | 14 (`Effects`' alcohol capture: native's own hook is in the client, and the live run showed exactly which one piece is left) |
+| **Round (prev)** | 13 (`Camera` ported whole: 46 members, none raising, and the payload gained the write operation it needed) |
 | **Round (prev)** | 12 (a name is decoded by the client: 15x faster than the dat route, and no dat record at all) |
 | **Round (prev)** | 11 (the dat handling moved off the call path: pre-cached at connect, on a worker) |
 | **Round (prev)** | 10 (the owner's second catch: the agent viewer's own scheme, and one name end to end) |
@@ -18,7 +19,43 @@ something stopped — not something to wait on.
 | **Phase** | **`Camera` is FULL**: 46/46 members answer, live-verified (reads median 5 us, a write read back from the client's own struct, the camera-unlock patch proven byte-for-byte); the payload gained `WRITE_MEMORY` so a member can change client state on the game's own thread, and the class now caches a patch's address *and* bytes the way `MemoryPatcher` does |
 | **Verdicts** | **`Agent`: COMPLETE for this port's purposes** (148 declared, 145 answer; the 3 that raise are two frame-loop halves and the injected-runtime artifact), **`AgentArray`: FULL**, **`Camera`: FULL (2026-09-27)** -- all from the modules' own AST |
 | **Verdicts (prev)** | **`Agent`: COMPLETE for this port's purposes** (148 declared, 145 answer; the 3 that raise are two frame-loop halves and the injected-runtime artifact) and **`AgentArray`: FULL** (no raising member) -- both from the modules' own AST, 2026-09-27 |
-| **Updated** | 2026-09-27 ~07:00 (round 13) |
+| **Updated** | 2026-09-27 ~09:00 (round 14) |
+
+## Now (round 14 - `Effects`' alcohol hook: it is in the client, and one event shape is left)
+
+**What moved.** ``Effects`` has been 13 of 15 members for two rounds because ``GetAlcoholLevel`` is
+not a read: native's number is the ``intensity`` argument of the client's own post-process effect
+call, stored by an entry hook (``effects.cpp:15,26-41``) and returned by the binding
+(``effects_bindings.cpp:37-39``). That hook is now installed. What it took, all of it our own
+capability layer and none of it invented behaviour:
+
+- ``Bridge.install`` takes a **second observed function**, in native's shape — one hook per function,
+  each with its own watch list (``effects.cpp:51-55``) — with its own hook name, watch list,
+  observer stub and teardown, and the install rollback removes hooks before it frees anything (the
+  rule that crash taught).
+- ``build_observer`` takes the **event kind** it publishes, and ``EventKind.EFFECT_INTENSITY`` (= 4)
+  is that kind, so no other module's handler sees these events.
+- The connection resolves ``effects.post_process_effect_func`` read-only first, checks the entry
+  against its own bytes, and patches it with the displaced bytes pinned to whole instructions
+  (``55 8B EC 83 EC 08`` — ``push ebp; mov ebp, esp; sub esp, 8``; the next instruction is where the
+  arguments are read).
+- ``py4gw/effect.py`` holds native's state and handler: ``_alcohol_level`` (``effects.cpp:15``),
+  ``_on_post_process_effect`` (``effects.cpp:26-41``), ``_reset_alcohol_state`` (``effects.cpp:81``,
+  called on close). Native's ``intensity <= 5`` test is the watch list (``_WATCHED_INTENSITIES``).
+
+**The live run** (`tests/probe_alcohol_live.py`, pid 35416, exit clean, three hooks in and every
+entry restored on disconnect): the level read ``0``, ``Effects.ApplyDrunkEffect(3, 0)`` ran, the level
+stayed ``0``. **The reason is in the emitted observer** and it is now written down precisely: it takes
+the hooked function's first argument as the id to match and its **second as a pointer to a packet**,
+and drops the event when that pointer is null (``payload.py:762-765``) — the UI path's own check. The
+post-process function's two arguments are plain words and its second is ``0`` for a plain drunk level,
+so nothing is ever published. **One stub is the whole remainder**: an observer that carries the
+hooked call's own word arguments instead of dereferencing one (``docs/TARGET_SIDE_WORK.md``,
+2026-09-27). Until it exists the member raises naming it — it does not answer a number nothing stored.
+
+**Verdicts are unchanged** by this round: ``Effects`` is still 13 of 15 (the two alcohol members), and
+``Agent`` (COMPLETE for this port's purposes), ``AgentArray`` and ``Camera`` (both FULL) are untouched.
+1099 offline tests OK.
 
 ## Now (round 12 - the client decodes the name, and it is 15x cheaper)
 

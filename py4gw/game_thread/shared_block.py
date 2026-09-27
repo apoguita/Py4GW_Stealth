@@ -366,6 +366,12 @@ class EventKind(IntEnum):
     #: the record's ``sequence``, its length in ``arg0``, and ``arg1`` says whether the decode
     #: failed rather than produced an empty string.
     STRING_DECODED = 3
+    #: The first argument of a call to the client's post-process effect function: the intensity the
+    #: client applied, which is the alcohol level when it is one (``effects.cpp:26-41``). Native has
+    #: no such event because its handler is its own function, called inside the client; here the
+    #: observer records the call and the host reads it. The argument travels in the record's
+    #: ``sequence`` (it is what the watch list matched) and in ``arg0``.
+    EFFECT_INTENSITY = 4
     UI_MESSAGE = 63
 
 

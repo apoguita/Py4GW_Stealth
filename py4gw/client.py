@@ -108,6 +108,15 @@ _GAME_THREAD_OBSERVE = "ui.send_ui_message_func"
 _GAME_THREAD_HOOK_BYTES = bytes.fromhex("55 8B EC 81 EC 20 02 00 00")
 _GAME_THREAD_OBSERVE_BYTES = bytes.fromhex("55 8B EC 8B 45 08 83 F8 56")
 
+#: The third hooked function: the client's post-process effect function, which is where the
+#: alcohol level comes from. Native hooks it for exactly that (``effects.cpp:51-55``) and its
+#: handler keeps the ``intensity`` argument (``effects.cpp:26-41``); the effects module holds the
+#: capture, and this connection only feeds it. The displaced bytes stop after the frame setup —
+#: ``push ebp; mov ebp, esp; sub esp, 8`` — because the next instruction is where the arguments
+#: are read, and a trampoline replays whole instructions.
+_EFFECTS_HOOK = "effects.post_process_effect_func"
+_EFFECTS_HOOK_BYTES = bytes.fromhex("55 8B EC 83 EC 08")
+
 #: ``jmp rel32``, the first byte of an entry patch.
 _JMP_REL32 = 0xE9
 
@@ -390,8 +399,13 @@ class ConnectedClient:
 
         global _current_client
 
+        # The effects module owns the alcohol capture the same way the dialog module owns the
+        # dialog's state, so its watch list — the levels native's handler stores — comes from there.
+        from . import effect as effect_module
+
         hook_target = self._resolve(_GAME_THREAD_HOOK)
         observe_target = self._resolve(_GAME_THREAD_OBSERVE)
+        effects_target = self._resolve(_EFFECTS_HOOK)
         # Held from here on: this is the address resolved *before* the entry is patched, which is
         # what a caller of :meth:`send_ui_message` must use afterwards.
         self._ui_message_address = observe_target
@@ -402,6 +416,7 @@ class ConnectedClient:
             for name, address, expected in (
                 (_GAME_THREAD_HOOK, hook_target, _GAME_THREAD_HOOK_BYTES),
                 (_GAME_THREAD_OBSERVE, observe_target, _GAME_THREAD_OBSERVE_BYTES),
+                (_EFFECTS_HOOK, effects_target, _EFFECTS_HOOK_BYTES),
             ):
                 self._prepare_target(access, name, address, expected)
 
@@ -414,6 +429,8 @@ class ConnectedClient:
                 module_size=self._module_size,
                 watch=_WATCHED_MESSAGES,
                 observing=(observe_target, _GAME_THREAD_OBSERVE_BYTES),
+                effects_observing=(effects_target, _EFFECTS_HOOK_BYTES),
+                effects_watch=effect_module._WATCHED_INTENSITIES,
             )
         except BaseException:
             access.close()
@@ -458,6 +475,15 @@ class ConnectedClient:
             from . import camera as camera_module
 
             camera_module._reset_patch_state()
+
+            # The alcohol level is native's captured word, so the capture is registered where
+            # native registers its handler: on the client's post-process function, which is the
+            # third hooked function above (``effects.cpp:26-41,51-55``). Its own event kind carries
+            # the captured intensity, so no other module's handlers see it.
+            effect_module._reset_alcohol_state()
+            self._callbacks.register(
+                EventKind.EFFECT_INTENSITY, effect_module._on_post_process_effect
+            )
             # The chat history is kept the same way native's chat module watches the log message
             # (``chat.cpp:205``): the connection watches ``kWriteToChatLog`` and the module decodes
             # each line as it is announced, so the history exists without anyone asking for it.
@@ -1425,6 +1451,15 @@ class ConnectedClient:
             from . import agent as agent_module
 
             agent_module._reset_name_state()
+        except BaseException as error:
+            failure = failure or error
+
+        # Native's ``Exit`` forgets the captured alcohol level the same way (``effects.cpp:81``),
+        # and the capture's own hook is the one coming out below.
+        try:
+            from . import effect as effect_module
+
+            effect_module._reset_alcohol_state()
         except BaseException as error:
             failure = failure or error
 

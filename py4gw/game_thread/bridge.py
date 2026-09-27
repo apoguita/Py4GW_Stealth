@@ -77,6 +77,10 @@ HOOK_NAME = "game_thread"
 
 #: What it calls the observing hook, when the caller asks for one.
 OBSERVER_NAME = "observe"
+# The second observed function gets its own hook name, because it is its own hook: the
+# client reads the watch list its own function forwards, and a name per function is what
+# lets one come out without the other.
+EFFECTS_OBSERVER_NAME = "observe_effects"
 
 #: The observer's stub forwards the hooked function's first two arguments, which
 #: are the message id and its packet. Its payload pops the block and those two,
@@ -133,9 +137,12 @@ class Bridge:
         self._watch_address = 0
         self._dispatcher_address = 0
         self._observer_address = 0
+        self._effects_watch_address = 0
+        self._effects_observer_address = 0
         self._decoder_address = 0
         self._hooker: Hooker | None = None
         self._observer_hooker: Hooker | None = None
+        self._effects_hooker: Hooker | None = None
         #: One use of the command ring at a time. Every publish goes through :meth:`publish`,
         #: and a call holds this across its wait as well, so two threads cannot interleave
         #: their publishes. It is **reentrant** because a call *is* a publish: ``call`` takes
@@ -191,6 +198,27 @@ class Bridge:
         return self._observer_address
 
     @property
+    def observing_effects(self) -> bool:
+        """Return whether the second observing hook is currently placed."""
+
+        return (
+            self._effects_hooker is not None
+            and EFFECTS_OBSERVER_NAME in self._effects_hooker.installed
+        )
+
+    @property
+    def effects_watch_address(self) -> int:
+        """Return where the second watch list is, or zero when there is none."""
+
+        return self._effects_watch_address
+
+    @property
+    def effects_observer_address(self) -> int:
+        """Return where the second observer's code is, or zero when there is none."""
+
+        return self._effects_observer_address
+
+    @property
     def block_address(self) -> int:
         """Return where the shared block is, or zero before it is placed."""
 
@@ -231,6 +259,8 @@ class Bridge:
         module_size: int = 0,
         watch: Sequence[tuple[int, int]] = (),
         observing: tuple[int, bytes] | None = None,
+        effects_observing: tuple[int, bytes] | None = None,
+        effects_watch: Sequence[tuple[int, int]] = (),
     ) -> None:
         """Place the block, the call table, the dispatcher and the hook.
 
@@ -259,10 +289,13 @@ class Bridge:
         table_address = 0
         watch_address = 0
         observer_address = 0
+        effects_watch_address = 0
+        effects_observer_address = 0
         dispatcher_address = 0
         decoder_address = 0
         hooker: Hooker | None = None
         observer_hooker: Hooker | None = None
+        effects_hooker: Hooker | None = None
         try:
             self._place_block(block_address, session)
             table_address = self._place_call_table(calls or {})
@@ -319,6 +352,40 @@ class Bridge:
                     forwarded_arguments=OBSERVER_ARGUMENTS,
                     after=OBSERVER_AFTER,
                 )
+
+            # The second observed function, in the source's own shape: native installs one
+            # hook per function (`effects.cpp:51-55` hooks the post-process effect function
+            # separately from anything else), and each hook carries the watch list for the
+            # events it reports. The handler decides which of them means what.
+            effects_hooker: Hooker | None = None
+            if effects_observing is not None:
+                effects_watch_address = self._place_watch_list(effects_watch)
+                effects_observer = build_observer(
+                    effects_watch_address, WATCH_DEPTH, EventKind.EFFECT_INTENSITY
+                )
+                effects_observer_address = self._access.allocate(len(effects_observer))
+                self._access.write(effects_observer_address, effects_observer)
+                self._access.protect(
+                    effects_observer_address, len(effects_observer), PAGE_EXECUTE_READ
+                )
+                self._access.flush_instruction_cache(
+                    effects_observer_address, len(effects_observer)
+                )
+                effects_hooker = Hooker(
+                    self._access,
+                    self._pid,
+                    block_address,
+                    effects_observer_address,
+                    self._timeout_ms,
+                )
+                effects_target, effects_displaced = effects_observing
+                effects_hooker.install(
+                    EFFECTS_OBSERVER_NAME,
+                    effects_target,
+                    effects_displaced,
+                    forwarded_arguments=OBSERVER_ARGUMENTS,
+                    after=OBSERVER_AFTER,
+                )
         except BaseException:
             # **The patches come out first, and that is not a detail.** The entry patch is one of the
             # last steps but it *is* a step: if a later one fails -- the observer is the one that can,
@@ -328,7 +395,11 @@ class Bridge:
             # it: the stub calls freed memory on the next game frame. So both hooks are removed (their
             # functions get their own bytes back) before anything is freed.
             rollback_error: BaseException | None = None
-            for a_hooker, hook_name in ((observer_hooker, OBSERVER_NAME), (hooker, HOOK_NAME)):
+            for a_hooker, hook_name in (
+                (effects_hooker, EFFECTS_OBSERVER_NAME),
+                (observer_hooker, OBSERVER_NAME),
+                (hooker, HOOK_NAME),
+            ):
                 if a_hooker is None or hook_name not in a_hooker.installed:
                     continue
                 try:
@@ -337,6 +408,8 @@ class Bridge:
                     rollback_error = rollback_error or error
 
             for address in (
+                effects_observer_address,
+                effects_watch_address,
                 observer_address,
                 watch_address,
                 decoder_address,
@@ -360,9 +433,12 @@ class Bridge:
         self._watch_address = watch_address
         self._dispatcher_address = dispatcher_address
         self._observer_address = observer_address
+        self._effects_watch_address = effects_watch_address
+        self._effects_observer_address = effects_observer_address
         self._decoder_address = decoder_address
         self._hooker = hooker
         self._observer_hooker = observer_hooker
+        self._effects_hooker = effects_hooker
 
     def remove(self, free_allocations: bool = False) -> None:
         """Disable dispatch and restore both hooked functions' own bytes.
@@ -383,6 +459,10 @@ class Bridge:
         (``ConnectedClient.close`` does, through the dialog module's own shutdown).
         """
 
+        if self._effects_hooker is not None and self.observing_effects:
+            self._effects_hooker.remove(
+                EFFECTS_OBSERVER_NAME, free_code=free_allocations
+            )
         if self._observer_hooker is not None and self.observing:
             self._observer_hooker.remove(OBSERVER_NAME, free_code=free_allocations)
         self.require_hooker().remove(HOOK_NAME, free_code=free_allocations)
@@ -396,6 +476,8 @@ class Bridge:
                     "Drain them before removing the bridge."
                 )
             for address in (
+                self._effects_observer_address,
+                self._effects_watch_address,
                 self._observer_address,
                 self._watch_address,
                 self._decoder_address,
@@ -405,6 +487,8 @@ class Bridge:
             ):
                 if address:
                     self._access.free(address)
+            self._effects_observer_address = 0
+            self._effects_watch_address = 0
             self._observer_address = 0
             self._watch_address = 0
             self._decoder_address = 0

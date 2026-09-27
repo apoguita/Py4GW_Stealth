@@ -47,6 +47,7 @@ from dataclasses import dataclass
 
 from .client import require_client
 from .context.world_context import AgentEffectsStruct, BuffStruct, EffectStruct
+from .game_thread.shared_block import EventRecord
 
 #: ``DWORD`` arithmetic wraps at 32 bits, and both the skill timer and an effect's elapsed time are
 #: ``DWORD`` in the source (``skill.cpp:39-45``).
@@ -56,6 +57,17 @@ _DWORD_MASK = 0xFFFFFFFF
 #: ``effects_patterns.cpp``).
 _DROP_BUFF_FUNC = "effects.drop_buff_func"
 _POST_PROCESS_EFFECT_FUNC = "effects.post_process_effect_func"
+
+#: What the second observed function is watched for: the alcohol levels, in the observer's own
+#: form — one entry per id it reports. Native's handler tests ``intensity <= 5`` before storing it
+#: (``effects.cpp:26-41``) because the client calls that function for its other post-process
+#: effects as well; a watch entry is where this port makes that same test, and the levels are
+#: ``0..5``.
+_WATCHED_INTENSITIES = tuple((level, 0) for level in range(6))
+
+#: ``g_alcohol_level`` (``effects.cpp:15``): what the client's own call last reported, and the word
+#: ``GetAlcoholLevel`` answers with. Zero until the client calls the function.
+_alcohol_level = 0
 
 
 @dataclass(slots=True)
@@ -242,19 +254,60 @@ def get_drunk_af(intensity: int, tint: int) -> None:
 def get_alcohol_level() -> int:
     """``PyEffects.get_alcohol_level`` (``effects_bindings.cpp:37-39``).
 
-    Blocked on target-side work: native's answer is the ``intensity`` argument of the client's
-    post-process call, captured by the entry hook at ``effects.cpp:24-41`` into ``g_alcohol_level``.
-    This port has no hook on that function, so the member raises and names the work instead of
-    answering a number it does not have (``docs/TARGET_SIDE_WORK.md``).
+    Native's number is ``g_alcohol_level``: the ``intensity`` argument of the client's post-process
+    effect call, stored by its entry hook (``effects.cpp:15,26-41``). This port now has the hook that
+    native has — the connection's second observed function is ``effects.post_process_effect_func``,
+    with its own watch list and event kind, and :func:`_on_post_process_effect` is native's handler
+    — but the event it publishes is still the *UI-message* shape, and that is the one piece missing.
+
+    **What the live run showed (`tests/probe_alcohol_live.py`, 2026-09-27, pid 35416).** With the hook
+    in place and ``Effects.ApplyDrunkEffect(3, 0)`` called through the binding's own member, the level
+    stayed ``0``. The reason is in the observer's emitted code
+    (``payload.py:762-765``): it takes the hooked function's first argument as the *id* to match and
+    its **second** as a pointer to the packet whose words become the event's arguments, and returns
+    without publishing when that second argument is null — which is the UI path's own check
+    (``agent.cpp:145-151``). For the post-process function the two arguments are plain words
+    (``intensity``, ``tint``; ``effects.cpp:24-25``), and ``tint`` is ``0`` for a plain drunk level,
+    so no event is produced.
+
+    So the remaining work is one emitted stub — an observer whose event carries the hooked call's
+    **arguments as words** instead of dereferencing the second one — and then this member returns
+    :data:`_alcohol_level` as the binding returns its global. Until that stub exists the member
+    raises and names it, rather than answering a word that nothing has stored.
     """
 
     raise NotImplementedError(
-        "PyEffects.get_alcohol_level is declared but not built here yet: it needs the entry hook "
-        "on the client's post-process function that native installs to capture its intensity "
-        "argument into g_alcohol_level (effects.cpp:24-41; the function is the catalog's "
-        "effects.post_process_effect_func). The source's member works; this port raises at the "
-        "call site and names the work item instead of returning a wrong value."
+        "PyEffects.get_alcohol_level is declared, and its capture is wired, but it is not built "
+        "here yet: the observer's emitted code reads the hooked function's second argument as a "
+        "packet pointer and drops the event when it is null (payload.py:762-765), while native's "
+        "post-process handler stores the two plain word arguments (effects.cpp:24-41). What is "
+        "missing is that second event shape -- an observer that carries the call's own arguments "
+        "instead of dereferencing one. The hook, the watch list (_WATCHED_INTENSITIES) and the "
+        "handler (_on_post_process_effect) are all in place; the source's member works, and this "
+        "port raises at the call site instead of returning a number nothing stored."
     )
+
+
+def _on_post_process_effect(event: EventRecord) -> None:
+    """Native's ``OnPostProcessEffect`` (``effects.cpp:26-41``), the capture half.
+
+    Native's handler tests the intensity before storing it — ``if (intensity <= 5)`` — because the
+    client calls this function for its other post-process effects too, and only ``0..5`` are the
+    alcohol levels. This port's observer makes that same test where it can make it: the watch list
+    holds the levels ``0..5``, so what reaches here is already one of them, and ``arg0`` is the
+    ``intensity`` argument native's handler stores. ``effects.cpp:15`` initialises the global to
+    zero, which is where :data:`_alcohol_level` starts.
+    """
+
+    global _alcohol_level
+    _alcohol_level = int(event.arg0)
+
+
+def _reset_alcohol_state() -> None:
+    """Native's ``Exit`` (``effects.cpp:81``), the reset half: the captured level is forgotten."""
+
+    global _alcohol_level
+    _alcohol_level = 0
 
 
 class PyEffects:

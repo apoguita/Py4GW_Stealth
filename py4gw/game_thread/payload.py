@@ -711,7 +711,9 @@ _OBSERVER_EPILOGUE = bytes((0xC2, 0x0C, 0x00))
 
 
 def build_observer(
-    watch_address: int = 0, watch_depth: int = WATCH_DEPTH
+    watch_address: int = 0,
+    watch_depth: int = WATCH_DEPTH,
+    kind: int = EventKind.UI_MESSAGE,
 ) -> bytes:
     """Return the observer: what runs when a watched client function is called.
 
@@ -787,7 +789,7 @@ def build_observer(
         code.emit(_shl_r32_imm8(_ECX, _EVENT_SLOT_SHIFT))
         code.emit(_lea_r32_mem(_EDI, _EBX, EVENT_REGION_OFFSET, _ECX))
 
-        code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["kind"], EventKind.UI_MESSAGE))
+        code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["kind"], int(kind)))
         code.emit(_mov_mem_r32(_EDI, EVENT_OFFSET["sequence"], _ESI))
         for word in range(_OBSERVED_WORDS):
             code.emit(_mov_r32_mem(_ECX, _EDX, word * 4))

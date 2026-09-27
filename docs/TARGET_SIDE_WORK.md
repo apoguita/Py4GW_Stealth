@@ -345,3 +345,24 @@ Before implementing any target-side item:
 5. Add offline safety tests and a bounded live test before enabling the feature.
 6. Update this document, the parity audit, and the public API contract before
    implementation.
+
+## 2026-09-27 — an observed function whose arguments are words, not a packet
+
+**What is already in place** (all of it live-run, pid 35416): the hook on
+``effects.post_process_effect_func`` (``effects.cpp:51-55``), its watch list
+(``effect._WATCHED_INTENSITIES``), its own event kind (``EventKind.EFFECT_INTENSITY`` = 4), the
+handler (``effect._on_post_process_effect``, ``effects.cpp:26-41``) and the reset
+(``effect._reset_alcohol_state``, ``effects.cpp:81``).
+
+**What is missing.** ``build_observer`` (``payload.py:713``) emits one event shape, and it is the UI
+one: the hooked function's second argument is a **pointer to a packet**, its words become the event's
+``arg0..arg3``, and a null second argument drops the event (``payload.py:762-765``). The post-process
+function's two arguments are plain words, and its second is ``0`` for a plain drunk level, so no event
+is ever published. What is needed is the second shape: an observer that records the hooked call's own
+arguments — ``sequence``/``arg0`` = the first, ``arg1`` = the second — with no dereference and no
+null-drops-event check, selected by the caller that installs it (``Bridge.install``, one shape per
+observed function, as native has one handler per hooked function).
+
+**How it is verified.** ``tests/probe_alcohol_live.py``: connect, read ``Effects.GetAlcoholLevel()``
+(``0``), ``Effects.ApplyDrunkEffect(3, 0)``, wait for ``3``, ``Effects.ApplyDrunkEffect(0, 0)``, wait
+for ``0``, disconnect. It must be allowed to finish — a killed run leaves a hook in the client.

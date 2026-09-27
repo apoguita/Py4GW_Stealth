@@ -108,3 +108,40 @@ reason when they do not. Both of the class's calls resolve on this build
 dropping a buff and driving the drunk post-process are game actions. The skill timer the snapshot
 depends on was live and advancing (`+251 ms` over a 250 ms sleep) — see
 [`RESEARCH.md`](RESEARCH.md).
+
+## 2026-09-27 — the alcohol capture: hook wired, event shape missing
+
+**What was built.** Native's alcohol level is not a read: it is the ``intensity`` argument of the
+client's own post-process effect call, stored by its entry hook (``effects.cpp:15,26-41``) and
+returned by ``PyEffects.GetAlcoholLevel`` (``effects_bindings.cpp:37-39``). This port now has that
+hook. ``Bridge.install`` takes a second observed function (``effects_observing`` /
+``effects_watch``) in native's own shape — one hook per function, each with its own watch list
+(``effects.cpp:51-55``) — the observer publishes its own event kind (``EventKind.EFFECT_INTENSITY``,
+``shared_block.py``), the connection installs it on ``effects.post_process_effect_func`` with the
+address resolved live and the displaced bytes pinned to whole instructions (``55 8B EC 83 EC 08``,
+6 bytes: ``push ebp; mov ebp, esp; sub esp, 8``), and ``py4gw/effect.py`` holds native's state and
+handler: ``_alcohol_level`` (``effects.cpp:15``), ``_on_post_process_effect`` (``effects.cpp:26-41``)
+and ``_reset_alcohol_state`` (``effects.cpp:81``, called from ``ConnectedClient.close``). Native's
+``intensity <= 5`` test is the watch list: ``_WATCHED_INTENSITIES`` is the six levels.
+
+**What the live run found** (``tests/probe_alcohol_live.py``, pid 35416, clean exit; three hooks in,
+``observing``/``observing_effects`` both true, disconnect restored every entry). ``GetAlcoholLevel``
+started at ``0``; ``Effects.ApplyDrunkEffect(3, 0)`` — the binding's own member, so no test-only path
+— was called, and the level stayed ``0`` for the whole 4 s wait.
+
+**Why, from the emitted code.** The observer is the UI-message observer
+(``payload.py:713-830``): it takes the hooked function's **first** argument as the id to match against
+the watch list and its **second** as a pointer to a packet, copies the packet's first words into the
+event's ``arg0..arg3``, and *returns without publishing when that second argument is null*
+(``payload.py:762-765``) — the UI path's own check (``agent.cpp:145-151``). The post-process function
+takes two plain words (``intensity``, ``tint``; ``effects.cpp:24-25``) and ``tint`` is ``0`` for a
+plain drunk level, so the observer drops the event every time.
+
+**The work item, and it is one stub.** An observer whose event carries the hooked call's **arguments
+as words** — ``sequence`` = ``arg0`` (the intensity, which is also what the watch list matches) and
+``arg1`` = the second argument — instead of dereferencing the second one. Nothing else is missing:
+until that shape exists ``PyEffects.GetAlcoholLevel`` / ``Effects.GetAlcoholLevel`` raise naming it
+(they do **not** answer the captured word, because nothing can store it yet).
+
+**Verdict unchanged: 13 of 15 members answer.** ``GetAlcoholLevel`` (this stub) and
+``GetAlcoholTimeRemaining`` (the binding implements no such member; see the finding above) are the two.

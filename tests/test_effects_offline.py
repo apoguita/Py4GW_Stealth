@@ -14,17 +14,21 @@ the binding computes rather than restates:
 - ``HasEffect``'s short-circuit (the effect array first, then the buff array);
 - ``EffectAttributeLevel`` and ``GetEffectTimeRemaining`` picking their effect out of the list;
 - ``GetBuffID`` walking the player's buffs;
-- the three members that are calls or findings: ``DropBuff``, ``ApplyDrunkEffect`` (each gated on
-  its catalog resolver, which the fake client answers for), and the two alcohol members, which raise
-  naming what they need — the hook native installs, and the binding member that does not exist.
+- the three members that are calls or findings: ``DropBuff`` and ``ApplyDrunkEffect`` (each gated on
+  its catalog resolver, which the fake client answers for), the alcohol level, whose capture is wired
+  (``effects.cpp:15,26-41``) and whose handler is checked here while the member still raises naming the
+  one event shape it needs, and ``GetAlcoholTimeRemaining``, which raises naming the binding member
+  that does not exist.
 """
 
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from py4gw import effect
 from py4gw.context.world_context import BuffStruct, EffectStruct
 from py4gw.effect import (
     BuffType,
@@ -39,10 +43,29 @@ from py4gw.effect import (
     get_buffs,
     get_effects,
 )
+from py4gw.game_thread.shared_block import EventKind, EventRecord
 
 #: The agent the fixture's effects block belongs to, and a second id that has no block.
 AGENT_ID = 7
 OTHER_AGENT_ID = 8
+
+
+def _event(arg0: int) -> EventRecord:
+    """The record the observer publishes when the client calls the post-process function.
+
+    ``sequence`` is the watched id — the intensity — and ``arg0`` is the argument the stub
+    forwarded, which is what native's handler stores.
+    """
+
+    return EventRecord(
+        kind=int(EventKind.EFFECT_INTENSITY),
+        sequence=arg0,
+        arg0=arg0,
+        arg1=0,
+        arg2=0,
+        arg3=0,
+        tick=0,
+    )
 
 #: The timer the fixture answers with. Both derived fields are subtractions from it, so a fixed
 #: value makes them exact.
@@ -364,8 +387,13 @@ class EffectsTests(unittest.TestCase):
         self.assertEqual(name, "effects.post_process_effect_func")
         self.assertEqual(args, (3, 7))
 
-    def test_the_alcohol_level_names_the_hook_it_needs(self) -> None:
-        """``get_alcohol_level`` is native's hooked capture (`effects.cpp:24-41`)."""
+    def test_the_alcohol_level_names_the_event_shape_it_still_needs(self) -> None:
+        """``get_alcohol_level`` raises naming the observer shape its capture still needs.
+
+        The hook, the watch list and the handler are wired (`effects.cpp:15,26-41`); what is missing
+        is an event that carries the hooked call's own word arguments instead of dereferencing the
+        second one — the live probe measured the level staying zero for exactly that reason.
+        """
 
         self._use()
 
@@ -374,8 +402,46 @@ class EffectsTests(unittest.TestCase):
                 with self.assertRaises(NotImplementedError) as caught:
                     call()
                 message = str(caught.exception)
-                self.assertIn("post-process function", message)
+                self.assertIn("payload.py:762-765", message)
                 self.assertIn("effects.cpp:24-41", message)
+
+    def test_the_alcohol_handler_stores_what_the_source_stores(self) -> None:
+        """The handler is native's (`effects.cpp:26-41`): ``arg0`` is the captured level."""
+
+        effect._reset_alcohol_state()
+        try:
+            self.assertEqual(effect._alcohol_level, 0)
+            effect._on_post_process_effect(_event(arg0=3))
+            self.assertEqual(effect._alcohol_level, 3)
+            effect._on_post_process_effect(_event(arg0=5))
+            self.assertEqual(effect._alcohol_level, 5)
+            effect._reset_alcohol_state()
+            self.assertEqual(effect._alcohol_level, 0)
+        finally:
+            effect._reset_alcohol_state()
+
+    def test_the_alcohol_watch_list_is_the_levels_native_stores(self) -> None:
+        """The handler's ``intensity <= 5`` test (`effects.cpp:26-41`) is the watch list here."""
+
+        self.assertEqual(
+            effect._WATCHED_INTENSITIES,
+            ((0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0)),
+        )
+
+    def test_the_connection_wires_the_capture_to_its_own_event_kind(self) -> None:
+        """The capture is fed by the post-process hook, and only its kind reaches the handler."""
+
+        source = (Path(__file__).resolve().parents[1] / "py4gw" / "client.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('_EFFECTS_HOOK = "effects.post_process_effect_func"', source)
+        self.assertIn('bytes.fromhex("55 8B EC 83 EC 08")', source)
+        self.assertIn("EventKind.EFFECT_INTENSITY, effect_module._on_post_process_effect", source)
+        self.assertIn("effects_watch=effect_module._WATCHED_INTENSITIES", source)
+        self.assertEqual(int(EventKind.EFFECT_INTENSITY), 4)
+        self.assertNotEqual(
+            int(EventKind.EFFECT_INTENSITY), int(EventKind.UI_MESSAGE)
+        )
 
     def test_the_alcohol_time_names_the_binding_member_that_does_not_exist(self) -> None:
         """``GetAlcoholTimeRemaining`` calls a binding member the binding does not implement."""
