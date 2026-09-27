@@ -347,6 +347,36 @@ class InstallTests(BridgeTestCase):
         self.assertEqual(target.entry(), ORIGINAL)
         self.assertFalse(bridge.installed)
 
+    def test_an_observer_that_refuses_leaves_no_hook_behind(self) -> None:
+        """The first patch comes out before anything this install made is freed.
+
+        The observer is the step that can fail *after* the game-thread hook is already live: its
+        resolved address is checked against its own entry bytes, and on the live client that check
+        has failed (2026-09-27: ``expected 55 8b ec 8b 45 08 83 f8 56, observed 55 8b ec 83 ec 2c 53
+        8b 5d``). What the failure path must never do is free the block and the dispatcher while a
+        live patch still jumps into the stub that calls them: the next game frame runs freed memory,
+        which is the crash the client had. So the rollback removes the hook first, and the function's
+        own bytes are back.
+        """
+
+        observe_target = TARGET + 0x40
+        target = FakeTarget()
+        bridge = Bridge(target, PID)
+        with self.assertRaises(RuntimeError):
+            bridge.install(
+                TARGET,
+                ORIGINAL,
+                observing=(observe_target, bytes.fromhex("55 8B EC 8B 45 08 83 F8 56")),
+            )
+
+        self.assertEqual(target.entry(), ORIGINAL, "the game thread's own bytes are back")
+        self.assertEqual(
+            target.at(observe_target, 8), bytes(8), "the observer wrote nothing"
+        )
+        self.assertFalse(bridge.installed)
+        self.assertIn(ALLOC_BASE, target.freed, "the block is released")
+        self.assertIn(ALLOC_BASE + 0x1000, target.freed, "the dispatcher is released")
+
 
 class QueueTests(BridgeTestCase):
     """Publishing, waiting, and reading the events back."""

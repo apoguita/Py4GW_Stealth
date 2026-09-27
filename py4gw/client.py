@@ -66,15 +66,12 @@ from .context import (
     GadgetContext,
     GadgetContextStruct,
     AgentArray,
-    AgentArraySnapshot,
     AgentGadgetStruct,
     AgentItemStruct,
     AgentLivingStruct,
     AgentStruct,
-    AgentReference,
-    LivingAgentSnapshot,
 )
-from .memory import ProcessMemoryReader
+from .memory import MemoryManager, ProcessMemoryReader
 from .perf_counter import PerfCounter
 from .scanner import PatternCatalog, RemoteScanner
 from .ui import CurrentTooltip, FrameArray, FrameTree, TooltipInfoStruct
@@ -85,6 +82,7 @@ from .game_thread.callbacks import Callbacks, EventListener
 from .game_thread.patcher import Patcher
 from . import chat
 from . import dialog
+from .internals import string_table
 from .dialog import DialogTables
 from .game_thread.shared_block import (
     DESCRIPTOR_DEPTH,
@@ -223,7 +221,13 @@ class ConnectedClient:
             self._scanner.initialize()
             patterns = PatternCatalog.from_directory("offsets")
             self._patterns = patterns
-            self._dialog_tables = DialogTables(self._reader, self._scanner, patterns)
+            self._dialog_tables = DialogTables(self._scanner)
+            self._memory_manager = MemoryManager(
+                self._reader,
+                self._scanner,
+                patterns,
+            )
+            self._memory_manager.Scan()
             self._game_context = GameContext(
                 self._reader,
                 self._scanner,
@@ -307,10 +311,9 @@ class ConnectedClient:
                 self._reader,
                 self._scanner,
                 patterns,
-                self._acc_agent_context,
                 cache_context_validator=self._agent_array_cache_contexts_are_valid,
             )
-            self._agent_array.initialize(perf_counter)
+            self._agent_array.initialize()
             self._skill_constants = SkillConstantArray(
                 self._reader,
                 self._scanner,
@@ -365,6 +368,15 @@ class ConnectedClient:
         # patched, and so the connection that reads contexts exists first.
         if self._game_thread_enabled:
             self._install_game_thread()
+            # The string table is loaded here, once, for the same reason and in the same shape as
+            # the sources load it: Reforged's first frame refreshes the ``TextParser`` context, and
+            # that refresh loads the table (``TextContext.py:152-155``) — so by the time any name is
+            # asked for, ``string_table.decode`` is a dictionary hit. This port has no frame loop,
+            # so its startup is the connection. Without this call the load happens *inside* the
+            # first ``Agent.GetNameByID``: one synchronous GW.dat chain per file slot in the middle
+            # of a name read, and another attempt on every later read while it has not succeeded.
+            # Measured live on 2026-09-26 — see ``docs/RESEARCH.md``.
+            TextParser._update_ptr()
 
     def _install_game_thread(self) -> None:
         """Hook the game thread and the message sender, and start listening.
@@ -424,13 +436,21 @@ class ConnectedClient:
         # which left both journals empty while the dialog itself was open in the client.
         _current_client = self
         try:
-            dialog.PyDialog.initialize()
+            dialog.Dialog.initialize()
             self._callbacks.register(EventKind.UI_MESSAGE, dialog._capture_message)
             self._callbacks.register(EventKind.UI_MESSAGE, self._capture_target)
             # The client's decoder calling back is what finishes a dialog string, so the
             # module's completion for it is registered like its message capture — native
             # registers its own callbacks in the same step (``dialog.cpp:1266-1295``).
             self._callbacks.register(EventKind.STRING_DECODED, dialog._on_string_decoded)
+            # An agent's name is decoded by the client too (``Agent.GetNameByID``, Native's
+            # ``AsyncGetAgentName`` route), but it takes its text from **its own slot's state** rather
+            # than from ``STRING_DECODED``: measured live, a decode taken on that event reads empty
+            # while the same slot read by state answers the text, and the dialog's strings own that
+            # event. Only the module's state has to be reset here.
+            from . import agent as agent_module
+
+            agent_module._reset_name_state()
             # The chat history is kept the same way native's chat module watches the log message
             # (``chat.cpp:205``): the connection watches ``kWriteToChatLog`` and the module decodes
             # each line as it is announced, so the history exists without anyone asking for it.
@@ -935,8 +955,8 @@ class ConnectedClient:
         Native keeps these tables in the module's own process and reaches them through
         ``GW::dialog::GetDialogTables()``; here they are the client's, because
         resolving them is a read of this process. What the resolver does with them —
-        the static rebase, the validation pass, the ``.rdata`` fallback — is the
-        port of ``dialog_patterns.cpp``.
+        the rebase of the source's ``DialogMemory`` constants, the validation pass, the
+        ``.rdata`` fallback — is the port of ``dialog_patterns.cpp``.
         """
 
         return self._dialog_tables
@@ -1107,6 +1127,17 @@ class ConnectedClient:
         return self._acc_agent_context.read()
 
     @property
+    def memory_manager(self) -> MemoryManager:
+        """Return the reader for the client's own memory-manager globals.
+
+        The port of ``PY4GW::MemoryManager``. Two classes need it: the effect snapshot's
+        ``time_elapsed``/``time_remaining`` and the skillbar slot's ``get_recharge`` are both
+        measured against ``GetSkillTimer``.
+        """
+
+        return self._memory_manager
+
+    @property
     def camera(self) -> Camera:
         """Return the external read-only camera reader."""
 
@@ -1257,16 +1288,15 @@ class ConnectedClient:
 
     @property
     def agent_array(self) -> AgentArray:
-        """Return the bounded external agent-array reader."""
+        """Return the external agent-array reader.
+
+        The reader is the port of ``native_src/context/AgentContext.py``'s ``AgentArray`` facade.
+        Its ``get_context()`` is the source's own accessor for the agent-array *view*
+        (``AgentContext.py:1473-1474``), which is where the category lists and the per-id lookups
+        live; this project has no frame loop, so the view is built the first time it is asked for.
+        """
 
         return self._agent_array
-
-    def read_agent_array(
-        self, perf_counter: PerfCounter | None = None
-    ) -> AgentArraySnapshot | None:
-        """Read the current bounded set of agent references."""
-
-        return self._agent_array.read(perf_counter)
 
     def _agent_array_cache_contexts_are_valid(self) -> bool:
         """Apply Reforged's required-context gate to the external array cache."""
@@ -1274,22 +1304,6 @@ class ConnectedClient:
         from .map import Map
 
         return Map.IsMapReady()
-
-
-
-    def read_agent(
-        self, reference: AgentReference, perf_counter: PerfCounter | None = None
-    ) -> AgentStruct | AgentLivingStruct | AgentItemStruct | AgentGadgetStruct | None:
-        """Read one complete typed record for an AgentArray reference."""
-
-        return self._agent_array.read_agent(reference, perf_counter)
-
-    def read_agent_by_id(
-        self, agent_id: int
-    ) -> AgentStruct | AgentLivingStruct | AgentItemStruct | AgentGadgetStruct | None:
-        """Find an agent ID and read its complete typed record."""
-
-        return self._agent_array.read_agent_by_id(agent_id)
 
     @property
     def skill_constants(self) -> SkillConstantArray:
@@ -1318,29 +1332,6 @@ class ConnectedClient:
         """Read the tooltip the client is showing, or ``None`` when there is none."""
 
         return self._current_tooltip.read()
-
-    @property
-    def living_snapshot(self) -> LivingAgentSnapshot | None:
-        """Return the latest complete living-agent snapshot, if refreshed."""
-
-        return self._agent_array.living_snapshot
-
-    def refresh_living_agents(
-        self, perf_counter: PerfCounter | None = None
-    ) -> LivingAgentSnapshot | None:
-        """Refresh and cache complete records for current living agents."""
-
-        return self._agent_array.refresh_living_agents(perf_counter)
-
-    def get_living_agent(
-        self,
-        agent_id: int,
-        refresh: bool = False,
-        perf_counter: PerfCounter | None = None,
-    ) -> AgentLivingStruct | None:
-        """Return one complete living record from the local snapshot cache."""
-
-        return self._agent_array.get_living_agent(agent_id, refresh, perf_counter)
 
     @property
     def cinematic(self) -> Cinematic:
@@ -1400,7 +1391,7 @@ class ConnectedClient:
         # that can no longer arrive. Native's own shutdown is called the same way — its callbacks
         # are still registered while it drains, and the unregistration is a step *inside* it.
         try:
-            dialog.PyDialog.terminate()
+            dialog.Dialog.terminate()
         except BaseException as error:
             failure = error
 
@@ -1410,6 +1401,25 @@ class ConnectedClient:
                 listener.stop()
             except BaseException as error:
                 failure = failure or error
+
+        # The string table's warm-up reads GW.dat through this connection, so it must be finished
+        # with it before the block it reads through is released -- the same reason the listener stops
+        # first. A worker left running would also leave the dat record it was reading open in the
+        # client, which is the client's own `Gw.dat still open` assertion at shutdown.
+        try:
+            string_table._stop_warmup()
+        except BaseException as error:
+            failure = failure or error
+
+        # Names asked for and never taken hold decode slots, and a block with a decode outstanding
+        # cannot be freed (``Bridge.remove``): giving those slots back here is what lets the bridge
+        # come out at all. A name in flight at disconnect is a caller that stopped calling.
+        try:
+            from . import agent as agent_module
+
+            agent_module._reset_name_state()
+        except BaseException as error:
+            failure = failure or error
 
         bridge, self._bridge = self._bridge, None
         access, self._access = self._access, None

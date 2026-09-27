@@ -40,7 +40,7 @@ readers = {
     "gadgetcontext": py4gw.context.gadgetcontext.get,
     "accagentcontext": py4gw.context.accagentcontext.get,
     "availablecharacters": py4gw.context.availablecharacters.get,
-    "agentarray": client.read_agent_array,
+    "agentarray": client.agent_array.get_context,
 }
 
 for name, reader in readers.items():

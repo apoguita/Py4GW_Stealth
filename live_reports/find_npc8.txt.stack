@@ -1,0 +1,48 @@
+Timeout (0:00:15)!
+Thread 0x0000998c (most recent call first):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\probe_find_npc_by_name.py", line 124 in watchdog
+  File "C:\Users\Apo\AppData\Local\Programs\Python\Python313-32\Lib\threading.py", line 992 in run
+  File "C:\Users\Apo\AppData\Local\Programs\Python\Python313-32\Lib\threading.py", line 1041 in _bootstrap_inner
+  File "C:\Users\Apo\AppData\Local\Programs\Python\Python313-32\Lib\threading.py", line 1012 in _bootstrap
+
+Thread 0x00005e34 (most recent call first):
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\scanner\scanner.py", line 198 in _matches_at
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\scanner\scanner.py", line 160 in find_all
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\scanner\remote.py", line 238 in find_in_range
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\scanner\remote.py", line 206 in find_all
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\scanner\remote.py", line 194 in find
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\scanner\remote.py", line 379 in find_assertion
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\scanner\patterns.py", line 414 in _run_step
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\scanner\patterns.py", line 345 in _run_attempt
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\scanner\patterns.py", line 204 in resolve
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\client.py", line 488 in _resolve
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\client.py", line 759 in call_function
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\dat_reader.py", line 270 in _read_dat_record
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\dat_reader.py", line 182 in read_file_by_hash
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\internals\string_table.py", line 763 in _load_dat_file
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\internals\string_table.py", line 826 in _read_slot
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\internals\string_table.py", line 987 in _load_table_for_language
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\internals\string_table.py", line 1018 in _do_load_string_table
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\internals\string_table.py", line 933 in _warmup_worker
+  File "C:\Users\Apo\AppData\Local\Programs\Python\Python313-32\Lib\threading.py", line 992 in run
+  File "C:\Users\Apo\AppData\Local\Programs\Python\Python313-32\Lib\threading.py", line 1041 in _bootstrap_inner
+  File "C:\Users\Apo\AppData\Local\Programs\Python\Python313-32\Lib\threading.py", line 1012 in _bootstrap
+
+Thread 0x000091f8 (most recent call first):
+  File "C:\Users\Apo\AppData\Local\Programs\Python\Python313-32\Lib\threading.py", line 363 in wait
+  File "C:\Users\Apo\AppData\Local\Programs\Python\Python313-32\Lib\threading.py", line 659 in wait
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\callbacks.py", line 213 in _run
+  File "C:\Users\Apo\AppData\Local\Programs\Python\Python313-32\Lib\threading.py", line 992 in run
+  File "C:\Users\Apo\AppData\Local\Programs\Python\Python313-32\Lib\threading.py", line 1041 in _bootstrap_inner
+  File "C:\Users\Apo\AppData\Local\Programs\Python\Python313-32\Lib\threading.py", line 1012 in _bootstrap
+
+Thread 0x00003fa4 (most recent call first):
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\win32\win32.py", line 246 in read_process_memory
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\memory\memory.py", line 45 in read
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\context\gw_array.py", line 162 in get
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\agent.py", line 244 in _get_agent_by_id
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\agent.py", line 284 in _get_agent_enc_name_by_id
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\agent.py", line 170 in get_agent_enc_name
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\agent.py", line 571 in GetNameByID
+  File "C:\Users\Apo\Py4GW_Stealth\tests\probe_find_npc_by_name.py", line 196 in main
+  File "C:\Users\Apo\Py4GW_Stealth\tests\probe_find_npc_by_name.py", line 337 in <module>

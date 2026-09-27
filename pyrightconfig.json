@@ -14,5 +14,11 @@
   "typeCheckingMode": "standard",
   "reportMissingTypeStubs": "none",
   "venvPath": "C:/Users/Apo/AppData/Local/Programs/Python",
-  "venv": "Python313-32"
+  "venv": "Python313-32",
+  "executionEnvironments": [
+    {
+      "root": "py4gw/enums_src",
+      "reportReturnType": "none"
+    }
+  ]
 }

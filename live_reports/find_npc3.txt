@@ -1,0 +1,1 @@
+{"stage": "client", "pid": 10508, "path": "F:\\GW\\GW1\\Gw.exe"}

@@ -30,7 +30,6 @@ did not resolve, when the message is empty, or when the channel byte is not one 
 from __future__ import annotations
 
 import struct
-from enum import IntEnum
 from typing import TYPE_CHECKING
 
 from .game_thread.shared_block import CallForm
@@ -63,35 +62,13 @@ MAX_MESSAGE_CODE_UNITS = 120
 BUFFER_OFFSET = 16
 
 
-class ChatChannel(IntEnum):
-    """``GW::chat::Channel`` (``common/constants/chat.h:17-35``).
-
-    Two spellings exist in the sources and this is the Reforged Python one
-    (``Py4GWCoreLib/enums_src/UI_enums.py:35-55``), which is what a ported script imports; Native
-    calls the same enum ``Channel`` and spells its last member ``CHANNEL_UNKNOW`` — a typo this
-    port does not carry, because Reforged's own ``CHANNEL_UNKNOWN`` names the same value.
-    ``py4gw/player.py`` re-exports this class, so ``Player.ChatChannel`` is the same object and
-    the two names cannot drift apart.
-    """
-
-    CHANNEL_ALLIANCE = 0
-    CHANNEL_ALLIES = 1
-    CHANNEL_GWCA1 = 2
-    CHANNEL_ALL = 3
-    CHANNEL_GWCA2 = 4
-    CHANNEL_MODERATOR = 5
-    CHANNEL_EMOTE = 6
-    CHANNEL_WARNING = 7
-    CHANNEL_GWCA3 = 8
-    CHANNEL_GUILD = 9
-    CHANNEL_GLOBAL = 10
-    CHANNEL_GROUP = 11
-    CHANNEL_TRADE = 12
-    CHANNEL_ADVISORY = 13
-    CHANNEL_WHISPER = 14
-    CHANNEL_COUNT = 15
-    CHANNEL_COMMAND = 16
-    CHANNEL_UNKNOWN = -1
+#: ``ChatChannel`` is Reforged's ``enums_src/UI_enums.py:35-55``, imported from where it lives
+#: instead of copied here. Two spellings exist in the sources and this is the Reforged Python
+#: one, which is what a ported script imports; Native calls the same enum ``Channel`` and spells
+#: its last member ``CHANNEL_UNKNOW`` — a typo this port does not carry, because Reforged's own
+#: ``CHANNEL_UNKNOWN`` names the same value. ``py4gw/player.py`` re-exports the class, so
+#: ``Player.ChatChannel`` is the same object and the two names cannot drift apart.
+from .enums_src.ui_enums import ChatChannel
 
 
 def GetChannel(opcode: str | int) -> ChatChannel:

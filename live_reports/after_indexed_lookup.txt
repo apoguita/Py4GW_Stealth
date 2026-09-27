@@ -1,0 +1,291 @@
+{
+  "pid": 47456,
+  "path": "F:\\GW\\GW1\\Gw.exe",
+  "elevated": false,
+  "connect": "not used: this probe reads directly",
+  "memory_manager": {
+    "GetSkillTimer_first": 2148276533,
+    "GetSkillTimer_second": 2148276783,
+    "advanced_ms": 250,
+    "GetGWWindowHandle": 120327462
+  },
+  "agent_array": {
+    "address": "0xe0c714",
+    "buffer": "0x2e5f4758",
+    "size": 188,
+    "capacity": 251,
+    "struct_matches_gwarray": true,
+    "raw_slots": 188,
+    "non_null": 43,
+    "ids_sample": [
+      15,
+      16,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30
+    ],
+    "kinds": {
+      "living": 40,
+      "item": 0,
+      "gadget": 3
+    },
+    "category_all": 43,
+    "category_ally": 3,
+    "category_enemy": 10,
+    "category_items": 0,
+    "category_gadgets": 3,
+    "module_getter_agrees": true,
+    "view_GetAgentByID": 15,
+    "agent_GetAgentByID": 15
+  },
+  "effects": {
+    "world_context_read": true,
+    "party_effects_array": {
+      "buffer": "0x26730838",
+      "size": 2,
+      "capacity": 2
+    },
+    "party_effect_blocks": 2,
+    "blocks": [
+      {
+        "agent_id": 25,
+        "effect_count": 1,
+        "buff_count": 0,
+        "effects": 1,
+        "buffs": 0,
+        "first_effect": {
+          "skill_id": 160,
+          "attribute_level": 15,
+          "effect_id": 72,
+          "duration": 13.0,
+          "timestamp": 2148271353,
+          "time_elapsed": 5433,
+          "time_remaining": 7567
+        },
+        "attribute_level_lookup": 15,
+        "remaining_lookup": 7567,
+        "EffectExists": true,
+        "HasEffect": true,
+        "HasEffect_absent_skill": false,
+        "instance_is_PyEffects": "PyEffects"
+      },
+      {
+        "agent_id": 26,
+        "effect_count": 2,
+        "buff_count": 0,
+        "effects": 2,
+        "buffs": 0,
+        "first_effect": {
+          "skill_id": 225,
+          "attribute_level": 12,
+          "effect_id": 73,
+          "duration": 55.0,
+          "timestamp": 2148254124,
+          "time_elapsed": 22662,
+          "time_remaining": 32338
+        },
+        "attribute_level_lookup": 12,
+        "remaining_lookup": 32337,
+        "EffectExists": true,
+        "HasEffect": true,
+        "HasEffect_absent_skill": false,
+        "instance_is_PyEffects": "PyEffects"
+      }
+    ]
+  },
+  "names": {
+    "sample": [
+      {
+        "agent_id": 15,
+        "kind": "gadget",
+        "branch": "gadget context",
+        "pointer": "0x2bf5bfd0",
+        "bytes": 4,
+        "code_units": "\u0c6e",
+        "port_bytes": 4,
+        "port_matches_probe": true,
+        "GetEncNameByID_matches": true,
+        "IsNameReady": false,
+        "GetNameByID": "",
+        "GetEncNameStrByID": "\\\\x0C6E"
+      },
+      {
+        "agent_id": 16,
+        "kind": "gadget",
+        "branch": "gadget context",
+        "pointer": "0x2bf5bfe0",
+        "bytes": 4,
+        "code_units": "\u0c9e",
+        "port_bytes": 4,
+        "port_matches_probe": true,
+        "GetEncNameByID_matches": true,
+        "IsNameReady": false,
+        "GetNameByID": "",
+        "GetEncNameStrByID": "\\\\x0C9E"
+      },
+      {
+        "agent_id": 25,
+        "kind": "living",
+        "branch": "player array",
+        "pointer": "0x2bf136f8",
+        "bytes": 44,
+        "code_units": "\u0ba9\u0107Fezzik The Untamed\u0001",
+        "port_bytes": 44,
+        "port_matches_probe": true,
+        "GetEncNameByID_matches": true,
+        "IsNameReady": true,
+        "GetNameByID": "Fezzik The Untamed",
+        "GetEncNameStrByID": "\\\\x0BA9\\\\x0107Fezzik The Untamed\\\\x0001"
+      },
+      {
+        "agent_id": 26,
+        "kind": "living",
+        "branch": "world agent_infos",
+        "pointer": "0x2bf5fe60",
+        "bytes": 6,
+        "code_units": "\u8102\u064f",
+        "port_bytes": 6,
+        "port_matches_probe": true,
+        "GetEncNameByID_matches": true,
+        "IsNameReady": false,
+        "GetNameByID": "",
+        "GetEncNameStrByID": "\\\\x8102\\\\x064F"
+      },
+      {
+        "agent_id": 27,
+        "kind": "living",
+        "branch": "world agent_infos",
+        "pointer": "0x2bf60020",
+        "bytes": 6,
+        "code_units": "\u8101\u38aa",
+        "port_bytes": 6,
+        "port_matches_probe": true,
+        "GetEncNameByID_matches": true,
+        "IsNameReady": false,
+        "GetNameByID": "",
+        "GetEncNameStrByID": "\\\\x8101\\\\x38AA"
+      },
+      {
+        "agent_id": 28,
+        "kind": "living",
+        "branch": "world agent_infos",
+        "pointer": "0x2bf71df0",
+        "bytes": 20,
+        "code_units": "\u0baa\u0107My Pet\u0001",
+        "port_bytes": 20,
+        "port_matches_probe": true,
+        "GetEncNameByID_matches": true,
+        "IsNameReady": false,
+        "GetNameByID": "",
+        "GetEncNameStrByID": "\\\\x0BAA\\\\x0107My Pet\\\\x0001"
+      }
+    ],
+    "walked": 6,
+    "GetAgentIDByName_round_trip": 0
+  },
+  "name_walk": {
+    "binding_walk_ms_cold": 0.903,
+    "binding_walk_ms_total": 22.26,
+    "binding_walk_ms_per_agent": 0.891,
+    "view_cache_ms_cold": [
+      2.11,
+      2.133,
+      2.173
+    ],
+    "binding_walk_agents": 25,
+    "branches": {
+      "gadget context": 3,
+      "player array": 1,
+      "world agent_infos": 35,
+      "npc record": 4
+    },
+    "agents_with_a_name": 43,
+    "port_bytes_mismatches": [],
+    "player_names": [
+      {
+        "agent_id": 25,
+        "kind": "living",
+        "branch": "player array",
+        "pointer": "0x2bf136f8",
+        "bytes": 44,
+        "player_prefix": true,
+        "decoded": "Fezzik The Untamed",
+        "GetNameByID": "Fezzik The Untamed",
+        "GetEncNameStrByID": "\\\\x0BA9\\\\x0107Fezzik The Untamed\\\\x0001"
+      }
+    ],
+    "string_table_names_sample": [
+      {
+        "agent_id": 15,
+        "kind": "gadget",
+        "branch": "gadget context",
+        "pointer": "0x2bf5bfd0",
+        "bytes": 4,
+        "code_units": "\u0c6e",
+        "GetEncNameStrByID": "\\\\x0C6E"
+      },
+      {
+        "agent_id": 16,
+        "kind": "gadget",
+        "branch": "gadget context",
+        "pointer": "0x2bf5bfe0",
+        "bytes": 4,
+        "code_units": "\u0c9e",
+        "GetEncNameStrByID": "\\\\x0C9E"
+      },
+      {
+        "agent_id": 26,
+        "kind": "living",
+        "branch": "world agent_infos",
+        "pointer": "0x2bf5fe60",
+        "bytes": 6,
+        "code_units": "\u8102\u064f",
+        "GetEncNameStrByID": "\\\\x8102\\\\x064F"
+      },
+      {
+        "agent_id": 27,
+        "kind": "living",
+        "branch": "world agent_infos",
+        "pointer": "0x2bf60020",
+        "bytes": 6,
+        "code_units": "\u8101\u38aa",
+        "GetEncNameStrByID": "\\\\x8101\\\\x38AA"
+      },
+      {
+        "agent_id": 28,
+        "kind": "living",
+        "branch": "world agent_infos",
+        "pointer": "0x2bf71df0",
+        "bytes": 20,
+        "code_units": "\u0baa\u0107My Pet\u0001",
+        "GetEncNameStrByID": "\\\\x0BAA\\\\x0107My Pet\\\\x0001"
+      },
+      {
+        "agent_id": 29,
+        "kind": "gadget",
+        "branch": "gadget context",
+        "pointer": "0x2bf3e0c8",
+        "bytes": 12,
+        "code_units": "\u8102\u37b5\ue9aa\ueb0a\u5c0c",
+        "GetEncNameStrByID": "\\\\x8102\\\\x37B5\\\\xE9AA\\\\xEB0A\\\\x5C0C"
+      }
+    ],
+    "table_note": "every name that is not player-prefixed is string-table indices; decoding it needs the table GW.dat fills, which is a call into the client (py4gw/dat_reader.py), so it is the elevated suite that proves that half"
+  },
+  "martial": {
+    "illusionary_weaponry_id": 33,
+    "agents_examined": 43,
+    "armed_agents": 23,
+    "mismatches": [],
+    "mismatch_count": 0
+  },
+  "resolvers": {
+    "effects.drop_buff_func": true,
+    "effects.post_process_effect_func": true
+  },
+  "action_members": "not called: Effects.DropBuff and Effects.ApplyDrunkEffect change the game (a dropped buff, a drunk post-process) and need the capability layer",
+  "imports_used": "py4gw.agent, py4gw.effect: the ported members themselves"
+}

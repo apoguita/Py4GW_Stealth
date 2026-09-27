@@ -17,6 +17,7 @@ custom hash exists in either source project.
 from __future__ import annotations
 
 import struct
+import threading
 import time
 import unittest
 from typing import Any
@@ -409,6 +410,13 @@ def raw_of(codepoints: tuple[int, ...]) -> bytes:
 def reset_table_state() -> None:
     """Put the module's singletons back, so one test's load is not the next one's cache."""
 
+    # The load runs on a worker, so the state it leaves behind includes a thread and the slots it
+    # read: both are this module's singletons, and neither may leak into the next test.
+    string_table._stop_warmup()
+    string_table._warmup_stop.clear()
+    string_table._warmup_requests.clear()
+    string_table._loaded_slots.clear()
+    string_table._failed_slots.clear()
     string_table._string_table.clear()
     string_table._string_tables_by_language.clear()
     string_table._string_table_loaded = False
@@ -418,6 +426,22 @@ def reset_table_state() -> None:
     string_table._decode_cache.clear()
     string_table._decode_cache_by_language.clear()
     string_table._pending.clear()
+
+
+def await_loaded(timeout_s: float = 5.0) -> None:
+    """Wait for the warm-up worker to finish the table, on a deadline rather than forever."""
+
+    deadline = time.monotonic() + timeout_s
+    while not string_table._string_table_loaded and time.monotonic() < deadline:
+        time.sleep(0.005)
+
+
+def await_entry(index: int, timeout_s: float = 5.0) -> None:
+    """Wait for one entry to land in the table, which the worker fills file by file."""
+
+    deadline = time.monotonic() + timeout_s
+    while index not in string_table._string_table and time.monotonic() < deadline:
+        time.sleep(0.005)
 
 
 def await_cached(raw: bytes, timeout_s: float = 5.0) -> None:
@@ -846,6 +870,7 @@ class LoadTests(unittest.TestCase):
             string_table.TextParser, "get_context", return_value=context
         ), patch.object(string_table, "_load_dat_file", slot_loader(files)):
             string_table.load_string_table(0)
+            await_loaded()
 
         self.assertTrue(string_table._string_table_loaded)
         self.assertEqual(sorted(string_table._string_table), [0, 1, 10])
@@ -968,6 +993,7 @@ class LoadTests(unittest.TestCase):
             string_table, "_load_dat_file", slot_loader({"a": entry(b"one", 0x20, 8)})
         ):
             string_table.switch_language(1)
+            await_loaded()
 
         self.assertEqual(string_table._loaded_language, 1)
         self.assertTrue(string_table._string_table_loaded)
@@ -996,6 +1022,79 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(string_table._last_load_status, "TextParser entries_per_file is zero")
 
 
+class WarmupTests(unittest.TestCase):
+    """The load runs off the caller's stack, and a decode sends its slot to the front of the queue.
+
+    This is the port's stand-in for the source's game-frame callback: Reforged's load runs on the game
+    thread, so the script that asks for a name never waits for ``gw.dat``; here it runs on one worker,
+    so a connect never waits for it either, and a name that needs a file nobody has read yet *asks* for
+    that file instead of reading it (``_request_slot``).
+    """
+
+    def setUp(self) -> None:
+        reset_table_state()
+
+    def tearDown(self) -> None:
+        reset_table_state()
+
+    def test_the_load_returns_before_it_finishes(self) -> None:
+        """``load_string_table`` defers: the call is back while the worker is still reading."""
+
+        entered = threading.Event()
+        release = threading.Event()
+
+        def blocking(file_hash: str) -> bytes:
+            entered.set()
+            release.wait(5.0)
+            return entry(b"one", 0x20, 8) + entry(b"two", 0x20, 8)
+
+        context = FakeTextParserContext(10, [FakeSlot("a")])
+        with patch.object(string_table.TextParser, "_update_ptr"), patch.object(
+            string_table.TextParser, "get_context", return_value=context
+        ), patch.object(string_table, "_load_dat_file", blocking):
+            string_table.load_string_table(0)
+            self.assertTrue(entered.wait(5.0), "the worker should be inside its first read")
+            self.assertFalse(
+                string_table._string_table_loaded,
+                "the load is behind the caller, which is the whole point of the worker",
+            )
+            release.set()
+            await_loaded()
+
+        self.assertEqual(sorted(string_table._string_table), [0, 1])
+
+    def test_a_slot_a_decode_asks_for_is_read_before_the_ones_nobody_wants(self) -> None:
+        """A decode names the one file its entry lives in, and that file is read next."""
+
+        calls: list[str] = []
+        entered = threading.Event()
+        release = threading.Event()
+
+        def loader(file_hash: str) -> bytes:
+            calls.append(file_hash)
+            if len(calls) == 1:
+                entered.set()
+                release.wait(5.0)
+            return entry(b"one", 0x20, 8)
+
+        # Three slots of ten entries each: entry 25 lives in slot 2, which is file "c".
+        context = FakeTextParserContext(10, [FakeSlot("a"), FakeSlot("b"), FakeSlot("c")])
+        raw = raw_of(digit_run(25) + (0,))
+
+        with patch.object(string_table.TextParser, "_update_ptr"), patch.object(
+            string_table.TextParser, "get_context", return_value=context
+        ), patch.object(string_table, "_load_dat_file", loader):
+            string_table.load_string_table(0)
+            self.assertTrue(entered.wait(5.0), "the worker should be inside slot 0")
+            self.assertEqual(string_table.decode(raw), "", "the source's pending answer")
+            release.set()
+            deadline = time.monotonic() + 5.0
+            while "c" not in calls and time.monotonic() < deadline:
+                time.sleep(0.005)
+
+        self.assertEqual(calls[:3], ["a", "c", "b"], f"the asked-for slot is read next: {calls}")
+
+
 class PublicDecodeTests(unittest.TestCase):
     """``decode`` / ``decode_plain``: the public entry points, end to end."""
 
@@ -1022,8 +1121,13 @@ class PublicDecodeTests(unittest.TestCase):
         self.assertEqual(string_table.decode(raw), "Foreman")
         self.assertEqual(string_table.decode_plain(raw), "Foreman")
 
-    def test_a_decode_with_no_context_returns_empty_text(self) -> None:
-        """The load's own answer when there is no TextParser to read: nothing yet."""
+    def test_a_decode_with_no_context_asks_for_nothing(self) -> None:
+        """No TextParser means no slot can be named, so nothing is asked for and nothing is read.
+
+        The source's ``decode`` would call ``load_string_table`` here; this port's asks for the one
+        slot the entry names (``_request_slot``), and a slot it cannot name is a slot it does not
+        guess at -- the caller gets the source's own pending answer and no load is started.
+        """
 
         raw = raw_of(digit_run(5) + (0,))
 
@@ -1032,10 +1136,17 @@ class PublicDecodeTests(unittest.TestCase):
         ):
             self.assertEqual(string_table.decode(raw), "")
 
-        self.assertEqual(string_table._last_load_status, "TextParser context unavailable")
+        self.assertEqual(string_table._last_load_status, "not requested")
+        self.assertFalse(string_table._string_table_loaded)
 
-    def test_a_decode_that_needs_the_table_loads_it_then_answers_from_the_cache(self) -> None:
-        """The whole pipeline: slots → entries → decode → postprocess → cache."""
+    def test_a_decode_that_needs_the_table_asks_for_that_slot_and_the_warmup_reads_it(self) -> None:
+        """The whole pipeline, with the archive read on the worker rather than on the caller.
+
+        The first ``decode`` answers ``""`` (the source's pending value) and asks the warm-up for the
+        one slot its entry lives in; the worker reads that file; the decode after it answers from the
+        cache. What the test pins is that **the caller never reads a file**: the entry arrives because
+        the worker put it there.
+        """
 
         payload = b"".join(entry(b"unused", 0x20, 8) for _ in range(5))
         context = FakeTextParserContext(10, [FakeSlot("a")])
@@ -1049,11 +1160,14 @@ class PublicDecodeTests(unittest.TestCase):
             slot_loader({"a": payload + entry(b"Foreman", 0x20, 8)}),
         ):
             first = string_table.decode(raw)
-            await_cached(raw)
+            await_entry(5)
             second = string_table.decode(raw)
+            await_cached(raw)
+            third = string_table.decode(raw)
 
         self.assertEqual(first, "", "the source answers from the cache one call later")
-        self.assertEqual(second, "Foreman")
+        self.assertEqual(second, "", "the entry is in the table, the decode is on the worker")
+        self.assertEqual(third, "Foreman")
         self.assertEqual(string_table.decode_plain(raw), "Foreman")
 
     def test_a_table_already_in_place_answers_without_any_client(self) -> None:

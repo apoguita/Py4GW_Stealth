@@ -32,7 +32,7 @@ from typing import Any
 
 import py4gw
 from py4gw import dialog
-from py4gw.context.agent_array import AgentAllegiance
+from py4gw.context.agent_array import Allegiance
 from py4gw.game_thread.shared_block import EventKind, EventRecord
 from py4gw.internals import string_table
 from py4gw.player import Player
@@ -79,31 +79,35 @@ class _LabelWatch:
 def _closest_npc(client: py4gw.ConnectedClient, xy: tuple[float, float]) -> int:
     """Return the closest NPC, as the other dialog probes do."""
 
-    snapshot = client.read_agent_array()
-    if snapshot is None:
-        return 0
+    from py4gw.agent import Agent
+    from py4gw.agent_array import AgentArray
+
     own_agent = int(Player.GetAgentID())
     best_id, best_distance = 0, 0.0
     read = 0
-    for reference in snapshot.all:
-        if reference.agent_id in (0, own_agent):
-            continue
-        if reference.allegiance in (None, AgentAllegiance.ENEMY):
-            continue
-        if not (reference.is_living or reference.is_gadget):
+    for agent_id in AgentArray.GetAgentArray():
+        agent_id = int(agent_id)
+        if agent_id in (0, own_agent):
             continue
         if read >= SCAN_LIMIT:
             break
         read += 1
+        # A gadget answers dialogs too, and an NPC is a living agent with no login number:
+        # a player has one. The allegiance test is the source's own member.
+        if not (Agent.IsLiving(agent_id) or Agent.IsGadget(agent_id)):
+            continue
+        allegiance, _ = Agent.GetAllegiance(agent_id)
+        if allegiance == int(Allegiance.Enemy):
+            continue
         try:
-            record = client.read_agent(reference)
-        except (OSError, RuntimeError):
+            if Agent.GetLoginNumber(agent_id):
+                continue
+            x, y = Agent.GetXY(agent_id)
+        except (OSError, RuntimeError, ValueError):
             continue
-        if record is None or not (record.is_living_type and not int(record.login_number)):
-            continue
-        distance = math.dist((float(record.pos.x), float(record.pos.y)), xy)
+        distance = math.dist((float(x), float(y)), xy)
         if not best_id or distance < best_distance:
-            best_id, best_distance = int(reference.agent_id), distance
+            best_id, best_distance = agent_id, distance
     return best_id
 
 

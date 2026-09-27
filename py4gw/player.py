@@ -47,7 +47,7 @@ from functools import wraps
 from typing import Any, Callable, TypeVar
 
 from .client import ConnectedClient, require_client
-from .context.agent_array import AgentAllegiance, AgentStruct
+from .context.agent_array import Allegiance, AgentStruct
 from .context.char_context import CharContextStruct
 from .context.world_context import PlayerStruct, TitleStruct, WorldContextStruct
 from .game_thread.shared_block import CallForm, DecodeState, float_bits
@@ -58,57 +58,11 @@ from .py4gwcorelib_src.utils import Utils
 _T = TypeVar("_T")
 
 
-class PlayerStatus(IntEnum):
-    """Native ``GW::Constants::FriendStatus``, as Reforged names it.
-
-    The same numeric values are exposed by
-    :class:`py4gw.context.friend_list_context.FriendStatus`; this is the spelling
-    Reforged's ``Player`` uses, including its ``DND`` alias and string parsing.
-    """
-
-    Offline = 0
-    Online = 1
-    DoNotDisturb = 2
-    DND = 2
-    Away = 3
-
-    @classmethod
-    def from_value(cls, status: PlayerStatus | int | str | None) -> PlayerStatus | None:
-        """Coerce a member, integer, or status name to a member.
-
-        Accepts ``"offline"``, ``"online"``, ``"do_not_disturb"``,
-        ``"donotdisturb"``, ``"dnd"``, and ``"away"``, ignoring case and
-        treating spaces and dashes as underscores. Returns ``None`` for anything
-        unrecognized, matching Reforged.
-        """
-
-        if isinstance(status, cls):
-            return status
-        if isinstance(status, str):
-            normalized = status.strip().lower().replace(" ", "_").replace("-", "_")
-            names = {
-                "offline": cls.Offline,
-                "online": cls.Online,
-                "do_not_disturb": cls.DoNotDisturb,
-                "donotdisturb": cls.DoNotDisturb,
-                "dnd": cls.DoNotDisturb,
-                "away": cls.Away,
-            }
-            return names.get(normalized)
-        if status is None:
-            return None
-        try:
-            return cls(int(status))
-        except (TypeError, ValueError):
-            return None
-
-    @property
-    def display_name(self) -> str:
-        """Return the Reforged display spelling of this status."""
-
-        if self is PlayerStatus.DoNotDisturb:
-            return "do_not_disturb"
-        return self.name.lower()
+#: ``PlayerStatus`` is Reforged's ``enums_src/Player_enums.py``, imported from where it lives —
+#: as ``Player.py:16`` does (``PlayerStatus = PlayerStatus`` on the class, below) — rather than
+#: copied here, so the two cannot drift apart. Its ``from_value`` and ``display_name`` come with
+#: it, exactly as the source writes them.
+from .enums_src.player_enums import PlayerStatus
 
 
 #: Reforged's Python reaches the channel values as ``Player.ChatChannel``
@@ -518,34 +472,40 @@ class Player:
         """Return one agent record by id, or ``None``.
 
         A private helper, not a Reforged ``Player`` member: Reforged reaches the
-        same record through ``Agent.GetAgentByID``.
+        same record through ``Agent.GetAgentByID``, which is what this calls —
+        and that member goes on to ``AgentArray.GetAgentByID`` and the context
+        view, the source's own chain.
         """
 
         if not agent_id:
             return None
-        client = require_client()
+        require_client()
+        from .agent import Agent
+
         try:
-            return client.read_agent_by_id(agent_id)
+            return Agent.GetAgentByID(agent_id)
         except (OSError, RuntimeError):
             return None
 
     @staticmethod
     def GetName() -> str:
-        """Return the player's character name.
+        """Return the player's character name (``Player.py:GetName``).
 
-        Adapted: Reforged calls ``Agent.GetNameByID``, which reads the agent's
-        encoded name through a native binding. The same name is a plain field of
-        the character context, so it is read from there instead.
+        The source's body, unadapted since 2026-09-26: ``Agent.GetNameByID(Player.GetAgentID())``.
+        It used to read the character context's own name field instead, because
+        ``Agent.GetNameByID`` needs ``PyAgent.get_agent_enc_name`` — which is ported now
+        (``py4gw/agent.py``, over native's ``GW::agent::GetAgentEncName`` walk), so the source's
+        call is the one made here.
+
+        **One consequence, and it is the source's own:** ``Agent.GetNameByID`` decodes the encoded
+        name through ``string_table.decode``, which answers ``""`` on the first call for a string
+        it has not cached while the decode runs, and the text on the next. That is Reforged's
+        behaviour as written, not a limitation of this read.
         """
 
-        client = require_client()
-        try:
-            char_context = client.read_char_context()
-        except (OSError, RuntimeError):
-            return ""
-        if char_context is None:
-            return ""
-        return char_context.player_name_str or ""
+        from .agent import Agent
+
+        return Agent.GetNameByID(Player.GetAgentID())
 
     @staticmethod
     def GetXY() -> tuple[float, float]:
@@ -1160,7 +1120,7 @@ class Player:
         living = agent.GetAsAgentLiving()
         if living is None:
             return
-        if living.allegiance == AgentAllegiance.ENEMY:
+        if living.allegiance == Allegiance.Enemy:
             require_client().call_function(
                 "agent.call_target_func",
                 CallForm.U32_U32,
@@ -1206,9 +1166,9 @@ class Player:
             living = agent.GetAsAgentLiving()
             if living is None:
                 return
-            if living.allegiance == AgentAllegiance.ENEMY:
+            if living.allegiance == Allegiance.Enemy:
                 action_id = WorldActionId.INTERACT_ENEMY
-            elif living.allegiance == AgentAllegiance.NPC_MINIPET:
+            elif living.allegiance == Allegiance.NpcMinipet:
                 action_id = WorldActionId.INTERACT_NPC
             else:
                 action_id = WorldActionId.INTERACT_PLAYER_OR_OTHER

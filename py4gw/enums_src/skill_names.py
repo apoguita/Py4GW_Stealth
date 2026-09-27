@@ -6,11 +6,19 @@ include/GW/common/constants/skills.h (SkillID, SkillType enums) and
 include/GW/common/constants/constants.h (Profession enum)."* This file is the same table,
 transcribed pair for pair: **3031 entries**, id to name, in the source's own order.
 
+**Why it lives in the enums package.** The names *are* an enum: ``include/GW/common/constants/skills.h:9``
+declares ``Healing_Signet`` as a member of ``GW::Constants::SkillID``, and the table beside it is the
+generated id-to-name lookup for those members. The two switches it carries are generated from
+``SkillType`` and ``Profession`` the same way. So the data belongs with the other mirrors of the
+sources' constants and enums, and the handlers belong with the data — the project owner's direction,
+2026-09-26. An earlier pass had this file loose in the package root *and* split its four lookups
+across two modules (the type and profession switches sat in ``py4gw/skill.py``, "where the members
+that read them live"); both are fixed — one file, in the enums package, with all four lookups in
+the source's order.
+
 The names are the enum member names the generator produced (``Healing_Signet``, not
 ``Healing Signet``), because that is what native's ``GetSkillNameByID`` answers and therefore
-what Reforged's ``Skill.GetName`` returns. The two small switches beside the table — the 29
-skill-type names and the 11 profession names — are carried in ``py4gw/skill.py``, where the
-members that read them live.
+what Reforged's ``Skill.GetName`` returns.
 """
 
 from __future__ import annotations
@@ -3072,3 +3080,69 @@ def GetSkillIDByName(name: str) -> int:
     """``GW::skillbar::GetSkillIDByName`` (``skill_names.cpp:3075-3079``): ``0`` when absent."""
 
     return NAME_TO_ID.get(name, 0)
+
+
+#: ``GetSkillTypeNameByID``'s switch (``skill_names.cpp:3081-3114``): the skill-type names native
+#: generates from the ``SkillType`` enum. The switch's numbers are its own. **In the source file,
+#: not beside the members that call it**: an earlier pass carried these two switches in
+#: ``py4gw/skill.py`` "where the members that read them live", which split one source file across
+#: two ported modules; they are back where ``skill_names.cpp`` keeps them.
+SKILL_TYPE_NAMES = {
+    1: "Bounty",
+    2: "Scroll",
+    3: "Stance",
+    4: "Hex",
+    5: "Spell",
+    6: "Enchantment",
+    7: "Signet",
+    8: "Condition",
+    9: "Well",
+    10: "Skill",
+    11: "Ward",
+    12: "Glyph",
+    13: "Title",
+    14: "Attack",
+    15: "Shout",
+    16: "Skill2",
+    17: "Passive",
+    18: "Environmental",
+    19: "Preparation",
+    20: "PetAttack",
+    21: "Trap",
+    22: "Ritual",
+    23: "EnvironmentalTrap",
+    24: "ItemSpell",
+    25: "WeaponSpell",
+    26: "Form",
+    27: "Chant",
+    28: "EchoRefrain",
+    29: "Disguise",
+}
+
+
+def GetSkillTypeNameByID(type_id: int) -> str:
+    """``GW::skillbar::GetSkillTypeNameByID`` (``skill_names.cpp:3081-3114``): ``""`` when unknown."""
+
+    return SKILL_TYPE_NAMES.get(int(type_id), "")
+
+
+#: ``GetProfessionNameById``'s switch (``skill_names.cpp:3116-3131``).
+PROFESSION_NAMES = {
+    0: "None",
+    1: "Warrior",
+    2: "Ranger",
+    3: "Monk",
+    4: "Necromancer",
+    5: "Mesmer",
+    6: "Elementalist",
+    7: "Assassin",
+    8: "Ritualist",
+    9: "Paragon",
+    10: "Dervish",
+}
+
+
+def GetProfessionNameById(profession_id: int) -> str:
+    """``GW::skillbar::GetProfessionNameById`` (``skill_names.cpp:3116-3131``): ``""`` when unknown."""
+
+    return PROFESSION_NAMES.get(int(profession_id), "")

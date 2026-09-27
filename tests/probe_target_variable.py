@@ -146,26 +146,40 @@ def main() -> int:
     client = py4gw.connect(clients[0])
     try:
         player_id = int(Player.GetAgentID())
-        snapshot_agents = client.read_agent_array()
+        agent_ids = client.agent_array.get_context().GetAgentArray()
         pool: list[tuple[int, str]] = [(player_id, f"self (agent {player_id})")]
-        if snapshot_agents is not None:
+        if agent_ids:
             # One representative per kind and allegiance, so the candidates span
             # agent types instead of being the first six of whatever the array
-            # happens to list first.
+            # happens to list first. The kind is the record's own ``is_*_type``
+            # predicate and the allegiance is its living field, which is where the
+            # source reads both.
+            from py4gw.agent_array import AgentArray
+
+            view = client.agent_array.get_context()
             seen: set[tuple[object, object]] = set()
-            for reference in snapshot_agents.all:
-                if reference.agent_id in (0, player_id):
+            for agent_id in agent_ids:
+                agent_id = int(agent_id)
+                if agent_id in (0, player_id):
                     continue
-                key = (reference.kind, reference.allegiance)
+                record = view.GetAgentByID(agent_id)
+                if record is None:
+                    continue
+                if record.is_gadget_type:
+                    kind = "gadget"
+                elif record.is_item_type:
+                    kind = "item"
+                elif record.is_living_type:
+                    kind = "living"
+                else:
+                    kind = "unknown"
+                living = record.GetAsAgentLiving()
+                allegiance = int(living.allegiance) if living is not None else None
+                key = (kind, allegiance)
                 if key in seen:
                     continue
                 seen.add(key)
-                pool.append(
-                    (
-                        int(reference.agent_id),
-                        f"{reference.kind.name}/allegiance {reference.allegiance}",
-                    )
-                )
+                pool.append((agent_id, f"{kind}/allegiance {allegiance}"))
     finally:
         py4gw.disconnect()
     if not player_id:

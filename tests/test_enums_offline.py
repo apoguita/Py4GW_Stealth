@@ -6,7 +6,7 @@ Reforged checkout at test time and compared with the port: every public name, ev
 the source's order, every alias, every name table, and the two members that carry behaviour.
 
 That is what makes a re-numbering, a rename, an added member, a dropped alias or a substituted enum
-fail here instead of at a call site: ``Agent`` refused ``AgentAllegiance`` for exactly that reason,
+fail here instead of at a call site: ``Agent`` refused ``Allegiance`` for exactly that reason,
 and this test is what keeps the substitute from creeping back in.
 
 The one member that cannot be ported — ``DyeColor.from_dye_info``, whose first line imports the

@@ -39,6 +39,7 @@ import time
 import unittest
 
 import py4gw
+from py4gw.agent_array import AgentArray
 from py4gw.game_thread.bridge import Bridge
 from py4gw.game_thread.callbacks import Callbacks, EventListener
 from py4gw.game_thread.shared_block import (
@@ -425,12 +426,15 @@ class LiveObservationTests(unittest.TestCase):
         try:
             cls.agent_id = int(Player.GetAgentID())
             cls.other_agent = 0
-            snapshot = client.read_agent_array()
-            if snapshot is not None:
-                for reference in snapshot.all:
-                    if reference.is_living and reference.agent_id not in (0, cls.agent_id):
-                        cls.other_agent = int(reference.agent_id)
-                        break
+            view = client.agent_array.get_context()
+            for agent_id in AgentArray.GetAgentArray():
+                agent_id = int(agent_id)
+                if agent_id in (0, cls.agent_id):
+                    continue
+                record = view.GetAgentByID(agent_id)
+                if record is not None and record.is_living_type:
+                    cls.other_agent = agent_id
+                    break
         finally:
             py4gw.disconnect()
         if not cls.agent_id:

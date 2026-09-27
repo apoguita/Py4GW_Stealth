@@ -141,18 +141,20 @@ class SkillbarSkill:
     def get_recharge(self) -> int:
         """``SkillbarSkill::GetRecharge`` (``skill.cpp:20-25``).
 
-        Not built yet: it is ``recharge - PY4GW::MemoryManager::GetSkillTimer()``, and that timer is
-        ``timeGetTime() + *g_skill_timer_ptr`` (``memory_manager.cpp:69-71``) — the client global the
-        catalog names ``memory.skill_timer_ptr`` plus a host ``timeGetTime()``. Neither half is
-        ported yet, and the same timer is what ``Effect.GetTimeElapsed``/``GetTimeRemaining`` need.
+        ``recharge == 0 ? 0 : recharge - PY4GW::MemoryManager::GetSkillTimer()``. The timer landed
+        on 2026-09-26 (``py4gw/memory/memory_manager.py``: ``timeGetTime()`` plus the client global
+        the catalog names ``memory.skill_timer_ptr``), which is what this member had been raising
+        for — and the same timer the effect snapshot's ``time_elapsed``/``time_remaining`` need.
+
+        The subtraction is ``uint32_t`` in the source, so it wraps; masked here the way the
+        register does.
         """
 
-        raise _unported(
-            "SkillbarSkill.get_recharge",
-            "PY4GW::MemoryManager::GetSkillTimer (memory_manager.cpp:69-71) = timeGetTime() + "
-            "*g_skill_timer_ptr, the client global the catalog names memory.skill_timer_ptr, "
-            "plus the host timeGetTime() call",
-        )
+        recharge = int(self.slot.recharge)
+        if recharge == 0:
+            return 0
+        timer = require_client().memory_manager.GetSkillTimer()
+        return (recharge - timer) & 0xFFFFFFFF
 
 
 def _world_skillbar_bitset(world: WorldContextStruct, skill_id: int) -> bool:

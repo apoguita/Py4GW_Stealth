@@ -12,6 +12,64 @@ Read this before adding anything.
 
 ---
 
+## The cornerstones
+
+Two rules outrank every other consideration in this file, and both have been broken here.
+They are the project owner's standing instruction, in their words:
+
+> *"the reforged and native projects are the sole source of truth, they work 100% and whatever we
+> port needs to be ported as faithful as the sources are, by adding files, extra features, trying
+> to optimize or to compliment code you're violating this rule and this cannot keep happening"*
+
+**1. The sources are the only content.** Reforged Python and Reforged Native are the sole source
+of truth, and they are complete and working. Everything in this library comes from one of them,
+spelled the way they spell it, in the place they keep it.
+
+**Nothing that is in neither source may be added here.** Not a file, not an option, not a member,
+not a constant, not a helper, not a check, not a default, not a fallback, not an optimization, not
+a convenience, not a "completion" of what the source does. If it is not in Reforged or Reforged
+Native, there is nothing to port and nothing to write — and "it works", "it is faster", "it
+prevents a crash" and "the source's data is stale on this build" are not exceptions. They are
+findings: they get written down, on the member, with the source line they came from, and the
+member reports what it needs.
+
+**2. A name that belongs to the sources belongs to the sources.** A member, type, module or file
+carries a source name only when the source carries that thing. Naming this project's own class
+after a source's *injected module* — the way `PyDialog` was used for a Python class here when in
+Reforged it is the imported module (`Dialog.py:7-9`) and in Native the embedded one
+(`dialog_bindings.cpp:94`) — reads as a claim to have something this project does not have, and it
+is forbidden for the same reason `Player.player_instance` is refused. This project's classes are
+named for the class they port, as `Player`, `Agent`, `Map` and `Dialog` are.
+
+**The standing consequences:**
+
+- **A source file the port has not written is not an excuse to write a different one.** If a
+  member needs something with no ported home, the member reports what it needs; the missing piece
+  is work with a name, and it is built from the source (see
+  [Never substitute a stand-in](#never-substitute-a-stand-in-for-an-unported-source-file)).
+- **A missing mechanism is not a licence to extend this project's mechanism.** `offsets/dialog.json`
+  and the `module_relative` op were added here, read only by each other, because the dialog tables
+  are addressed by constants Native keeps in code (`dialog.h:94-99`) rather than in its catalog
+  (`dialog.h:80-85`). Both were removed on 2026-09-26: the constants now live in `py4gw/dialog.py`
+  as the source keeps them, and the resolver engine's op list is Native's, exactly. **Catalog files
+  are copies of Native's `offsets/` — 29 files, entry for entry — and nothing else may go in
+  there.**
+- **A guard the source does not make is not this project's to add.** The dialog loader's
+  byte-shape check (a prologue, or a `jmp rel32` thunk to one) was added here after a call to the
+  sources' stale constant faulted the client. It was removed with the file: the port now refuses
+  that one call by name, which is legal, instead of adding a check to keep answering, which is not.
+- **An optimization the source does not make is not this project's to add.** The dialog fallback
+  scan read `.rdata` once into a buffer to save syscalls; the source reads field by field
+  (`dialog_patterns.cpp:94-133`), and so does the port now.
+- **Provenance is not permission.** A file copied from a third project — `offsets/gwau3_leads.json`
+  says in its own header that it is — is not source content, whatever it was revalidated against.
+
+**How to apply this to work in flight:** if a change needs a new file, a new op, a new guard, a new
+name, or a shortcut to be *possible*, stop. That is the signal that the member is not ported yet.
+Write the refusal with the source lines in it, add the register row, and say what the work is.
+
+---
+
 ## The mandate
 
 **Port everything.** Reforged and Reforged Native are complete, working, in-production
@@ -581,10 +639,15 @@ Recorded so they are **not** mistaken for defects:
   (projections, pathing reads, frame lookup).
   [`MAP_PORT.md`](MAP_PORT.md) is the staged plan and the progress record.
 - `py4gw/dialog.py` — Reforged's 10-member `Dialog.py` plus the native `PyDialog`
-  surface behind it: 32 statics and 6 records, **all 32 answering** — nothing refuses, the only
-  refusal in the module being the facade helper that would reach a binding object by dynamic
-  name, which is a documented divergence and not a member. The text decode, the journals and
-  the frame-by-hash read are all ported and live-verified. What it still cannot read on this
+  surface behind it: 32 statics and 6 records, **31 answering; 1 reports the work it needs**
+  (`get_dialog_text_decoded`, and the catalog `content` behind `get_dialog_info` and
+  `enumerate_available_dialogs`, waiting on this build's `DialogLoader_GetText`). The other
+  refusal in the module is the facade helper that would reach a binding object by dynamic
+  name, which is a documented divergence and not a member. The code state, the decode
+  protocol, the journals and the frame-by-hash read are all ported and live-verified. The
+  dialog metadata tables come from the sources' own constants, rebased in code — **not from a
+  catalog file**, which an earlier pass had added and which was removed on 2026-09-26 (§ The
+  cornerstones). What it still cannot read on this
   build is named in the class's row of [`CLASS_PORT_MAP.md`](CLASS_PORT_MAP.md), and the
   per-member record is [`DIALOG_PORT.md`](DIALOG_PORT.md).
 - `Py4GWCoreLib/Context.py` — **ported** (`py4gw/context/gw_context.py`); the

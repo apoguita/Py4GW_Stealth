@@ -80,6 +80,16 @@ class _FakeWorld:
         self.unlocked_character_skills = skill_words
 
 
+class _FakeMemoryManager:
+    """The ported skill timer, answering a fixed value (``memory_manager.cpp:69-71``)."""
+
+    def __init__(self, timer: int = 0) -> None:
+        self.timer = timer
+
+    def GetSkillTimer(self) -> int:
+        return self.timer
+
+
 class _FakeAccount:
     """The account-context read ``IsSkillUnlocked`` makes."""
 
@@ -127,6 +137,8 @@ class _FakeClient:
         self.tooltip_reader = _FakeTooltipReader(tooltip_word)
         self.skill_ids = skill_ids
         self.calls: list[tuple[Any, ...]] = []
+        #: The ported skill timer, for the slot member that subtracts it: ``get_recharge``.
+        self.memory_manager: Any = _FakeMemoryManager()
 
     def read_world_context(self) -> Any:
         return self.world
@@ -496,12 +508,23 @@ class SkillBarRaisingTests(unittest.TestCase):
             "DecodeSkillTemplate",
         )
 
-    def test_the_slot_recharge_names_the_skill_timer(self) -> None:
-        """``get_recharge`` names ``MemoryManager::GetSkillTimer``."""
+    def test_the_slot_recharge_is_the_source_s_subtraction(self) -> None:
+        """``get_recharge`` is ``recharge - GetSkillTimer()`` (``skill.cpp:20-25``).
 
-        slot = SkillBar.GetSkillData(1)
-        self._assert_names(
-            "get_recharge",
-            lambda: slot.get_recharge,
-            "GetSkillTimer",
-        )
+        It raised until 2026-09-26 for want of the timer; the timer is ported now
+        (``py4gw/memory/memory_manager.py``), so what is pinned here is the source's own two
+        branches: a zero recharge answers ``0`` without asking for the timer, and a real one is the
+        ``DWORD`` subtraction — masked, because the register is.
+        """
+
+        client = _FakeClient(world=_FakeWorld([_skillbar(skill_ids=(1,))]))
+        client.memory_manager = _FakeMemoryManager(500)
+        with mock.patch("py4gw.client._current_client", client):
+            slot = SkillBar.GetSkillData(1)
+            # ``_skillbar`` fills only the slots it is given: slot 1 carries recharge 100.
+            self.assertEqual(int(slot.recharge), 100)
+            self.assertEqual(slot.get_recharge, (100 - 500) & 0xFFFFFFFF)
+
+            empty = SkillBar.GetSkillData(2)
+            self.assertEqual(int(empty.recharge), 0)
+            self.assertEqual(empty.get_recharge, 0)

@@ -25,7 +25,7 @@ from typing import Any
 
 import py4gw
 from py4gw import dialog
-from py4gw.context.agent_array import AgentAllegiance
+from py4gw.context.agent_array import Allegiance
 from py4gw.player import Player
 
 #: How long to wait for the walk and the dialog that follows it.
@@ -73,37 +73,37 @@ def _closest_npc(client: py4gw.ConnectedClient, xy: tuple[float, float]) -> tupl
     because the whole point is the walk: the client takes the character to the NPC.
     """
 
-    snapshot = client.read_agent_array()
-    if snapshot is None:
-        return 0, 0.0
+    from py4gw.agent import Agent
+    from py4gw.agent_array import AgentArray
 
     own_agent = int(Player.GetAgentID())
     best_id, best_distance = 0, 0.0
     read = 0
-    for reference in snapshot.all:
-        if reference.agent_id in (0, own_agent):
-            continue
-        if reference.allegiance in (None, AgentAllegiance.ENEMY):
-            continue
-        if not (reference.is_living or reference.is_gadget):
+    for agent_id in AgentArray.GetAgentArray():
+        agent_id = int(agent_id)
+        if agent_id in (0, own_agent):
             continue
         if read >= SCAN_LIMIT:
             break
         read += 1
-        try:
-            record = client.read_agent(reference)
-        except (OSError, RuntimeError):
-            continue
-        if record is None:
-            continue
         # An NPC is a living agent with no login number: a player has one, a gadget is
         # not living. Preferring NPCs is the suite's ordering, and a dialog is what an
-        # NPC answers with.
-        if not (record.is_living_type and not int(record.login_number)):
+        # NPC answers with. The allegiance test is the source's own member — an enemy or
+        # an unknown allegiance is never the NPC a dialog probe should walk to.
+        if not (Agent.IsLiving(agent_id) or Agent.IsGadget(agent_id)):
             continue
-        distance = math.dist((float(record.pos.x), float(record.pos.y)), xy)
+        allegiance, _ = Agent.GetAllegiance(agent_id)
+        if allegiance == int(Allegiance.Enemy):
+            continue
+        try:
+            if Agent.GetLoginNumber(agent_id):
+                continue
+            x, y = Agent.GetXY(agent_id)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        distance = math.dist((float(x), float(y)), xy)
         if not best_id or distance < best_distance:
-            best_id, best_distance = int(reference.agent_id), distance
+            best_id, best_distance = agent_id, distance
     return best_id, best_distance
 
 
@@ -131,10 +131,12 @@ def _run() -> int:
             print("no NPC found in the scanned records; nothing to interact with.")
             return 2
 
-        record = client.read_agent_by_id(agent_id)
-        position = (
-            (float(record.pos.x), float(record.pos.y)) if record is not None else (0.0, 0.0)
-        )
+        from py4gw.agent import Agent
+
+        try:
+            position = Agent.GetXY(agent_id)
+        except (OSError, RuntimeError, ValueError):
+            position = (0.0, 0.0)
         print(
             f"\nclosest NPC: agent {agent_id} at {position}, {distance:.1f} units away"
         )
@@ -199,11 +201,11 @@ def _run() -> int:
                 f"  decode_pending {button.message_decode_pending}"
             )
 
-        print(f"\nlast_selected_dialog_id: {dialog.PyDialog.get_last_selected_dialog_id()}")
+        print(f"\nlast_selected_dialog_id: {dialog.Dialog.get_last_selected_dialog_id()}")
         for button in buttons:
             print(
                 f"  is_dialog_displayed({button.dialog_id}) "
-                f"= {dialog.PyDialog.is_dialog_displayed(button.dialog_id)}"
+                f"= {dialog.Dialog.is_dialog_displayed(button.dialog_id)}"
             )
 
         print(

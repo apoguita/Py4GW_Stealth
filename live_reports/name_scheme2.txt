@@ -1,0 +1,13 @@
+{"stage": "client", "pid": 20496, "path": "F:\\GW\\GW1\\Gw.exe"}
+{"stage": "connected", "string_table_loaded": false, "table_status": "language 0: read on demand, one file per entry (0 file(s) read)"}
+{"stage": "decode_preconditions", "decoder_resolves": true, "decoder_stub_address": 56557568, "text_parser_address": 29357184}
+{"stage": "slots", "available": true, "language_id": 0, "entries_per_file": 1024, "slot_count": 99}
+{"stage": "slot", "index": 0, "present": true, "lang_id": 0, "start_index": 0, "end_index": 1024, "assumed_start_index": 0, "hash_code_units": 2}
+{"stage": "slot", "index": 1, "present": true, "lang_id": 0, "start_index": 1024, "end_index": 2048, "assumed_start_index": 1024, "hash_code_units": 2}
+{"stage": "slot", "index": 2, "present": true, "lang_id": 0, "start_index": 2048, "end_index": 3072, "assumed_start_index": 2048, "hash_code_units": 2}
+{"stage": "slot", "index": 3, "present": true, "lang_id": 0, "start_index": 3072, "end_index": 4096, "assumed_start_index": 3072, "hash_code_units": 2}
+{"stage": "slot", "index": 4, "present": true, "lang_id": 0, "start_index": 4096, "end_index": 5120, "assumed_start_index": 4096, "hash_code_units": 2}
+{"stage": "slot", "index": 5, "present": true, "lang_id": 0, "start_index": 5120, "end_index": 6144, "assumed_start_index": 5120, "hash_code_units": 2}
+{"stage": "slot", "index": 6, "present": true, "lang_id": 0, "start_index": 6144, "end_index": 7168, "assumed_start_index": 6144, "hash_code_units": 2}
+{"stage": "slot", "index": 7, "present": true, "lang_id": 0, "start_index": 7168, "end_index": 8192, "assumed_start_index": 7168, "hash_code_units": 2}
+{"stage": "disconnected"}

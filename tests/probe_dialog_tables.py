@@ -149,17 +149,17 @@ def _run() -> int:
         print("\nthe five columns, for the rows the client has enabled:")
         enabled = 0
         for dialog_id in range(dialog.MAX_DIALOG_ID + 1):
-            flags = dialog.PyDialog.read_dialog_flags(dialog_id)
+            flags = dialog.Dialog.read_dialog_flags(dialog_id)
             if not (flags & 0x1):
                 continue
             enabled += 1
             print(
                 f"  id {dialog_id:>3}   flags 0x{flags:04X}"
-                f"  frame_type {dialog.PyDialog.read_dialog_frame_type(dialog_id):>3}"
-                f"  handler 0x{dialog.PyDialog.read_dialog_event_handler(dialog_id):08X}"
-                f"  content_id {dialog.PyDialog.read_dialog_content_id(dialog_id):>6}"
-                f"  property_id {dialog.PyDialog.read_dialog_property_id(dialog_id):>6}"
-                f"  available {dialog.PyDialog.is_dialog_available(dialog_id)}"
+                f"  frame_type {dialog.Dialog.read_dialog_frame_type(dialog_id):>3}"
+                f"  handler 0x{dialog.Dialog.read_dialog_event_handler(dialog_id):08X}"
+                f"  content_id {dialog.Dialog.read_dialog_content_id(dialog_id):>6}"
+                f"  property_id {dialog.Dialog.read_dialog_property_id(dialog_id):>6}"
+                f"  available {dialog.Dialog.is_dialog_available(dialog_id)}"
             )
         print(f"\n{enabled} of {dialog.MAX_DIALOG_ID + 1} rows are enabled")
 

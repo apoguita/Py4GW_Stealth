@@ -1,0 +1,100 @@
+﻿python.exe : test_encoded_names_are_the_clients_own_bytes 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_encoded_names_are_the_clients_own_bytes)
+At line:1 char:44
++ ... W_Stealth'; & python -m unittest tests.test_live_agent_effects -v 2>& ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (test_encoded_na...ents_own_bytes):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+``Agent.GetEncNameByID`` returns the binding's bytes, terminator included. ... ok
+test_get_instance_holds_the_agent_id 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_get_instance_holds_the_agent_id)
+``Effects.get_instance`` is the binding object (``Effect.py:6-14``). ... ok
+test_martial_and_melee_follow_the_weapon_table 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_martial_and_melee_follow_the_weapon_table)
+``IsMartial``/``IsMelee`` are the source's body: the effect first, then the pet, then the ... ok
+test_names_decode_to_text (tests.test_live_agent_effects.LiveAgentEffectsTests.test_names_decode_to_text)
+``Agent.GetNameByID`` decodes real names, and ``IsNameReady`` agrees. ... ok
+test_one_record_answers_through_the_sources_chain 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_one_record_answers_through_the_sources_chain)
+``Agent.GetAgentByID`` -> ``AgentArray.GetAgentByID`` -> the view. ... ok
+test_player_get_name_is_the_sources_call 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_player_get_name_is_the_sources_call)
+``Player.GetName`` is ``Agent.GetNameByID(Player.GetAgentID())`` again. ... ok
+test_the_alcohol_members_report_what_they_need 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_alcohol_members_report_what_they_need)
+The two members that cannot answer say so, and neither is a call this suite makes. ... ok
+test_the_buff_members_answer_from_the_buff_array 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_buff_members_answer_from_the_buff_array)
+``GetBuffs``/``BuffExists``/``GetBuffID`` over the same walk's buff half. ... skipped 'No party member has a buff 
+running, so there is nothing to compare ù apply any buff and run this again.'
+test_the_category_lists_come_from_the_view 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_category_lists_come_from_the_view)
+Every category the source fills answers, and its ids come from the array. ... ok
+test_the_connection_prepares_the_table_without_reading_it_all 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_connection_prepares_the_table_without_reading_it_all)
+The table is read a file at a time, on demand ù not the client's whole 99-file table. ... FAIL
+test_the_effect_snapshot_fields_are_the_records 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_effect_snapshot_fields_are_the_records)
+Every effect answers the record's fields plus the two computed times. ... ok
+test_the_effects_array_is_the_party_effects_array 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_effects_array_is_the_party_effects_array)
+The walk's source array is readable, and the walk agrees with it block for block. ... ok
+test_the_effects_resolvers_resolve_and_the_actions_are_not_run 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_effects_resolvers_resolve_and_the_actions_are_not_run)
+Both of ``Effects``' calls have their catalog entry; neither is issued here. ... ok
+test_the_names_can_be_looked_up_again_by_text 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_names_can_be_looked_up_again_by_text)
+``GetAgentIDByName``/``GetAgentIDByEncString`` find the agent they came from. ... ok
+test_the_readable_encoded_string_is_the_escape_form 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_readable_encoded_string_is_the_escape_form)
+``GetEncNameStrByID`` escapes non-printable code points (``Agent.py:161-179``). ... ok
+test_the_skill_timer_is_the_clients_clock 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_skill_timer_is_the_clients_clock)
+``MemoryManager.GetSkillTimer`` advances, and the window handle is not null. ... ok
+test_the_slot_recharge_is_the_timer_subtraction 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_slot_recharge_is_the_timer_subtraction)
+A skillbar slot's ``get_recharge`` is ``recharge - GetSkillTimer()`` (``skill.cpp:20-25``). ... ok
+test_the_view_is_the_clients_own_agent_array 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_view_is_the_clients_own_agent_array)
+The ported view reads the array the client keeps (``AgentContext.py:1405-1415``). ... ok
+
+======================================================================
+FAIL: test_the_connection_prepares_the_table_without_reading_it_all 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_the_connection_prepares_the_table_without_reading_it_all)
+The table is read a file at a time, on demand ù not the client's whole 99-file table.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_live_agent_effects.py", line 280, in 
+test_the_connection_prepares_the_table_without_reading_it_all
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        string_table._last_load_status.startswith("language "),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "the connection did not run the table trigger: "
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"{string_table._last_load_status!r}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: False is not true : the connection did not run the table trigger: 'slot 3: 1024 entries from one file 
+(5 file(s) read, 5120 entries held)'
+
+----------------------------------------------------------------------
+Ran 18 tests in 8.302s
+
+FAILED (failures=1, skipped=1)
+Live encoded names: 3 agent(s) carried a name
+Live martial/melee: 4 armed agent(s) matched the weapon table
+Live decoded names: players=[(25, 'Fezzik The Untamed')], table-backed first=15:'Random Arenas', decoded 7 of 8 sampled agents
+Live agent record: id=15, type=0x200, position=(-1943.0, -1725.0, 0)
+Live player name: 'Fezzik The Untamed' (agent 25)
+Live AgentArray categories: all=43, living-by-allegiance=13, items=0, gadgets=3
+Live effect: agent=25, skill=160, attribute=15, elapsed=9521 ms, remaining=3479 ms
+Live party effects array: buffer=0x4C6050C8, size=2, capacity=2, blocks_read=2
+Live effects resolvers: drop_buff_func and post_process_effect_func both resolve; DropBuff/ApplyDrunkEffect not called (game actions)
+Live name lookups: id=15, model=0
+Live encoded string: id=15, literal='\\x0C6E'
+Live skill timer: 2148460668 -> 2148460920 (+252 ms), window=0x1B09A8
+Live slot recharges: 0 of 8 slots carried a recharge timestamp
+Live AgentArray view: buffer=0x25B51B00, size=188, capacity=251, non_null=43

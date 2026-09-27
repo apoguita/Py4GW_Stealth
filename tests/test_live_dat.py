@@ -43,7 +43,7 @@ from typing import Any
 
 import py4gw
 from py4gw import dat_reader, dialog
-from py4gw.context.agent_array import AgentAllegiance
+from py4gw.context.agent_array import Allegiance
 from py4gw.game_thread.shared_block import EventKind, EventRecord, EventTextState
 from py4gw.internals import string_table
 from py4gw.player import Player
@@ -676,19 +676,19 @@ class LiveDatReadTests(unittest.TestCase):
         # The captions the port itself reports: the label the client decoded for each button,
         # which is what the facade answers and what is on the screen in the client.
         for waited_buttons in range(int(DECODE_WAIT_S / POLL_S) + 1):
-            buttons = dialog.PyDialog.get_active_dialog_buttons()
+            buttons = dialog.Dialog.get_active_dialog_buttons()
             if not any(button.message_decode_pending for button in buttons):
                 break
             time.sleep(POLL_S)
         print("--- the buttons the module answers with ---")
-        for button in dialog.PyDialog.get_active_dialog_buttons():
+        for button in dialog.Dialog.get_active_dialog_buttons():
             print(
                 f"    dialog id {button.dialog_id} (icon {button.button_icon}): "
                 f"caption {button.message_decoded!r}, "
                 f"pending={button.message_decode_pending}"
             )
         self.assertTrue(
-            dialog.PyDialog.get_active_dialog_buttons(),
+            dialog.Dialog.get_active_dialog_buttons(),
             "the client announced buttons and the module answers with none",
         )
 
@@ -705,9 +705,9 @@ class LiveDatReadTests(unittest.TestCase):
         answered from nothing would pass an offline test and fail this one.
         """
 
-        logs = dialog.PyDialog.get_dialog_event_logs()
-        received = dialog.PyDialog.get_dialog_event_logs_received()
-        journal = dialog.PyDialog.get_dialog_callback_journal()
+        logs = dialog.Dialog.get_dialog_event_logs()
+        received = dialog.Dialog.get_dialog_event_logs_received()
+        journal = dialog.Dialog.get_dialog_callback_journal()
 
         # The text is the client's own decoder's answer, and it arrives asynchronously — the
         # module hands the string over and the client calls the stub back when it has decoded
@@ -720,7 +720,7 @@ class LiveDatReadTests(unittest.TestCase):
             f"the client's decoder answered in {decode_waited:.2f}s "
             f"({len(dialog._body_decodes)} body decodes still in flight)"
         )
-        journal = dialog.PyDialog.get_dialog_callback_journal()
+        journal = dialog.Dialog.get_dialog_callback_journal()
 
         self._print_timeline()
 
@@ -740,7 +740,7 @@ class LiveDatReadTests(unittest.TestCase):
         print(
             f"event log                 = {len(logs)} rows "
             f"({len(received)} received, "
-            f"{len(dialog.PyDialog.get_dialog_event_logs_sent())} sent)\n"
+            f"{len(dialog.Dialog.get_dialog_event_logs_sent())} sent)\n"
             f"  bodies / buttons        = {len(bodies)} / {len(buttons)}\n"
             f"callback journal          = {len(journal)} rows: "
             f"{[row.event_type for row in journal]}\n"
@@ -789,7 +789,7 @@ class LiveDatReadTests(unittest.TestCase):
         body_rows = [row for row in journal if row.event_type == "recv_body"]
         self.assertEqual(len(body_rows), 1, "one body, one row")
         body_text = body_rows[0].text
-        active = dialog.PyDialog.get_active_dialog()
+        active = dialog.Dialog.get_active_dialog()
         print(
             f"the module rendered the body as = {body_text!r}\n"
             f"the open dialog's raw message   = {active.raw_message!r}\n"
@@ -860,31 +860,33 @@ class LiveDatReadTests(unittest.TestCase):
     def _closest_npc(self, xy: tuple[float, float]) -> int:
         """Return the closest living NPC, as ``probe_dialog_open.py`` does."""
 
-        snapshot = self.client.read_agent_array()
-        if snapshot is None:
-            return 0
+        from py4gw.agent import Agent
+        from py4gw.agent_array import AgentArray
+
         own_agent = int(Player.GetAgentID())
         best_id, best_distance = 0, 0.0
         read = 0
-        for reference in snapshot.all:
-            if reference.agent_id in (0, own_agent):
-                continue
-            if reference.allegiance in (None, AgentAllegiance.ENEMY):
-                continue
-            if not (reference.is_living or reference.is_gadget):
+        for agent_id in AgentArray.GetAgentArray():
+            agent_id = int(agent_id)
+            if agent_id in (0, own_agent):
                 continue
             if read >= SCAN_LIMIT:
                 break
             read += 1
+            if not (Agent.IsLiving(agent_id) or Agent.IsGadget(agent_id)):
+                continue
+            allegiance, _ = Agent.GetAllegiance(agent_id)
+            if allegiance == int(Allegiance.Enemy):
+                continue
             try:
-                record = self.client.read_agent(reference)
-            except (OSError, RuntimeError):
+                if Agent.GetLoginNumber(agent_id):
+                    continue
+                x, y = Agent.GetXY(agent_id)
+            except (OSError, RuntimeError, ValueError):
                 continue
-            if record is None or not (record.is_living_type and not int(record.login_number)):
-                continue
-            distance = math.dist((float(record.pos.x), float(record.pos.y)), xy)
+            distance = math.dist((float(x), float(y)), xy)
             if not best_id or distance < best_distance:
-                best_id, best_distance = int(reference.agent_id), distance
+                best_id, best_distance = agent_id, distance
         return best_id
 
     @staticmethod

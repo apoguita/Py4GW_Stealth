@@ -39,7 +39,7 @@ import sys
 import time
 
 import py4gw
-from py4gw.context.agent_array import AgentAllegiance
+from py4gw.context.agent_array import Allegiance
 from py4gw.game_thread.shared_block import CommandState, EventKind, EventRecord
 from py4gw.memory import ProcessMemoryReader
 from py4gw.player import Player
@@ -95,29 +95,30 @@ def scan_enemies(
     read in full, so this is a scan and not a walk through every agent record.
     """
 
-    snapshot = client.read_agent_array()
-    if snapshot is None:
-        return 0, []
+    from py4gw.agent import Agent
+    from py4gw.agent_array import AgentArray
 
     total = 0
     found: list[tuple[float, int, int, float]] = []
-    for reference in snapshot.all:
-        if reference.allegiance is not AgentAllegiance.ENEMY:
-            continue
-        if reference.agent_id in (0, own_agent) or not reference.is_living:
+    # The source's own enemy list: the context buckets the array by allegiance, so the scan
+    # starts from the enemies rather than filtering every agent by hand.
+    for agent_id in AgentArray.GetEnemyArray():
+        agent_id = int(agent_id)
+        if agent_id in (0, own_agent) or not Agent.IsLiving(agent_id):
             continue
         total += 1
-        record = client.read_agent_by_id(int(reference.agent_id))
-        if record is None or record.GetAsAgentLiving() is None:
+        try:
+            x, y = Agent.GetXY(agent_id)
+            health = Agent.GetHealth(agent_id)
+            level = Agent.GetLevel(agent_id)
+        except (OSError, RuntimeError, ValueError):
             continue
-        if float(record.hp) <= 0.0:
+        if float(health) <= 0.0:
             continue
-        distance = math.dist((float(record.pos.x), float(record.pos.y)), xy)
+        distance = math.dist((float(x), float(y)), xy)
         if distance > SCAN_RANGE:
             continue
-        found.append(
-            (distance, int(reference.agent_id), int(record.level), float(record.hp))
-        )
+        found.append((distance, agent_id, int(level), float(health)))
     found.sort(key=lambda entry: entry[0])
     return total, found
 

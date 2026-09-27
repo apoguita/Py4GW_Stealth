@@ -4,10 +4,12 @@
 six record classes carry what the source fills them with, and the text fields of the
 members that already work stop being empty.
 
-**Verdict today: INCOMPLETE — all 32 members answer; what is missing is one thing a member
-cannot *read* on this build** (this build's `DialogLoader_GetText`, so a catalog dialog's
-`content` is empty), plus one handover withheld with its missing piece named (a button's label,
-which the client's parser asserts on when it is handed over at this port's observation point).
+**Verdict today: INCOMPLETE — 31 of the 32 members answer; the one that does not is
+`get_dialog_text_decoded`**, which waits on this build's `DialogLoader_GetText` and reports that
+work instead of calling the sources' stale constant, so a catalog dialog's `content` (and the
+`get_dialog_info`/`enumerate_available_dialogs` rows that carry it) is not produced. The button
+label handover named here when this plan was written is **in**: it is read where the source reads
+it and decoded by the client's own decoder (see [`DIALOG_PORT.md`](DIALOG_PORT.md)).
 This document is the plan for the
 21, and for the features that have to be ported *first* because those members sit on top
 of them. It is also the progress record: a workstream is marked done when its members

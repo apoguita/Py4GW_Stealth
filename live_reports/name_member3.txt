@@ -1,0 +1,23 @@
+{"stage": "warmup_stopped", "status": "loaded 1024 entries from 1 files"}
+{"stage": "attempt", "index": 0, "agent_id": 15, "text": "", "ms": 113.728, "in_flight": 1, "states": ["DONE"], "cached": 0, "why": "15: asked in slot 0"}
+{"stage": "attempt", "index": 0, "agent_id": 16, "text": "", "ms": 115.907, "in_flight": 2, "states": ["DONE", "DONE"], "cached": 0, "why": "16: asked in slot 1"}
+{"stage": "attempt", "index": 0, "agent_id": 26, "text": "", "ms": 116.165, "in_flight": 3, "states": ["DONE", "DONE", "DONE"], "cached": 0, "why": "26: asked in slot 2"}
+{"stage": "attempt", "index": 0, "agent_id": 27, "text": "", "ms": 116.057, "in_flight": 4, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 0, "why": "27: asked in slot 3"}
+{"stage": "attempt", "index": 0, "agent_id": 28, "text": "", "ms": 116.209, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 0, "why": "28: asked in slot 4"}
+{"stage": "attempt", "index": 0, "agent_id": 29, "text": "", "ms": 115.675, "in_flight": 6, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 0, "why": "29: asked in slot 5"}
+{"stage": "progress", "attempt": 0, "cached": 0, "in_flight": 6, "states": ["DONE", "DONE", "DONE", "DONE", "DONE", "IN_FLIGHT"]}
+{"stage": "attempt", "index": 1, "agent_id": 15, "text": "Random Arenas", "ms": 0.492, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 1, "why": "15: took 'Random Arenas' (truncated=False)"}
+{"stage": "attempt", "index": 2, "agent_id": 15, "text": "Random Arenas", "ms": 0.212, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 1, "why": "15: cache hit"}
+{"stage": "attempt", "index": 3, "agent_id": 15, "text": "Random Arenas", "ms": 0.191, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 1, "why": "15: cache hit"}
+{"stage": "progress", "attempt": 3, "cached": 1, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE", "DONE"]}
+{"stage": "attempt", "index": 4, "agent_id": 15, "text": "Random Arenas", "ms": 0.204, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 1, "why": "15: cache hit"}
+{"stage": "attempt", "index": 5, "agent_id": 15, "text": "Random Arenas", "ms": 0.196, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 1, "why": "15: cache hit"}
+{"stage": "attempt", "index": 6, "agent_id": 15, "text": "Random Arenas", "ms": 0.175, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 1, "why": "15: cache hit"}
+{"stage": "attempt", "index": 7, "agent_id": 15, "text": "Random Arenas", "ms": 0.203, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 1, "why": "15: cache hit"}
+{"stage": "progress", "attempt": 7, "cached": 1, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE", "DONE"]}
+{"stage": "attempt", "index": 8, "agent_id": 15, "text": "Random Arenas", "ms": 0.193, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 1, "why": "15: cache hit"}
+{"stage": "attempt", "index": 9, "agent_id": 15, "text": "Random Arenas", "ms": 0.182, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 1, "why": "15: cache hit"}
+{"stage": "attempt", "index": 10, "agent_id": 15, "text": "Random Arenas", "ms": 0.181, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 1, "why": "15: cache hit"}
+{"stage": "attempt", "index": 11, "agent_id": 15, "text": "Random Arenas", "ms": 0.264, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE"], "cached": 1, "why": "15: cache hit"}
+{"stage": "progress", "attempt": 11, "cached": 1, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE", "DONE"]}
+{"stage": "done", "cached": {"6e0c0000": "Random Arenas"}, "in_flight": 5, "states": ["DONE", "DONE", "DONE", "DONE", "DONE"], "decoded_states": ["DONE", "FAILED"]}

@@ -2506,6 +2506,17 @@ calling that with a dialog id would dereference a small integer. So the resolver
 does **not** walk back to a function start, and the loader stays refused until it is identified by
 a signature rather than by an address from a stale table.
 
+**Superseded 2026-09-26, on the project owner's direction.** The byte-shape check described in the
+paragraph above is **removed**, and the "no loader" branch it answered went with it: a guard the
+source does not make is not this project's to add, whatever it prevents (`PORTING_RULES.md` § The
+cornerstones). `DialogTables.resolve_loader_get_text` now rebases
+`DialogMemory::DIALOG_LOADER_GETTEXT` unconditionally, exactly as `dialog_patterns.cpp:261-269`
+does, and the **member** that needs the loader — `get_dialog_text_decoded` — reports the work item
+instead of calling it or substituting a check. The measurement below is unchanged, and it is the
+reason that member refuses. The catalog file the constants lived in (`offsets/dialog.json`) and the
+`module_relative` op added to read it were removed in the same change; the constants live in
+`py4gw/dialog.py` now, where the source keeps them.
+
 **Verified live after the fix** (`tests/test_live_dialog_text.py`, PID `18928`, 2026-09-25):
 the tables resolve, **56 dialogs are available**, the loader is **refused**, the members answer
 the source's empty text, **0 commands were published** — nothing was called at all — and both
@@ -2941,8 +2952,9 @@ Three things the dump settles, and they are worth keeping:
    `0x462FD617` is outside it — so this went further than the module bound should have allowed, and
    the bound is not the check that matters: an address *inside* the module but outside `.text` is
    data, and executing data does not fail, it runs. The dialog loader learned this on the same day
-   from the other side (`DialogTables._is_function_entry` confirms a candidate before it is handed
-   out); the call path never got the same treatment.
+   from the other side (`DialogTables` confirmed a candidate's entry bytes before handing it out —
+   **that check was removed on 2026-09-26**, see the note at `DialogTables.resolve_loader_get_text`
+   above); the call path never got the same treatment.
 
 **What changed, and it closes the class of crash.** `ConnectedClient._descriptor_slot` confirms
 the target is inside the client's code section before it writes the descriptor, and refuses
@@ -2986,6 +2998,357 @@ blocked** — a finding, not a silent failure.
   (`0x008440C0` instead of `0x008441A0`) and the repair could not find the address to repair.
   `RemoteScanner.to_function_start` now treats a `jmp` that **leaves the module** as a function
   start, and a `jmp` inside it as an ordinary branch, with a synthetic-image test for both.
+
+## Live: agent names, the effects walk and the skill timer — 2026-09-26
+
+Three read paths landed this day with offline evidence only: `PyAgent.get_agent_enc_name` (and the
+seven `Agent` members over it), the whole `Effects` class over `WorldContext.party_effects`, and
+`PY4GW::MemoryManager::GetSkillTimer`. They are now verified against a running client
+(`Gw.exe` pid 46544, `F:\GW\GW1\Gw.exe`, 2026-09-26) by
+`tests/probe_agent_effects_live.py` — which reads **directly**, without `py4gw.connect()`, because
+connecting is a write and elevation is not needed for reads. The probe builds the same facades
+`ConnectedClient` builds, registers that stand-in as the current client, and lets the ported members
+run unmodified. Its full output is `live_reports/probe_agent_effects_live.txt`.
+
+**The agent-name walk answers on all four of the source's branches.** Over the 93 non-null records in
+the client's agent array, the branch that produced each name was: **player array 55**, **world
+`agent_infos` 26**, **NPC record 7**, **gadget context 2** — the four arms of
+`GW::agent::GetAgentEncName(const Agent*)` (`agent_methods.cpp:263-316`), each with a live example.
+90 of the 93 carried a name, and for **every one of them the ported `get_agent_enc_name` returned
+exactly the bytes an independent read of the same pointer returned** (`port_bytes_mismatches: []`).
+
+**Player names decode, with no string table at all.** A player's encoded name carries its text inline
+behind the `0xBA9` prefix, and 55 of them decoded through the port's own `Agent.GetNameByID`:
+`Blacki D Dragon`, `Twiddly Knobs`, `Zero Refrain`, `Soul Hanako`, `Kiyai Bellystabber`,
+`Ragnarok Windwalker`, `Asterix The Phoenix`, `Smeagol The Sinless`, `Hammers Are Amazing`, … The
+live byte shape, which the offline fixture now reproduces exactly, is
+`0x0BA9` + a nonzero word (`0x0107`) + UTF-16LE text + `0x0001` + terminator — 38 bytes for a
+15-character name. That word matters: the binding's copy walks to the first **zero code unit**
+(`agent_bindings.cpp:219`), so a zero there would truncate the name, and the decoder skips the word
+because it starts reading at byte 4 (`string_table.py:1054`).
+
+**The names that are *not* player names are string-table indices**, e.g.
+`\x8102\x3B6F\xFFB8\xE4A2\x4112` for a gadget and `\x8103\x0A65\xC1D9\x8C63\x4697` for a living
+agent. Their text needs the table GW.dat fills, which is filled by a call **into the client**
+(`py4gw/dat_reader.py`), so that half is the elevated suite's:
+`tests/test_live_agent_effects.py`.
+
+**The skill timer is the client's own clock.** `GetSkillTimer()` answered `2202888165` and then
+`2202888416` — **+251 ms** across a 250 ms sleep, so it is `timeGetTime()` plus the client global the
+catalog names `memory.skill_timer_ptr` (`memory_manager.cpp:69-71`), live and advancing; and
+`GetGWWindowHandle()` answered `592774`, a real window handle.
+
+**The agent array reads as the source describes it.** `agent.agent_array_addr` resolved to
+`0xE0C714`; its header read `buffer=0x31411068, size=975, capacity=1024`, `AgentArrayStruct` matched
+the `GWArray` size exactly, 975 slots held 93 non-null records (91 living, 2 gadgets, 0 items at that
+moment), and the ported view's category lists answered: **all 93, ally 56, enemy 0, items 0,
+gadgets 2** — with `view.GetAgentByID(10)` and `Agent.GetAgentByID(10)` both answering record 10.
+
+**The effects array was null at the time of the run** — `party_effects_array` read
+`buffer=0x0, size=0, capacity=0`, so the walk had nothing to return and every `Effects` member
+correctly answered empty/`0`/`False`. That is a real answer, not a failure: the client builds a block
+per agent that has an effect or a buff, and the character had none running. The suite therefore
+compares block for block when blocks exist and skips with that reason when they do not.
+
+### One live defect found and fixed on the way
+
+**The view's cache was gated on a class-level context that nothing refreshed outside a frame loop.**
+`AgentArrayStruct._build_allegiance_cache` reads `AccAgentContext.get_context()` — in Reforged that
+class cache is refreshed once per frame by the context's own in-process callback. This port's
+`AccAgentContext._update_ptr()` is the source's callback body, but nothing called it: the only other
+call site is `_GWContextBase.GetContext` (`py4gw/context/gw_context.py:79`). Live, that left the
+cache at `None` on a fresh connection, so the gate dropped the cache and **every category list
+answered empty** — `GetAgentArray()` included — while `raw_agents` still read the array. The fix is
+the port's own rule for callback-owned state: refresh at the point of use, exactly as
+`py4gw/internals/string_table.py` does for `TextParser._update_ptr()` before
+`TextParser.get_context()`. After it, the category lists answer live (above). The offline suite had
+not caught it because its tests patch `AccAgentContext.get_context`.
+
+## Live: why names were slow, and the two crashes a killed run left behind — 2026-09-26
+
+### The three parts, measured live (2026-09-26, `tests/probe_one_npc_name.py`)
+
+One NPC, one name, from the live client — the smallest thing a caller does, and each part timed apart:
+
+```text
+connected   table_status "language 0: read on demand, one file per entry (0 file(s) read)"
+npc         agent_id 15, bytes [110, 12, 0, 0], encoded "\x0C6E"
+timing_fetch_ms            0.147      the fetch: native's indexed GetAgentByID, one record read
+timing_first_decode_ms  2084.099      the table: "slot 2: 1024 entries from one file (1 file read)"
+timing_cached_decode_ms    0.104      the decode from the cache → "Random Arenas"
+result      ok=true, name="Random Arenas", is_name_ready=true, disconnected
+```
+
+And the whole suite on the same path (`tests/test_live_agent_effects.py`, 18 tests, **8.2 s, OK**):
+
+```text
+Live decoded names: players=[(25, 'Fezzik The Untamed')], table-backed first=15:'Random Arenas',
+                    decoded 7 of 8 sampled agents
+Live player name: 'Fezzik The Untamed' (agent 25)
+Live string table: 5 of the client's 99 files read for the names this suite asked for;
+                   5120 entries held
+Live effect: agent=25, skill=160, attribute=15, elapsed=7106 ms, remaining=5894 ms
+Live party effects array: buffer=0x4C6050C8, size=2, capacity=2, blocks_read=2
+Live martial/melee: 4 armed agent(s) matched the weapon table
+Live AgentArray view: buffer=0x25B51B00, size=188, capacity=251, non_null=43
+Live AgentArray categories: all=43, living-by-allegiance=13, items=0, gadgets=3
+Live skill timer: 2148501146 -> 2148501397 (+251 ms), window=0x1B09A8
+```
+
+So the three parts are each proven: the **fetch** is 0.147 ms (one index, one record), the **table**
+costs one file per entry it is asked about (5 files for a suite that read 8 names, against the
+client's 99), and the **decode** answers in 0.104 ms from `_decode_cache` once an entry has been
+decoded. The one remaining cost is the **first** decode of an entry: 2.08 s, which is the GW.dat
+chain for that one file — five calls through the command ring, and the file itself is up to a
+megabyte of entries copied into the block and then read out again. That is per *file*, not per name:
+the next name in the same file is a cache hit.
+
+### The record behind a name is a **table index**, not a rebuilt cache
+
+The second half of the owner's point. Native's name binding is
+`PyAgent.get_agent_enc_name(id)` → `GW::agent::GetAgentEncName(uint32_t)` → **`GetAgentByID(id)`**,
+and that function is one index into the client's own agent table plus the movement check
+(`agent_methods.cpp:73-88`):
+
+```cpp
+auto* agents = agent_id ? GetAgentArray() : nullptr;                  // g_agent_array_addr + valid()
+Agent* agent = agents && agent_id < agents->size() ? agents->at(agent_id) : nullptr;
+if (!agent) return nullptr;
+if (!(agent_context && agent_context->agent_movement.size() > agent->agent_id &&
+      agent_context->agent_movement[agent->agent_id])) return nullptr;
+```
+
+This port's first version of the name walk called **Reforged's Python** `Agent.GetAgentByID` instead.
+That is a different member with a different cost: it asks the array view, whose answer comes from the
+per-id cache `_build_allegiance_cache` fills — a traversal of every slot (975 in the district
+measured) before it can answer one id. Native's binding never goes through it.
+
+Both halves of native's lookup are now indexed, the movement array included — the port's first fix
+still materialized `agent_movement` (a read per slot) where native reads one entry. Measured live on
+the same client, 25 agents, in the same run (`tests/probe_agent_effects_live.py`, unelevated):
+
+| lookup | cold | per agent |
+| --- | ---: | ---: |
+| native's indexed `GetAgentByID` (now) | 0.094 ms | 0.087 ms |
+| Reforged's Python `Agent.GetAgentByID` (the view's rebuilt cache) | 2.10 ms | 0.056 ms *once warm* |
+
+The indexed path is 22× faster for the case that matters — a caller asking for one name — and it does
+not depend on a cache surviving a map gate. Both were checked for the same answers in the same run:
+all four branches, 43 named records, **0 byte mismatches** against an independent read.
+
+### The string table is loaded once, at startup — and this port was loading it inside a name read
+
+Reforged never pays for the string table at a name read. `TextContext.py:134-155` — the
+`TextParser` accessor's refresh, registered as the `PreUpdate` callback at priority 99 — ends with:
+
+```python
+if not TextParser._string_table_triggered:
+    TextParser._string_table_triggered = True
+    from ..internals.string_table import _do_load_string_table
+    _do_load_string_table(TextParser._cached_ctx.language_id)
+```
+
+So on **the first frame of a session** the table is read out of GW.dat once, synchronously, and from
+then on `string_table.decode` is a dictionary hit for every name. (`decode` keeps a lazy
+`load_string_table` fallback at `string_table.py:952-954`, but in Reforged it is never the path
+taken: the table is already up.)
+
+This port has the same trigger — `py4gw/context/text_parser_context.py:274-278` ports it verbatim —
+but nothing called `_update_ptr` until a **decode** did, through
+`string_table._get_client_language()`. The consequence is the difference the owner spotted:
+
+| | Reforged | this port, before this change |
+| --- | --- | --- |
+| when the table is read | once, on the first frame after startup | inside the **first** `Agent.GetNameByID` |
+| what a later name costs | a dictionary hit | a decode, and — while the load has not succeeded — the **whole GW.dat chain again on every read**, because `load_string_table` resets its `_load_enqueued` flag when a load fails |
+
+The fix is the port's own shape for a callback-owned cache: the connection is this port's startup, so
+`ConnectedClient.__init__` refreshes the `TextParser` context once after the capability layer is
+installed (`py4gw/client.py`, next to `dialog.Dialog.initialize()`), which fires the source's trigger.
+`tests/test_live_agent_effects.py::test_the_string_table_is_loaded_by_the_connection` pins it, and the
+offline suite never saw the difference because its tests never load a table.
+
+### Two crashes, and what they were
+
+Both client crashes on this date came from the same cause, and it is not the read paths.
+
+**16:49:11 — `eip=01b00000`, "memory at 01b00000 could not be written".** Trace:
+`01b00000 ← 03e6001b ← 0083a26f` (the last is client code). One second earlier, an elevated run had
+tried to connect to that client and the installer **refused, writing nothing**:
+
+```
+RuntimeError: code at 0x008440C0 before the patch is not what this installer expected in pid 46544:
+expected 55 8b ec 8b 45 08 83 f8 56, observed 55 8b ec 83 ec 2c 53 8b 5d. Nothing was written.
+```
+
+That is the *stale-patch-broke-its-own-resolution* signature this document already records (the
+patched entry makes `to_function_start` answer the **previous** function — `0x008440C0` instead of the
+hooked one). The patch was there because the **previous run had been killed without `disconnect()`**,
+so the client's game thread was still calling this project's orphaned stub when the next install ran.
+
+**16:44:45 — the first run simply stopped**, in the middle of `test_names_decode_to_text`, with no
+summary written and no `disconnect()`. The client survived that one; the patch did not.
+
+The lesson is about how a live run may end, not about what it reads: **a killed controller leaves live
+code in the client, and the next connect lands on it.** The safe recovery is to restart the client,
+which is what cleared it. A run that is allowed to finish calls `disconnect()` and restores both
+functions' own bytes.
+
+### What the live runs did prove, on a real connection
+
+`tests.test_agent_array` — 6 tests, `OK` (2 skipped) on a freshly started client (pid 47456) at
+16:49:14: resolver `0x00E0C714`, header `buffer=0x54079C90, size=188, capacity=251, non_null=43`,
+categories **all=43, ally=3, neutral=0, enemy=10, gadgets=3**, `Agent.GetAgentByID(15)` = a gadget at
+`(-1943, -1725, 0)`. Those category lists are the live proof of the point-of-use `AccAgentContext`
+refresh recorded above.
+
+`tests.test_live_agent_effects` reached its name tests on the same connection and answered
+`test_encoded_names_are_the_clients_own_bytes` **ok** — `Agent.GetEncNameByID` returning the binding's
+bytes, terminator included — before the suite was interrupted.
+
+Without elevation, `tests/probe_agent_effects_live.py` walked every present agent: **branches
+`player array 1 / world agent_infos 35 / npc record 4 / gadget context 3`**, 43 named records, **0 byte
+mismatches** against an independent read, and `IsMartial`/`IsMelee` compared against the source's own
+body over **23 armed agents with 0 mismatches** (that comparison is what showed the live suite's
+failure was its own assertion order, not the port: `Agent.ILLUSIONARY_WEAPONRY_ID` is `0` until
+`IsMartial`/`IsMelee` first writes the memo).
+
+## The 2026-09-26 19:39 client exit assertion: `Gw.dat still open`
+
+**What the log says** (owner-supplied; `Gw.exe` pid 20496 — the client every live run that evening used;
+`BaseAddr 00610000`, `Build 38888`, `App: Gw.exe`):
+
+```text
+Assertion: Error: file 'F:\GW\GW1\Gw.dat' still open
+P:\Code\Base\Os\Win32\Exe\Nt\NtFile.cpp(321)
+When: 9/26/2026 19:39:35
+```
+
+It fired **at shutdown, not during play**: the trace runs through the client's own error reporter
+(`Pc:00697bdb`, inside `Gw.exe`'s code at `0x00697xxx`) and then out through `KERNEL32`'s
+`BaseThreadInitThunk` (`0x76f1fcc9`) and `ntdll`'s `RtlInitializeExceptionChain` (`0x77e082ae`) — the
+process-exit path — with the assertion's own text on the stack at `018FF8E8` (`Error: file
+'F:\GW\GW1\Gw.dat' still open`). Nothing in the trace is outside the client's module and those two
+system DLLs.
+
+**What caused it.** The assertion is the client's own invariant: at teardown it expects no dat record
+open. Exactly one thing in this project opens one — the GW.dat chain behind the string table
+(`py4gw/dat_reader.py`, native's `ReadDatFile`, `gw_dat_reader.cpp:1441-1461`):
+
+```text
+FileHashToRecObj(hash, 1, 0) | OpenFileByFileId(0, id, 1, 1, 0)   <- a record is open from here
+ReadFileBuffer(rec, &size)                                        <- the client hands over the bytes
+the bounded copy out                                              <- the host copies them
+FreeFileBuffer(rec, bytes)                                        <- the buffer goes back
+CloseRecObj(rec)                                                  <- the record closes
+```
+
+Every path in the port frees and closes (`_read_dat_record`), which is why an uninterrupted run leaves
+nothing open. **The probe run of 19:22-19:23 did not finish**: its Python process was terminated
+externally (no traceback, no `done` marker, `Gw.exe` alive and responding) while it was reading string
+files, so the record it had open was never closed — and the client held it until it exited at 19:39:35,
+sixteen minutes later. Confirmed read-only against that same client before it closed: the game-thread
+entry hook was still installed (`leave_game_thread_func` at `0x00845880` = `BaseAddr + 0x235880` read
+`e9 7b a7 74 03 90 90 90` — a jump into memory this project allocated), so the kill left both the hook
+and the open record behind.
+
+**The window is inherent to an external controller, and this is the first time it has bitten.**
+Reforged cannot leave a record open: its dat read is in-process, so a dead controller is a dead client.
+Here the controller can die while the client lives, and the source's own order cannot be shortened —
+`CloseRecObj` cannot run before the copy, because the bytes being copied are the buffer that
+`FreeFileBuffer` releases. So the mitigation is operational, and it is the rule already recorded after
+round 9's two crashes: **a live run must be allowed to finish**, and a run that dies leaves a client to
+be restarted (a restart clears both the hook and the record).
+
+**Are this project's traces discoverable in a log like this?** The owner asked, because such a log
+lists injected modules. In *this* log:
+
+| section | what an injected DLL would leave | what this project leaves |
+| --- | --- | --- |
+| `DllList` (97 entries) | a module of the injector's | **nothing of ours**: `Gw.exe`, 80-odd system DLLs, `steam_api.dll`, `OpenAL32.dll`, AMD's `amdihk32.dll`/`atidx9loader32.dll`, RTSS's `RTSSHooks.dll`, and the Windows shims (`apphelp`, `AcLayers`, `sfc`, `sfc_os`). Every non-Microsoft entry is accounted for by the environment (Steam, RTSS, the AMD driver, a compatibility shim); this project never loads a module into the client, so it cannot appear here |
+| `Code` (the faulting bytes) | the injector's code, if it faulted | the client's own error reporter (`0x00697BBB-0x00697C0B`); our hook target is `0x00845880` and our code is a private allocation outside the image |
+| `Trace` | a frame in the injected module, or a remote thread's entry | twelve frames, all inside `Gw.exe`, then `KERNEL32` and `ntdll`'s exit path — the client shutting itself down |
+| `Thread` (one section, `0xfffffffe`) | a remote thread whose entry is private memory | only the exiting thread |
+| the assertion itself | — | **our effect, and the only trace of it**: `Gw.dat still open` is a state the client's own reader does not reach on its own |
+
+What *would* be discoverable **while a connection is open** (none of it in a module list): the 5-byte
+`jmp` at the head of the hooked function — a code-integrity check or a disassembly of that head sees it
+immediately, and it points outside the image — plus the emitted dispatcher/decoder stub and the shared
+block in private committed memory (`VirtualAllocEx`; the stub is placed `PAGE_EXECUTE_READ`) carrying
+this project's own header fields, which a memory scan could fingerprint; and, on the **controller's**
+side rather than the client's, an open process handle holding the write rights
+(`PROCESS_VM_WRITE`, `PROCESS_VM_OPERATION`, `PROCESS_CREATE_THREAD`, `PROCESS_SUSPEND_RESUME`) — the
+same handle that RivaTuner's filter refuses unelevated, as recorded above. A dump taken while patched
+therefore carries our code; a crash log with no module of ours in it does not.
+
+## Access cost, measured (2026-09-27)
+
+The owner's question was for numbers, because Reforged is orders of magnitude faster and that is *why*
+its eager GW.dat read is cheap. `tests/perf_access_cost.py` (new) measures the three families of
+access this port has. Sections 1-2 were run on 2026-09-27, unelevated, with no client; section 3 needs
+the client and an elevated shell and is the row set still to fill.
+
+**1. Host-side read (`ReadProcessMemory`, through `py4gw.memory.ProcessMemoryReader`), against a child
+process of the same interpreter — the same API the client is read with:**
+
+| read | min | median | mean | bandwidth |
+| --- | ---: | ---: | ---: | ---: |
+| 4 B | 0.0029 ms | 0.0032 ms | 0.0032 ms | — |
+| 16 B | 0.0029 ms | 0.0032 ms | 0.0033 ms | — |
+| 196 B (an agent record) | 0.0030 ms | 0.0032 ms | 0.0033 ms | — |
+| 4 KiB | 0.0037 ms | 0.0040 ms | 0.0040 ms | 977 MiB/s |
+| 64 KiB | 0.0075 ms | 0.0079 ms | 0.0081 ms | 7.9 GiB/s |
+| 1 MiB | 0.4448 ms | 0.5623 ms | 0.5924 ms | 1.8 GiB/s |
+| 4 MiB | 2.8321 ms | 3.0028 ms | 2.9391 ms | 1.3 GiB/s |
+| **write 64 B (one command record, through `WriteAccess`)** | 0.0044 ms | **0.0047 ms** | 0.0049 ms | — |
+
+The per-call overhead is **~3 µs** (a write is ~5 µs), so the host's own half of a command is
+**~10 µs of the ~130 ms one costs** — i.e. 0.01%: a command's price is the client's pickup and the
+client's work, never this side. Everything above 64 KiB is bandwidth. So a read is never the problem:
+the port's own recorded walks (58 living records in ~4.05 ms per refresh, a 521-frame callback search
+in ~45 ms) sit in the same microseconds-per-record range, and the connect-time resolver scan is a
+one-off ~128 ms.
+
+**2. Host-side work on the bytes:**
+
+| operation | min | median |
+| --- | ---: | ---: |
+| `GWArray.from_buffer_copy` (16 B header) | 0.0001 ms | 0.0002 ms |
+| `AgentStruct.from_buffer_copy` (196 B) | 0.0002 ms | 0.0002 ms |
+| `string_table._decode_entry` (plain entry) | 0.0008 ms | 0.0009 ms |
+| `string_table._decode_entry` (bit-packed) | 0.0010 ms | 0.0015 ms |
+| `string_table._postprocess` (one name) | 0.0009 ms | 0.0011 ms |
+| `string_table._parse_codepoints` (2 units) | 0.0003 ms | 0.0003 ms |
+| `string_table.decode`, cache miss with no table | 0.0017 ms | 0.0020 ms |
+
+**A complete name decode is ~3 µs of host CPU.** The Python decoder is not a cost centre and never
+was; the live "0.104 ms cached decode" is the *fetch* around it (indexed record read, movement gate,
+world name array — tens of host reads), which the live probe measured at 0.147 ms on its own.
+
+**3. Inside the client — the command ring.** From the live runs of 2026-09-26 (client pid 20496):
+
+| operation | measured | why |
+| --- | ---: | --- |
+| one command (client-decode call, which includes the client's own work) | ~130 ms | the host publishes, the client's thread takes it at its next hook hit, the host waits |
+| a GW.dat string file | 1055 / 1060 / 1066 ms (new slot), 2083 ms (cold) | the chain is **four** commands: open, read buffer, free, close |
+| first decode of an entry's slot | 1.0-2.1 s | it pays the file above |
+| a cached decode | 0.104 ms | the table holds the entry |
+| a name fetch (no decode) | 0.147 ms | host reads only |
+| eager whole table (the source's load) | **~100 s** | 99 files x 4 commands |
+| hook hits per second (one command may be taken per hit) | *to measure* | bounds the pickup latency of every command |
+
+**What the numbers mean for runtime use.** Reads and host-side work are usable at any rate this
+project needs. A decoded string is usable at 0.1 ms **once its slot has been touched**, and the first
+touch of a slot is 1-2 s — a 10^4 ratio between the decode and the one thing that feeds it. Anything
+that must *run inside* the client costs ~130 ms per command, so one-shot actions are fine, per-frame
+paths are not, and the number of commands per operation is what decides its cost: that is why one
+string file costs a second and why the source's eager table load cannot be reproduced here as written.
+Reforged pays none of these: in-process, a client call is a direct call (sub-µs), a dat read is
+memory-mapped and decompressed without a round trip (milliseconds), and its decode is the same Python
+code this port runs (µs). The gap is therefore entirely in the boundary, not in the algorithms — and it
+splits into exactly two open questions, both of which a live run answers: the **pickup latency of one
+command** (is the ~130 ms the client's loop rate or the work?) and whether the **client's own decoder**
+can carry names at all (one command per name, no GW.dat, no record left open — the route Native uses).
 
 ## Sources Consulted
 

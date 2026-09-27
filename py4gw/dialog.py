@@ -11,7 +11,13 @@ Both layers are ported here, and the split is the source's:
 | layer | where it is in the source | where it is here |
 | --- | --- | --- |
 | facade | ``Dialog.py``: two getters, two record classes, the text sanitiser, the inline-choice parser | the module functions and the two data classes below |
-| surface | ``PyDialog`` → ``dialog.cpp`` | :class:`PyDialog` and the state it reads |
+| surface | ``PyDialog`` → ``dialog.cpp`` | :class:`Dialog` and the state it reads |
+
+**``PyDialog`` is the sources' name for their module, not for a class here.** Reforged
+imports that module (``Dialog.py:7-9``, with a ``None`` fallback) and Reforged Native
+embeds it (``dialog_bindings.cpp:94``, its class backed by the empty ``PyDialogShim``
+struct at ``:90``). This project has neither, so the surface lives in :class:`Dialog`,
+named for its module the way ``Player``, ``Agent`` and ``Map`` are.
 
 Three things are worth knowing before reading the member list.
 
@@ -26,11 +32,14 @@ bytes — ``{button_icon, message, dialog_id, skill_id}`` — so the whole packe
 the four words the observer records, and a button's dialog id is a word in the event.
 That is why ``Player.SendAutomaticDialog`` works today while dialog *text* does not.
 
-**What still refuses is named per member, and the header it used to carry is out of date.** The
-dialog metadata tables *are* ported — `DialogTables` is the port of `dialog_patterns.cpp`, with the
-five `DialogMemory` addresses in `offsets/dialog.json` (the `module_relative` op this project added,
-which is what native's own note said the pattern system lacked) and the source's `.rdata` fallback
-scan behind them, which is the stage that supplies the bases on this build. The text *decoder* is
+**The metadata tables are resolved where the source declares them.** Native keeps the five table
+bases and the loader as constants in ``DialogMemory`` (``dialog.h:94-99``) and rebases them onto the
+live module in ``dialog_patterns.cpp``; both of those files are ported here as they stand —
+:data:`EVENT_HANDLER_BASE` … :data:`DIALOG_LOADER_GETTEXT` are the source's own numbers, and
+:class:`DialogTables` is ``BuildStaticDialogTables``, ``ValidateDialogMetadataBases`` and the
+``.rdata`` fallback scan. **Nothing about them lives in the pattern catalog**, because native's own
+catalog does not carry them either: its pattern system has no module-base-relative op (its own note,
+``dialog.h:80-85``), which is why the source keeps them in code. The text *decoder* is
 ported too, and it is the client's own: the encoded string is handed back to `AsyncDecodeStr` and the
 text returns through the callback stub (`py4gw/ui/async_decode.py`). One item is left, and it is
 **deferred to a later pass by the project owner** — this build's `DialogLoader_GetText`, the client
@@ -46,9 +55,8 @@ import time
 from collections.abc import Sequence
 from typing import Any
 
-from .context.gw_array import RemoteMemoryReader
 from .game_thread.shared_block import CallForm, EventRecord, EventTextState
-from .scanner import PatternCatalog, RemoteScanner
+from .scanner import RemoteScanner
 
 #: ``UIMessage::kDialogButton`` (``constants/ui.h:74``). Its packet is the client's
 #: ``DialogButtonInfo`` — ``{button_icon, message, dialog_id, skill_id}``.
@@ -74,6 +82,29 @@ MAX_DIALOG_ID = 0x39
 FLAGS_STRIDE = 0x24
 CONTENT_STRIDE = 0x24
 PROPERTY_STRIDE = 0x24
+
+#: ``DialogMemory`` (``dialog.h:94-99``): five hardcoded client virtual addresses and the
+#: loader, in the source's own order and spelling. They are rebased onto the live module by
+#: ``ToRuntimeAddress`` (``dialog_patterns.cpp:25-31``), which is
+#: :meth:`py4gw.scanner.remote.RemoteScanner.to_module_address`. Native holds them in code
+#: rather than in its pattern catalog — its own note (``dialog.h:80-85``) says the pattern
+#: system has no module-base-relative op to express them — so this port holds them in code too,
+#: beside the resolution that uses them, which is where the source keeps them.
+EVENT_HANDLER_BASE = 0x00913918
+FRAME_TYPE_BASE = 0x0091391C
+FLAGS_BASE = 0x00913920
+CONTENT_ID_BASE = 0x00913924
+PROPERTY_ID_BASE = 0x00913928
+
+#: ``DialogMemory::DIALOG_LOADER_GETTEXT`` (``dialog.h:99``), the client function a catalog
+#: dialog's text comes from. **``ResolveDialogLoaderGetText`` is unconditional in the source**
+#: — it rebases the constant and caches the answer — and this port does the same. The constant
+#: is native's, and this is not native's build: measured read-only, the rebased
+#: ``0x0079EEF0`` lands inside another function here rather than at its entry
+#: (``docs/RESEARCH.md``, 2026-09-25), so this address must not be called on build 38888.
+#: Identifying *this* build's ``DialogLoader_GetText`` is the one item left in this module, and
+#: the project owner has deferred it to a later pass (``docs/DIALOG_PORT.md``).
+DIALOG_LOADER_GETTEXT = 0x0079EEF0
 
 #: ``kMaxActiveDialogButtons`` (``dialog.cpp:43``). The open dialog's button list is
 #: capped, and the oldest entry is dropped when it overflows (``dialog.cpp:734-739``).
@@ -183,7 +214,7 @@ def _call_native_dialog_method(
     Both halves of that are unportable as written: there is no binding object outside
     the client (the same reason ``Player.player_instance`` refuses), and reaching a
     member through a dynamic name is not something this project does. The ported
-    surface is :class:`PyDialog` in this module, so the facade calls its methods
+    surface is :class:`Dialog` in this module, so the facade calls its methods
     directly and there is no absent case to fall back from.
     """
 
@@ -191,7 +222,7 @@ def _call_native_dialog_method(
         "_call_native_dialog_method",
         "it resolves a member of the PyDialog binding object dynamically "
         "(Dialog.py:36-41). No binding object exists here, and this project does not "
-        "reach members through dynamic names; Dialog calls PyDialog's methods "
+        "reach members through dynamic names; this port's Dialog class calls the surface's "
         "directly instead",
     )
 
@@ -280,7 +311,7 @@ class DialogInfo:
     """One row of the client's dialog metadata table (``dialog.h:20-29``).
 
     Native-only: Reforged's Python never wraps it, and it is the record
-    ``PyDialog.get_dialog_info`` returns.
+    ``Dialog.get_dialog_info`` returns.
     """
 
     def __init__(
@@ -448,44 +479,25 @@ class DialogTableAddrs:
 class DialogTables:
     """Resolve the dialog metadata tables, as ``dialog_patterns.cpp`` does.
 
-    The tables are hardcoded client virtual addresses rebased onto the live module,
-    with a validation pass and a heuristic ``.rdata`` fallback scan. Native's own note
-    (``dialog.h:80-85``) says they could not move into the offsets JSON because the
-    pattern system has no module-base-relative op — so this project added that op
-    (``module_relative``) and keeps the addresses in ``offsets/dialog.json``, exactly
-    as the source keeps them in ``DialogMemory``. What is left is dialog semantics
-    rather than pattern mechanics, and it lives here as it lives in
-    ``dialog_patterns.cpp``: the static rebase is tried first, the fallback second, and
-    both are followed by the same validation pass.
+    ``BuildStaticDialogTables`` (``:175-197``) rebases the five hardcoded ``DialogMemory``
+    addresses (:data:`EVENT_HANDLER_BASE` … :data:`PROPERTY_ID_BASE`) onto the live module and
+    validates them; when that fails, ``BuildResolvedDialogTables`` (``:199-225``) finds the flags
+    column by scanning ``.rdata`` (``ResolveFlagsBase``, ``:94-133``) and derives the other four
+    from it — handler ``-8``, frame type ``-4``, content id ``+4``, property id ``+8`` — and both
+    stages end in ``ValidateDialogMetadataBases`` (``:135-173``). That is the whole of this class,
+    and ``GetDialogTables`` (``:229-255``) is :meth:`get`: static first, fallback second, the
+    answer cached either way.
 
-    **One adaptation, and it is the reader.** Native validates in-process, where a
-    pointer read is free; this project reads through ``ReadProcessMemory``, where a
-    per-field read over every candidate offset would be tens of millions of syscalls.
-    So the fallback scan reads the ``.rdata`` window once into a buffer and indexes it.
-    The arithmetic, the bounds, the rules and the order are the source's.
+    **The reader is the only difference, and it is not a choice.** Native reads its own memory,
+    where a pointer read cannot fail; this port reads through ``ReadProcessMemory``, where the
+    source's ``TryReadU32NoLog`` becomes :meth:`read_uint32` and an unreadable field is the
+    ``false`` that ends a candidate.
     """
 
-    #: ``DialogMemory`` addresses (``dialog.h:94-99``), each rebased onto the live module
-    #: by the resolver named at its assignment in :meth:`_build_static`.
-    #: ``ResolveDialogLoaderGetText`` (``dialog_patterns.cpp:261-269``).
-    _LOADER_RESOLVER = "dialog.dialog_loader_get_text_func"
-
-    #: What a function entry looks like in this client, measured read-only: see
-    #: :meth:`_is_function_entry`. The longer form is checked first, and the shorter one is a
-    #: prefix of it, so a candidate either matches the padded entry or the plain one.
-    _FUNCTION_ENTRY_PREFIXES = (b"\x8b\xff\x55\x8b\xec", b"\x55\x8b\xec")
-
-    def __init__(
-        self,
-        reader: RemoteMemoryReader,
-        scanner: RemoteScanner,
-        patterns: PatternCatalog,
-    ) -> None:
+    def __init__(self, scanner: RemoteScanner) -> None:
         """Create the resolver over one connected client's process."""
 
-        self._reader = reader
         self._scanner = scanner
-        self._patterns = patterns
         self._tables = DialogTableAddrs()
         self._loader_address: int | None = None
 
@@ -513,81 +525,23 @@ class DialogTables:
         self._tables = DialogTableAddrs()
 
     def resolve_loader_get_text(self) -> int:
-        """Return the rebased ``DialogLoader_GetText`` address, or ``0``.
+        """Return the rebased ``DialogLoader_GetText`` address.
 
-        The counterpart of ``ResolveDialogLoaderGetText``, which rebases
-        ``DIALOG_LOADER_GETTEXT`` and caches it. Native's cache survives
-        ``InvalidateDialogTables``; so does this one.
+        ``ResolveDialogLoaderGetText`` (``dialog_patterns.cpp:261-269``): rebase the constant
+        and cache it in a function-static that ``InvalidateDialogTables`` leaves alone. The
+        source reads nothing at the address and adds no check of its own; neither does this.
 
-        **The candidate is checked before it is handed out, and that check is this port's.**
-        The source rebases the constant and calls it without reading anything at it
-        (``dialog_patterns.cpp:261-269``) — on its own build that is right, because the constant
-        is that build's. **On build 38888 it is not**: ``0x0079EEF0`` is *inside* another
-        function rather than at its entry, and calling it faulted the client on a null
-        dereference (``docs/RESEARCH.md``, 2026-09-25). The five **data** addresses from the same
-        table have been stale on this build since the first live probe — which is exactly what
-        the ``.rdata`` fallback exists for — so the code address is held to the same standard:
-        a candidate the client's own bytes do not confirm is answered as ``0``, which is the
-        "no loader" answer :func:`_queue_dialog_text_decode` already handles.
+        On this build the rebased constant is **not** that function — ``0x0079EEF0`` lands inside
+        another one (``docs/RESEARCH.md``, 2026-09-25) — and the address is therefore not safe to
+        call. Identifying this build's loader is the module's one open item, parked by the project
+        owner; see :data:`DIALOG_LOADER_GETTEXT`.
         """
 
         if self._loader_address is not None:
             return self._loader_address
 
-        result = self._patterns.resolve(self._LOADER_RESOLVER, self._scanner)
-        candidate = int(result.value) if result.ok else 0
-        self._loader_address = candidate if self._is_function_entry(candidate) else 0
+        self._loader_address = self._scanner.to_module_address(DIALOG_LOADER_GETTEXT)
         return self._loader_address
-
-    def _is_function_entry(self, address: int) -> bool:
-        """Whether ``address`` begins the way this client's functions do.
-
-        Measured read-only on build 38888, not assumed: the dialog event handlers the table
-        itself points at (``0x0070B8D0``, ``0x007103C0``) and the two functions this project
-        already hooks (``0x00845880``, ``0x008441A0``) all begin ``55 8B EC`` — ``push ebp`` /
-        ``mov ebp, esp`` — with ``8B FF`` hot-patch padding in front of some of them. **Most of
-        those handlers are ``jmp rel32`` thunks** (``0x0070B8D0`` is ``E9 6B 00 00 00``, a jump
-        to ``0x0070B940``), and a thunk is callable, so one whose target is a confirmed entry in
-        the code section counts too.
-
-        This is a shape check, not a proof: it refuses an address whose first bytes are not a
-        function entry — which is the failure that was observed — and it cannot confirm *which*
-        function it found.
-        """
-
-        return bool(self._entry_kind(address))
-
-    def _entry_kind(self, address: int) -> str:
-        """``"prologue"``, ``"thunk"``, or ``""`` when the address is not an entry."""
-
-        size = max(len(prefix) for prefix in self._FUNCTION_ENTRY_PREFIXES)
-        head = self._read_head(address, size)
-        if head is None:
-            return ""
-        if self._is_prologue(head):
-            return "prologue"
-        if head[0] != 0xE9:
-            return ""
-        target = address + 5 + int.from_bytes(head[1:5], "little", signed=True)
-        try:
-            text = self._scanner.get_section_range("text")
-        except (OSError, ValueError):
-            return ""
-        if not text.start <= target < text.end:
-            return ""
-        tail = self._read_head(target, size)
-        return "thunk" if tail is not None and self._is_prologue(tail) else ""
-
-    def _is_prologue(self, head: bytes) -> bool:
-        return any(head.startswith(prefix) for prefix in self._FUNCTION_ENTRY_PREFIXES)
-
-    def _read_head(self, address: int, size: int) -> bytes | None:
-        if not address:
-            return None
-        try:
-            return self._reader.read(address, size)
-        except OSError:
-            return None
 
     def read_uint32(self, address: int) -> int | None:
         """Read one word, ``None`` when it cannot be read (``TryReadU32``).
@@ -607,38 +561,19 @@ class DialogTables:
         """Rebase the five hardcoded addresses and validate them.
 
         ``BuildStaticDialogTables`` (``dialog_patterns.cpp:175-197``), assignment for
-        assignment. Each address is rebased by its own resolver, which is the port of
-        ``ToRuntimeAddress`` over the constant ``DialogMemory`` declares.
+        assignment: each ``DialogMemory`` constant goes through ``ToRuntimeAddress``
+        (``dialog_patterns.cpp:25-31``) — the module base plus the constant minus the client's
+        link-time image base (``0x00400000``) — which is
+        :meth:`py4gw.scanner.remote.RemoteScanner.to_module_address`.
         """
 
         tables = DialogTableAddrs()
 
-        flags_base = self._patterns.resolve("dialog.flags_base", self._scanner)
-        tables.flags_base = int(flags_base.value) if flags_base.ok else 0
-
-        frame_type_base = self._patterns.resolve(
-            "dialog.frame_type_base", self._scanner
-        )
-        tables.frame_type_base = int(frame_type_base.value) if frame_type_base.ok else 0
-
-        event_handler_base = self._patterns.resolve(
-            "dialog.event_handler_base", self._scanner
-        )
-        tables.event_handler_base = (
-            int(event_handler_base.value) if event_handler_base.ok else 0
-        )
-
-        content_id_base = self._patterns.resolve(
-            "dialog.content_id_base", self._scanner
-        )
-        tables.content_id_base = int(content_id_base.value) if content_id_base.ok else 0
-
-        property_id_base = self._patterns.resolve(
-            "dialog.property_id_base", self._scanner
-        )
-        tables.property_id_base = (
-            int(property_id_base.value) if property_id_base.ok else 0
-        )
+        tables.flags_base = self._scanner.to_module_address(FLAGS_BASE)
+        tables.frame_type_base = self._scanner.to_module_address(FRAME_TYPE_BASE)
+        tables.event_handler_base = self._scanner.to_module_address(EVENT_HANDLER_BASE)
+        tables.content_id_base = self._scanner.to_module_address(CONTENT_ID_BASE)
+        tables.property_id_base = self._scanner.to_module_address(PROPERTY_ID_BASE)
 
         if not self._validate(tables):
             return DialogTableAddrs()
@@ -717,8 +652,9 @@ class DialogTables:
         """``ResolveFlagsBase`` (``dialog_patterns.cpp:94-133``).
 
         The scan window, the four-byte step, the per-row checks and the bounds are the
-        source's; the reads come from one buffered ``.rdata`` image instead of a
-        pointer, which is the only thing the external reader changes.
+        source's, field for field through :meth:`read_uint32`, which is this port's
+        ``TryReadU32NoLog``: a field that cannot be read ends the candidate exactly as the
+        source's ``false`` does.
         """
 
         bounds = self._text_bounds()
@@ -730,33 +666,16 @@ class DialogTables:
         except ValueError:
             return 0
 
-        size = rdata.end - rdata.start
-        if size <= 0:
-            return 0
-        try:
-            window = self._reader.read(rdata.start, size)
-        except OSError:
-            return 0
-        if len(window) < size:
-            return 0
-
-        def word(address: int) -> int | None:
-            offset = address - rdata.start
-            if offset < 0 or offset + 4 > size:
-                return None
-            return int.from_bytes(window[offset : offset + 4], "little")
-
         count = MAX_DIALOG_ID + 1
         stride = FLAGS_STRIDE
-        start = rdata.start + 8
         end = rdata.end - (count * stride)
 
-        address = start
+        address = rdata.start + 8
         while address + count * stride <= end:
             ok = True
             enabled = 0
             for index in range(count):
-                flags = word(address + index * stride)
+                flags = self.read_uint32(address + index * stride)
                 if flags is None:
                     ok = False
                     break
@@ -765,7 +684,7 @@ class DialogTables:
                     break
                 if flags & 0x1:
                     enabled += 1
-                handler = word(address - 8 + index * stride)
+                handler = self.read_uint32(address - 8 + index * stride)
                 if handler is None:
                     ok = False
                     break
@@ -825,9 +744,8 @@ def _resolve_dialog_loader_get_text() -> int:
     """``ResolveDialogLoaderGetText`` (``dialog_patterns.cpp:261-269``): the loader.
 
     Native rebases the hardcoded ``DialogMemory::DIALOG_LOADER_GETTEXT`` onto the module and
-    caches it; this port expresses the same rebase as the ``module_relative`` resolver step in
-    ``offsets/dialog.json``, with the section check the rest of this port makes. The answer is
-    cached on the client's table resolver, which is what the source's own ``static cached`` is.
+    caches it; :class:`DialogTables` does the same with the same constant. On this build the
+    rebased address is not the loader (:data:`DIALOG_LOADER_GETTEXT`).
     """
 
     return _dialog_tables().resolve_loader_get_text()
@@ -899,14 +817,21 @@ def _encoded_text_to_text(codepoints: list[int]) -> str:
 
 
 def _queue_dialog_text_decode(dialog_id: int) -> None:
-    """``QueueDialogTextDecode`` (``dialog.cpp:1136-1254``), guard for guard.
+    """``QueueDialogTextDecode`` (``dialog.cpp:1136-1254``), up to the call this port cannot make.
 
-    The source's last step hands the string to ``AsyncDecodeStr``: the client decodes it and
-    calls back with the text, and ``OnDialogTextDecoded`` caches it. That is exactly what
-    happens here — :func:`py4gw.ui.async_decode.async_decode_str` is the port of that call, and
-    the text arrives at :func:`_on_string_decoded`. Everything around that step is the source's,
-    including which failures cache empty text, which ones cache the raw string, and which ones
-    only clear the pending flag.
+    The source's first step past its guards is its loader:
+    ``ResolveDialogLoaderGetText`` (``dialog_patterns.cpp:261-269``) rebases
+    ``DialogMemory::DIALOG_LOADER_GETTEXT``, and ``QueueDialogTextDecode`` calls it for the
+    dialog id. **That call is not ported, because this build's loader is not at that
+    address** — measured read-only, the rebased ``0x0079EEF0`` lands inside another function
+    and calling it faulted the client (``docs/RESEARCH.md``, 2026-09-25). Identifying this
+    build's own loader is the item the project owner has deferred, so the member reports it
+    here, before it flags the id pending — a refusal that left the pending flag set would
+    answer "" for that id for the life of the connection.
+
+    Everything the source does before that step is below in the source's order, and everything
+    after it — the copy, ``AsyncDecodeStr``, ``OnDialogTextDecoded``, the four failure
+    branches — is ported and waits on the same address.
     """
 
     global _catalog_pending_async_decode_count
@@ -926,6 +851,15 @@ def _queue_dialog_text_decode(dialog_id: int) -> None:
         return
     if _decoded_text_pending.get(dialog_id):
         return
+
+    raise _unported(
+        "get_dialog_text_decoded",
+        "this build's DialogLoader_GetText. The source rebases "
+        "DialogMemory::DIALOG_LOADER_GETTEXT (dialog.h:99, 0x0079EEF0) and calls it "
+        "(dialog_patterns.cpp:261-269); identifying this build's own loader is the item "
+        "the project owner has deferred",
+    )
+
     _decoded_text_pending[dialog_id] = True
     request_epoch = _catalog_decode_epoch
 
@@ -934,11 +868,6 @@ def _queue_dialog_text_decode(dialog_id: int) -> None:
     # flag. The two lines are written out at each site, as the source writes them; only the text
     # differs, the last site caching the **raw** string where the others cache nothing.
     address = _resolve_dialog_loader_get_text()
-    if not address:
-        if request_epoch == _catalog_decode_epoch and not _catalog_shutdown_requested:
-            _decoded_text_cache[dialog_id] = ""
-            _decoded_text_pending.pop(dialog_id, None)
-        return
 
     pointer = int(
         require_client().call_address(address, CallForm.U32, dialog_id).value
@@ -1115,21 +1044,30 @@ def _clear_catalog_cache() -> None:
 # ── the surface (``PyDialog``, ``dialog_bindings.cpp:94-138``) ───────────────
 
 
-class PyDialog:
+class Dialog:
     """The port of the ``PyDialog`` surface the facade reaches.
+
+    **Why this class is called ``Dialog`` and not ``PyDialog``.** In Reforged, ``PyDialog``
+    is the *injected module*: ``Dialog.py:7-9`` imports it and falls back to ``None`` when
+    it is absent, and no such class exists anywhere in Reforged's Python. In Reforged
+    Native it is the *embedded module*, whose Python class is backed by an empty struct —
+    ``struct PyDialogShim {}`` at ``dialog_bindings.cpp:90``, bound as ``"PyDialog"`` at
+    ``:101`` — with every method forwarding to a real ``GW::dialog::*`` function. This
+    project has neither an injected module nor a binding, so the surface is held in the
+    class its own module is named for, the way ``Player``, ``Agent`` and ``Map`` are.
+    **``PyDialog`` in this tree means the sources' module and nothing else.**
 
     Reforged's Python finds these through ``PyDialog.PyDialog.<name>``; here they are
     static methods of this class, so the facade calls them by name. Each one is either
     implemented from the state the client's messages give us or from the metadata
     tables, or refused naming the mechanism it needs.
 
-    **The tables are no longer a refusal.** They were, on the grounds the native source
-    states itself (``dialog.h:80-85``): the addresses are hardcoded client virtual
-    addresses with no module-base-relative op in the pattern system to express them.
-    That op now exists (``module_relative``, ``py4gw/scanner/patterns.py``), the
-    addresses live in ``offsets/dialog.json`` as the source keeps them in
-    ``DialogMemory``, and the two-stage resolution — static rebase, then the ``.rdata``
-    fallback — is :class:`DialogTables`, the port of ``dialog_patterns.cpp``.
+    **The tables are the source's own resolution.** The five bases are ``DialogMemory``'s
+    constants (``dialog.h:94-99``), rebased module-relative as ``ToRuntimeAddress`` does
+    (``dialog_patterns.cpp:25-31``) and validated by ``ValidateDialogMetadataBases``
+    (``:135-173``), with ``ResolveFlagsBase``'s ``.rdata`` scan (``:94-133``) behind them —
+    :class:`DialogTables`, entire. None of it is catalog data, because native keeps none of it
+    in its catalog either.
 
     **The text is no longer a refusal either.** ``DialogLoader_GetText`` is called through the
     capability layer for a dialog id's encoded string, and that string is handed to the client's
@@ -1175,7 +1113,7 @@ class PyDialog:
 
         _shutdown_requested = False
         _catalog_shutdown_requested = False
-        PyDialog.clear_cache()
+        Dialog.clear_cache()
         return True
 
     @staticmethod
@@ -1204,7 +1142,7 @@ class PyDialog:
         _body_decode_nonce += 1
         _drain_async_decodes("dialog")
 
-        PyDialog.clear_cache()
+        Dialog.clear_cache()
 
         _catalog_shutdown_requested = True
         _catalog_decode_epoch += 1
@@ -1379,7 +1317,7 @@ class PyDialog:
             return False
         if dialog_id > MAX_DIALOG_ID:
             return False
-        return (PyDialog.read_dialog_flags(dialog_id) & 0x1) != 0
+        return (Dialog.read_dialog_flags(dialog_id) & 0x1) != 0
 
     @staticmethod
     def get_dialog_info(dialog_id: int) -> DialogInfo:
@@ -1397,11 +1335,11 @@ class PyDialog:
         if dialog_id > MAX_DIALOG_ID:
             return info
 
-        info.flags = PyDialog.read_dialog_flags(dialog_id)
-        info.frame_type = PyDialog.read_dialog_frame_type(dialog_id)
-        info.event_handler = PyDialog.read_dialog_event_handler(dialog_id)
-        info.content_id = PyDialog.read_dialog_content_id(dialog_id)
-        info.property_id = PyDialog.read_dialog_property_id(dialog_id)
+        info.flags = Dialog.read_dialog_flags(dialog_id)
+        info.frame_type = Dialog.read_dialog_frame_type(dialog_id)
+        info.event_handler = Dialog.read_dialog_event_handler(dialog_id)
+        info.content_id = Dialog.read_dialog_content_id(dialog_id)
+        info.property_id = Dialog.read_dialog_property_id(dialog_id)
         info.content = _get_dialog_text_decoded(dialog_id)
         return info
 
@@ -1413,8 +1351,8 @@ class PyDialog:
         if not _is_dialog_map_ready():
             return dialogs
         for dialog_id in range(MAX_DIALOG_ID + 1):
-            if PyDialog.is_dialog_available(dialog_id):
-                dialogs.append(PyDialog.get_dialog_info(dialog_id))
+            if Dialog.is_dialog_available(dialog_id):
+                dialogs.append(Dialog.get_dialog_info(dialog_id))
         return dialogs
 
     @staticmethod
@@ -1866,9 +1804,9 @@ def _agent_model_id(agent_id: int) -> int:
     if not agent_id:
         return 0
     try:
-        from .client import require_client
+        from .agent import Agent
 
-        record = require_client().read_agent_by_id(int(agent_id))
+        record = Agent.GetAgentByID(int(agent_id))
     except (OSError, RuntimeError):
         return 0
     if record is None:
@@ -2171,7 +2109,7 @@ def _reset() -> None:
 
     The C++ statics come up in this state by themselves; a Python module does not, so this is
     the port's own way of getting back to it — the offline suite uses it between tests. **The
-    connection path does not call it**: ``connect()`` calls :meth:`PyDialog.initialize`, which
+    connection path does not call it**: ``connect()`` calls :meth:`Dialog.initialize`, which
     is the source's ``Initialize`` → ``ClearCache``, and that already wipes every list and
     record a previous client could have left behind and takes the gate from the live map.
     """
@@ -2494,11 +2432,16 @@ def _on_string_decoded(event: EventRecord) -> None:
         button_request = _button_decodes.pop(slot, None)
         if button_request is None:
             catalog_request = _catalog_decodes.pop(slot, None)
-            text, _ = decoded_text(slot)
             if catalog_request is None:
-                # A completion this module did not ask for, or one whose slot was already given
-                # back. Taking it frees the slot either way, so a stray decode cannot hold one.
+                # A completion this module did not ask for. **It is left alone**: a decode slot is
+                # shared by every module that hands a string to the client (the chat log's lines and
+                # an agent's name are the other two), and taking a slot that belongs to one of them
+                # consumes its answer and hands back the empty text -- measured live, an agent name
+                # reached ``DONE`` and was then read as ``FREE`` with nothing cached, which is what
+                # this line did to it. The chat module's own handler already returns without taking
+                # (``chat.py:447-453``); this is the same rule.
                 return
+            text, _ = decoded_text(slot)
             _on_catalog_text_decoded(slot, catalog_request[0], catalog_request[1], text)
             return
         text, _ = decoded_text(slot)
@@ -2862,7 +2805,7 @@ def get_active_dialog() -> ActiveDialogInfo | None:
     because the body arrives before the buttons do.
     """
 
-    info = PyDialog.get_active_dialog()
+    info = Dialog.get_active_dialog()
     if info.dialog_id == 0 and info.context_dialog_id == 0 and info.agent_id == 0:
         return None
     return info
@@ -2878,7 +2821,7 @@ def get_active_dialog_buttons() -> list[DialogButtonInfo]:
     of the facade sees is the sanitised text, not the markup and tokens the client left in it.
     """
 
-    buttons = _coerce_native_list(PyDialog.get_active_dialog_buttons())
+    buttons = _coerce_native_list(Dialog.get_active_dialog_buttons())
     if buttons:
         for button in buttons:
             button.message = sanitize_dialog_text(button.message)

@@ -1574,6 +1574,41 @@ class ItemContextStruct(TargetStruct):
             if isinstance((value := view.get(index)), ItemStruct)
         ]
 
+    def GetItemById(self, item_id: int) -> ItemStruct | None:
+        """Return one item by its array index, or ``None`` (``item_methods.cpp:109-112``).
+
+        Native's ``item::GetItemById`` is three lines and this is the same three:
+
+        ```cpp
+        Item* GetItemById(uint32_t item_id) {
+            ItemArray* items = item_id ? Context::GetItemArray() : nullptr;
+            return items && item_id < items->size() ? items->at(item_id) : nullptr;
+        }
+        ```
+
+        ``Context::GetItemArray()`` is ``item_context->item_array`` when its header is valid, and
+        ``at(item_id)`` is the indexed read this project does through the ported
+        :class:`~py4gw.context.gw_array.GWArrayView` — the pointer array, so the element read is
+        the pointer table entry and then the record it addresses. The index is the id: no scan,
+        no search.
+        """
+
+        if not item_id:
+            return None
+        if self._remote_reader is None:
+            raise RuntimeError("ItemContext snapshot is not bound to a reader.")
+        view = GWArrayView(self._remote_reader, self.item_array, ItemStruct)
+        if not view.valid() or item_id >= view.size():
+            return None
+        value = view.get(item_id)
+        if not isinstance(value, ItemStruct):
+            return None
+        return value.bind_reader(
+            self._remote_reader,
+            value.address,
+            self._trade_context,
+        )
+
     def read_inventory(self) -> InventoryStruct | None:
         """Read the optional inventory relationship from this root."""
 

@@ -261,6 +261,8 @@ class Bridge:
         observer_address = 0
         dispatcher_address = 0
         decoder_address = 0
+        hooker: Hooker | None = None
+        observer_hooker: Hooker | None = None
         try:
             self._place_block(block_address, session)
             table_address = self._place_call_table(calls or {})
@@ -318,8 +320,22 @@ class Bridge:
                     after=OBSERVER_AFTER,
                 )
         except BaseException:
-            # The entry patches are the last steps and they did not complete, so
-            # nothing can be running our code and what this made can go back.
+            # **The patches come out first, and that is not a detail.** The entry patch is one of the
+            # last steps but it *is* a step: if a later one fails -- the observer is the one that can,
+            # because its resolved address is checked against its own entry bytes -- the first patch
+            # is already live and the client's own thread is running through this bridge's stub. Freeing
+            # the block and the dispatcher underneath it is how a controller takes the client down with
+            # it: the stub calls freed memory on the next game frame. So both hooks are removed (their
+            # functions get their own bytes back) before anything is freed.
+            rollback_error: BaseException | None = None
+            for a_hooker, hook_name in ((observer_hooker, OBSERVER_NAME), (hooker, HOOK_NAME)):
+                if a_hooker is None or hook_name not in a_hooker.installed:
+                    continue
+                try:
+                    a_hooker.remove(hook_name, free_code=True)
+                except BaseException as error:  # noqa: BLE001 - reported with the original failure
+                    rollback_error = rollback_error or error
+
             for address in (
                 observer_address,
                 watch_address,
@@ -330,6 +346,13 @@ class Bridge:
             ):
                 if address:
                     self._access.free(address)
+
+            if rollback_error is not None:
+                raise RuntimeError(
+                    f"pid {self._pid}: the install failed and so did putting the hooks back "
+                    f"({type(rollback_error).__name__}: {rollback_error}); the client may still be "
+                    f"patched."
+                ) from rollback_error
             raise
 
         self._block_address = block_address

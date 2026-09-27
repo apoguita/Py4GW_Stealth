@@ -27,7 +27,7 @@ from typing import Any
 
 import py4gw
 from py4gw import dialog
-from py4gw.context.agent_array import AgentAllegiance
+from py4gw.context.agent_array import Allegiance
 from py4gw.player import Player
 from py4gw.ui.encoded_str import is_valid_enc_str
 from py4gw.ui.frame_tree import FrameTree
@@ -69,31 +69,35 @@ class _Tee:
 def _closest_npc(client: py4gw.ConnectedClient, xy: tuple[float, float]) -> int:
     """Return the closest NPC, as the other dialog probes do."""
 
-    snapshot = client.read_agent_array()
-    if snapshot is None:
-        return 0
+    from py4gw.agent import Agent
+    from py4gw.agent_array import AgentArray
+
     own_agent = int(Player.GetAgentID())
     best_id, best_distance = 0, 0.0
     read = 0
-    for reference in snapshot.all:
-        if reference.agent_id in (0, own_agent):
-            continue
-        if reference.allegiance in (None, AgentAllegiance.ENEMY):
-            continue
-        if not (reference.is_living or reference.is_gadget):
+    for agent_id in AgentArray.GetAgentArray():
+        agent_id = int(agent_id)
+        if agent_id in (0, own_agent):
             continue
         if read >= SCAN_LIMIT:
             break
         read += 1
+        # A gadget answers dialogs too, and an NPC is a living agent with no login number:
+        # a player has one. The allegiance test is the source's own member.
+        if not (Agent.IsLiving(agent_id) or Agent.IsGadget(agent_id)):
+            continue
+        allegiance, _ = Agent.GetAllegiance(agent_id)
+        if allegiance == int(Allegiance.Enemy):
+            continue
         try:
-            record = client.read_agent(reference)
-        except (OSError, RuntimeError):
+            if Agent.GetLoginNumber(agent_id):
+                continue
+            x, y = Agent.GetXY(agent_id)
+        except (OSError, RuntimeError, ValueError):
             continue
-        if record is None or not (record.is_living_type and not int(record.login_number)):
-            continue
-        distance = math.dist((float(record.pos.x), float(record.pos.y)), xy)
+        distance = math.dist((float(x), float(y)), xy)
         if not best_id or distance < best_distance:
-            best_id, best_distance = int(reference.agent_id), distance
+            best_id, best_distance = agent_id, distance
     return best_id
 
 
@@ -144,18 +148,18 @@ def _run() -> int:
             Player.Interact(agent_id)
 
         waited = 0.0
-        while waited < OPEN_WAIT_S and not dialog.PyDialog.is_dialog_active():
+        while waited < OPEN_WAIT_S and not dialog.Dialog.is_dialog_active():
             time.sleep(POLL_S)
             waited += POLL_S
-        print(f"\nwaited {waited:.1f}s; is_dialog_active() = {dialog.PyDialog.is_dialog_active()}")
+        print(f"\nwaited {waited:.1f}s; is_dialog_active() = {dialog.Dialog.is_dialog_active()}")
 
         # The buttons are not announced with the body: they arrive on their own, and seconds
         # later rather than milliseconds, so the wait does not stop when the dialog appears.
         buttons_waited = 0.0
-        while buttons_waited < BUTTON_WAIT_S and not dialog.PyDialog.get_active_dialog_buttons():
+        while buttons_waited < BUTTON_WAIT_S and not dialog.Dialog.get_active_dialog_buttons():
             time.sleep(POLL_S)
             buttons_waited += POLL_S
-        buttons = dialog.PyDialog.get_active_dialog_buttons()
+        buttons = dialog.Dialog.get_active_dialog_buttons()
         print(
             f"the client announced {len(buttons)} buttons "
             f"after a further {buttons_waited:.1f}s"
@@ -167,10 +171,10 @@ def _run() -> int:
             )
 
         waited = 0.0
-        while waited < OPEN_WAIT_S and not dialog.PyDialog.is_dialog_active():
+        while waited < OPEN_WAIT_S and not dialog.Dialog.is_dialog_active():
             time.sleep(POLL_S)
             waited += POLL_S
-        print(f"\nwaited {waited:.1f}s; is_dialog_active() = {dialog.PyDialog.is_dialog_active()}")
+        print(f"\nwaited {waited:.1f}s; is_dialog_active() = {dialog.Dialog.is_dialog_active()}")
 
         frame_id = frame_array.frame_id_by_hash(dialog.NPC_DIALOG_HASH)
         print(f"the NPC Dialog frame is frame {frame_id}")

@@ -109,6 +109,30 @@ This project **ports** Py4GW Reforged and Py4GW_Reforged_Native. It does not
 design its own way of doing what they already do. See `docs/PORTING_RULES.md`
 for the full statement and the audit procedure.
 
+### The cornerstones (they outrank everything below)
+
+**The two source projects are the sole source of truth. They work 100%, and whatever we port is
+ported as faithful as they are.**
+
+1. **Nothing that is in neither source may be added here** — not a file, an option, a member, a
+   constant, a helper, a check, a default, a fallback, an optimization, a convenience, or a
+   "completion" of what the source does. If it is not in Reforged or Reforged Native, there is
+   nothing to port and nothing to write. "It works", "it is faster", "it prevents a crash" and
+   "the source's data is stale on this build" are **findings to record on the member**, never
+   exceptions to this rule.
+2. **A name that belongs to the sources belongs to the sources.** Do not give this project's own
+   class a source's *injected module* name: `PyDialog` here was a Python class while in Reforged
+   it is the imported module (`Dialog.py:7-9`) and in Native the embedded one
+   (`dialog_bindings.cpp:94`). This project's classes are named for the class they port —
+   `Player`, `Agent`, `Map`, `Dialog`.
+
+Two worked examples of the rule being broken here, both removed on 2026-09-26: `offsets/dialog.json`
+with a `module_relative` op added to the resolver engine to read it (the sources keep those
+constants in code, `dialog.h:94-99`, because their catalog cannot express them, `dialog.h:80-85`),
+and a byte-shape guard on the dialog loader that the source does not make. **An earlier precedent
+is not permission** — not an existing helper, not a previous commit, not a line in these
+documents. `docs/PORTING_RULES.md` § The cornerstones carries the full statement.
+
 ### The unit of work is the class, not the member
 
 **When a class is migrated, it is migrated whole — every member of its source
@@ -130,10 +154,12 @@ owner and it outranks convenience:
   region — that is work with a name, and the answer is to build it. The docs never
   describe a feature as out of reach; they state what works and what is next.
 - **A no-op is very hard to justify.** If a member does nothing where the source does
-  something, the justification must be written down, specific, and rare. Two members
-  qualify today, both because they return or consume an object the injected runtime owns
-  in-process (`Player.player_instance`, `Dialog._call_native_dialog_method`); they report
-  that plainly and never return a stand-in. That is a documented divergence of those two,
+  something, the justification must be written down, specific, and rare. Three members
+  qualify today, all because they return or consume something the injected runtime owns
+  in-process (`Player.player_instance`, `Dialog._call_native_dialog_method`, and
+  `Agent.GetProfessionsTexturePaths`, whose paths are rooted at the injected runtime's own
+  module directory — `system_bindings.cpp:72-74` → `process_manager.cpp:38-40`); they report
+  that plainly and never return a stand-in. That is a documented divergence of those three,
   not a pattern for anything else.
 - **Every class carries a verdict** in `docs/CLASS_PORT_MAP.md`: **FULL** (every member
   works) or **INCOMPLETE** (with the members still to port named, and what each needs).
@@ -326,7 +352,9 @@ buttons is a test that never drove the interaction, **not** a finding about the 
 The order, in the port's own terms (`tests/test_live_dat.py`, `tests/probe_dialog_open.py`,
 `tests/probe_dialog_text.py`):
 
-1. `client.read_agent_array()` — find the closest living, non-enemy record: the NPC to talk to;
+1. `AgentArray.GetAgentArray()` (with `Agent.IsLiving` / `Agent.GetLoginNumber` /
+   `Agent.GetAllegiance` / `Agent.GetXY`) — find the closest living, non-enemy record: the NPC to
+   talk to;
 2. `Player.Interact(agent_id)` — once;
 3. **wait**, bounded, for the client to walk there and open its dialog. The client announces a
    body (`0x100000A6`) and then its buttons (`0x100000A3`), and the buttons can arrive

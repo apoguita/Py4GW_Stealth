@@ -27,9 +27,10 @@ queue. The rule is
 | `Skill` | INCOMPLETE | **8 of 87 members** (was: not ported at all). Landed 2026-09-26 as `py4gw/skill.py` over `py4gw/context/skill_context.py` (the client's `GW::Context::Skill` record, read from the static table the client itself indexes) and `py4gw/skill_names.py` (native's 3031-entry generated name table). Every record reader works, including `ExtraData.GetIDPvP` — the member `Utils.BalthazarSkillIdToDialogId` calls. What is left: `GetNameFromWiki`/`GetURL`/`GetProgressionData`/`GetDescription`/`GetConciseDescription` and the `_load_descriptions` they raise through (Reforged's bundled `skill_descriptions.json`, 1.98 MB), `GetCampaign` (`enums_src/Region_enums.py`'s `CampaignName`) and `ExtraData.GetTexturePath` (`enums_src/Texture_enums.py`'s `SkillTextureMap`). Per-member detail in [`SKILL_PORT.md`](SKILL_PORT.md) |
 | `Party` | INCOMPLETE | the 30 action members |
 | `Scanner` | FULL | — |
-| `Agent` | INCOMPLETE | **148 members declared, 135 answer, 13 raise** (8 directly, 5 through the member they call). `GetInstanceUptime` landed 2026-09-26 with the frame-limit port (`py4gw/ui/preferences.py`); `Utils` and `Skill` landed before it (`GetEnergyPips`, `GetHealthPips`, `GetID`). What the 13 need: the **`PyAgent.get_agent_enc_name`** binding (3 — `GetNameByID`, `GetEncNameByID`, `GetEncNameStrByID`, plus `RequestName`, `IsNameReady`, `GetAgentIDByName`, `GetAgentIDByEncString`, `GetModelIDByEncString` through them), **`Effects.HasEffect`** (2 — `IsMartial`, `IsMelee`, and the `Effect` class is the next class in the queue), `PySystem.Console.get_projects_path` (1 — `GetProfessionsTexturePaths`), and the two frame-loop members (`enable`, `_invalidate_property_cache`), whose caches have no frame loop to clear them here — the three `*ByID` readers read when called instead, documented per member in [`AGENT_PORT.md`](AGENT_PORT.md) |
-| `AgentArray` context | **one rule violation to fix** | `py4gw/context/agent_array.py` declares **`AgentAllegiance` (line 166), which exists in neither source project** — an invented enum, and it is exported from `py4gw/__init__.py`, read by `player.py:1103,1149,1151`, five probes and four test files. The source's own enum is now ported (`enums_src.game_data_enums.Allegiance`), so the fix is to remove `AgentAllegiance` and read the source's, member by member. That is the next work item and it is written here rather than done blind at the end of a session: it changes a public name. |
-| `Dialog` | INCOMPLETE — **deferred to a later pass** | All 32 `PyDialog` members answer, a button's **caption is produced** (read where the source reads it, decoded by the client's own decoder, live 2026-09-25), both journals are ported and the tables resolve. The one item left is identifying this build's `DialogLoader_GetText`, which leaves a **catalog dialog's `content`** empty. **The project owner has parked it for a later pass**, not abandoned it: the 2026-09-26 pass over `Gw.exe` shows why the usual routes come up empty (this client *inlines* the text path into its dialog window — `DialogShow` reads the row's text id itself), so the two routes to identify it are tracing the announce path or hooking the confirmed text encoder, both named in [`RESEARCH.md`](RESEARCH.md) and [`DIALOG_PORT.md`](DIALOG_PORT.md). Until then the loader resolution answers the source's own "no loader" value: a refusal, never a wrong string. The sources are complete and 100% functional, so this is porting work that remains, not a divergence. |
+| `Agent` | **COMPLETE for this port's purposes** (three structural members, 2026-09-27) | **148 members declared, 145 answer, 3 raise** (was 13 on 2026-09-26) — the same verdict form `Player` carries, for the same reason: the three that do not answer cannot be ported, and each is named with the line that says why. **The `PyAgent.get_agent_enc_name` group landed** (the binding is ported as `py4gw.agent.get_agent_enc_name` over native's own `GW::agent::GetAgentEncName` walk — the agent record, the world agent-name array, the player array, `GetNPCByID`, the agent-summary gadget entry, the gadget context and `item::GetItemById`, all state this port already reads, so it was never target-side work), and **`Effects.HasEffect` landed with the `Effects` port** (`py4gw/effect.py`), which closed `IsMartial`/`IsMelee`. Those two passes also restored `Player.GetName` to the source's body. **The decode step is Native's** since 2026-09-27 (`Agent.GetNameByID` = `AsyncGetAgentName`'s route: the client decodes the string; measured ~115 ms first time against ~2.1 s for the host-side table route, and no dat record at all — `docs/STRING_DECODE_PLAN.md` § 10). The 3 that remain are **not portable work**: `enable` and `_invalidate_property_cache` are the two halves of Reforged's per-frame cache registration, which this port's execution model has no frame loop for (`AGENTS.md`, `PORTING_RULES.md` § `@frame_cache`; the `*ByID` readers read when called instead), and `GetProfessionsTexturePaths` prefixes its paths with `PySystem.Console.get_projects_path()`, which native defines as **the injected runtime's own module directory** (`system_bindings.cpp:72-74` → `process_manager.cpp:38-40`) — the third member of the artifact kind, with `Player.player_instance` and `Dialog._call_native_dialog_method`, reported rather than stood in for. Per-member detail in [`AGENT_PORT.md`](AGENT_PORT.md) |
+| `AgentArray` context | **FULL — source-shaped (2026-09-26)** | `py4gw/context/agent_array.py` (1567 lines) is the port of `native_src/context/AgentContext.py` (1501 lines) with **no invented layer left**. Removed: `AgentAllegiance` (round 1), `Vec2fStruct`/`GamePositionStruct` (the ported `internals/types.py` supplies `Vec2f`/`Vec3f`/`GamePos`), and — this round — `AgentReference`, `AgentArraySnapshot`, `LivingAgentSnapshot`, `StaleAgentReferenceError`, `AgentKind`, `_agent_record_type`, the four `Reforged*Struct` duplicates, and every facade member that existed for them (`read`, `read_agent`, `read_agent_by_id`, `snapshot`, `living_snapshot`, `refresh_living_agents`, `get_living_agent`, `_read_snapshot`, `_validate_reference_current`, `_read_record`, `_read_pointer_values`, `_read_pointer_at`, `_kind_from_type_flags`, `max_pointer_slots`, `max_references`) together with `client.py`'s six wrappers over them. What is in the module is the source's own: the value records, the ctypes records and their `snapshot()` methods, `AgentArrayStruct` (`raw_agents`, `_build_allegiance_cache`, `_ensure_cache_up_to_date`, `GetAgentByID`, the twelve `Get*Array` members) and the `AgentArray` facade. The only members beside the source's are the external read path every context here needs (`resolve_address`/`initialize`/`read_context`/`_read_array_header`, `_timed`/`_memory_reader` for the client's `PerfCounter`). The record layouts read with native's `static_assert`s (`AgentStruct` 0xC4, `AgentLivingStruct` 0x1C4, `EquipmentStruct` 0xD8, `ItemDataStruct` 0x10); Reforged's Python declarations (0x1C2, 0xF3, 0x13) are recorded as a source-vs-source disagreement in [`AGENT_PORT.md`](AGENT_PORT.md) and in the struct test. |
+| `AgentArray` (the class) | **FULL (2026-09-27)** | `py4gw/agent_array.py` is the port of Reforged's `AgentArray.py` with **no raising member** — verified from the module's own AST on 2026-09-27 — and every member is the source's: the thirteen getters (`GetAgentArray`, `GetAllyArray`, `GetNeutralArray`, `GetEnemyArray`, `GetSpiritPetArray`, `GetMinionArray`, `GetNPCMinipetArray`, …), both key sets, `Manipulation`, `Sort`, `Filter`, `distance_filter` and the rest. The per-frame `enable` the source registers is not a member of this class but of its **context** (`context/agent_array.py:1612`, a documented no-op: there is no frame loop to register against, and the view is built on demand), which is the row above. |
+| `Dialog` | INCOMPLETE — **deferred to a later pass** | 31 of the 32 `PyDialog` members answer, a button's **caption is produced** (read where the source reads it, decoded by the client's own decoder, live 2026-09-25), both journals are ported and the tables resolve (the source's five `DialogMemory` constants, rebased in code — **no catalog file**). The one member that does not answer is `get_dialog_text_decoded`: it needs this build's `DialogLoader_GetText`, and it reports that rather than calling the sources' stale constant, so a **catalog dialog's `content`** — and the `get_dialog_info`/`enumerate_available_dialogs` rows that carry it — are not produced. **The project owner has parked it for a later pass**, not abandoned it: the 2026-09-26 pass over `Gw.exe` shows why the usual routes come up empty (this client *inlines* the text path into its dialog window — `DialogShow` reads the row's text id itself), so the two routes to identify it are tracing the announce path or hooking the confirmed text encoder, both named in [`RESEARCH.md`](RESEARCH.md) and [`DIALOG_PORT.md`](DIALOG_PORT.md). The sources are complete and 100% functional, so this is porting work that remains, not a divergence. |
 
 The verdicts are the work queue: a class moves to FULL only when its remaining column
 is empty, and what is named there is taken in dependency order. Two members report
@@ -51,25 +52,38 @@ change); what follows it is the queue as it now stands.
    with it too**, which completed `Utils.GenerateSkillbarTemplate` — see
    [`SKILLBAR_PORT.md`](SKILLBAR_PORT.md). What is left in `Utils` is target-side work
    (item 7 below) and nothing else.
-2. **`Effects`/`Effect`** — the next dependency, and it is a short one: `Agent.IsMartial` and
-   `Agent.IsMelee` are the only members left that need it (`Effects.HasEffect(agent_id,
-   skill_illusionary_weaponry)`, `Effect.py:102`), and everything else in their bodies is ported now
-   that `Skill.GetID` answers. `Effect.py` is 176 lines over the agent record's effect array, which
-   the ported `AgentLivingStruct`/`WorldContext` already reads.
+2. ~~**`Effects`/`Effect`**~~ — **landed 2026-09-26**: `py4gw/effect.py`, 12 of its 15 members
+   working (the array walk, the two computed times and the two calls), which closed
+   `Agent.IsMartial`/`Agent.IsMelee` and `Skillbar`'s slot `get_recharge`. It also brought
+   `py4gw/memory/memory_manager.py` — the skill timer the effect snapshot and `get_recharge` both
+   needed. What is left is `GetAlcoholLevel` (the entry hook native installs, in
+   [`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md)) and `GetAlcoholTimeRemaining` (a binding member
+   that does not exist). Per-member record: [`EFFECT_PORT.md`](EFFECT_PORT.md).
 3. ~~**`Skillbar`**~~ — **landed 2026-09-26**: `py4gw/skillbar.py`, every read working (plus
    `ChangeHeroSecondary`), which completed `Utils.GenerateSkillbarTemplate` — the last
    offline-portable dependency `Utils` had. Per-member record: [`SKILLBAR_PORT.md`](SKILLBAR_PORT.md).
-   What it left behind is in item 2 above (the keypress mechanism) and in its own queue: the two
-   template loaders, which need native's `DecodeSkillTemplate`, and the slot type's `get_recharge`,
-   which needs the skill timer.
-4. **The invented `AgentAllegiance`** — `py4gw/context/agent_array.py:166`, in neither source, read
-   by `py4gw/__init__.py`, `player.py:1103,1149,1151`, five probes and four test files. The source's
-   own enum is ported (`enums_src.game_data_enums.Allegiance`); remove the invention and read the
-   source's, member by member. It changes a public name, so it is done deliberately, in one change.
-5. **`Agent`'s remaining 14** — the `PyAgent.get_agent_enc_name` binding (3 direct, 5 transitive),
-   `Effects.HasEffect` (2 — `IsMartial`, `IsMelee`, and it is item 2 here), `PySystem.Console`
-   `get_projects_path` (1), `UIManager.GetFPSLimit` (1, which is also `Player.GetInstanceUptime`),
-   and the two frame-loop members.
+   Its `get_recharge` **landed with the skill timer in item 2**; what is left in its own queue is the
+   keypress mechanism and the two template loaders, which need native's `DecodeSkillTemplate`.
+4. ~~**The invented `AgentAllegiance`**~~ — **removed 2026-09-26.** `py4gw/context/agent_array.py`
+   declared it in neither source, and it was read by `py4gw/__init__.py`, `player.py`, five probes
+   and four test files. The module now imports the source's own
+   `enums_src.game_data_enums.Allegiance` (7 members, `Unknown` included) and every call site reads
+   the source's member names — `Allegiance.Enemy`, not `AgentAllegiance.ENEMY`. **The rest of the
+   invented layer went with it** (2026-09-26): `AgentReference`, `AgentArraySnapshot`,
+   `LivingAgentSnapshot`, `StaleAgentReferenceError`, the four `Reforged*Struct` duplicates,
+   `AgentKind`, `_agent_record_type`, and the facade members built for them. See
+   [`AGENT_PORT.md`](AGENT_PORT.md) for the module as it now stands and for the two findings the
+   pass produced (the Reforged-Python-vs-native layout disagreement, and the module-level `get()`
+   helpers that 24 other context modules still carry).
+5. **`Agent`'s remaining 3, and none of them is porting work** — ~~the `PyAgent.get_agent_enc_name`
+   binding~~ (**landed 2026-09-26**: `py4gw.agent.get_agent_enc_name`, ported over native's own walk,
+   closing 8 of the 13) and ~~`Effects.HasEffect`~~ (**landed 2026-09-26** with `py4gw/effect.py`,
+   closing `IsMartial` and `IsMelee`). What is left is `GetProfessionsTexturePaths`, which needs the
+   **injected runtime's own module directory** (`Console.get_projects_path`,
+   `system_bindings.cpp:72-74` → `process_manager.cpp:38-40`) — a path into an installation this
+   project does not have, and the third member of the artifact kind — and the two frame-loop members,
+   which the port's execution model has no dispatcher for. Both are recorded divergences, not items
+   in a queue.
 6. **The chat-history trio** — `Player.RequestChatHistory`/`IsChatHistoryReady`/`GetChatHistory`.
    The decode half is ported and live (`py4gw/ui/async_decode.py`, the emitted decoder stub), and
    `GW::chat::GetChatLog()` is `*chat_buffer_addr` (`chat_methods.cpp:70-73`) — a global the ported
@@ -147,8 +161,8 @@ reach is the real map:
 | `PyAgent` | 39 | `agent` (8) | array ported; the `Agent` class is not |
 | `PyInventory` | 32 | `item` (28) | **portable, class not ported** |
 | `PyMap` | 30 | `map` (16) | ported |
-| `PyDialog` | 32 + 6 records | `agent` (2: the two dialog senders), `ui` (2: the decode pair) | **ported**: state from the client's own messages; text waits on the string table |
-| `PyEffects` | 26 | `effects` (2) | **portable, class not ported** |
+| `PyDialog` | 32 + 6 records | `agent` (2: the two dialog senders), `ui` (2: the decode pair) | **ported**: state from the client's own messages, the tables from the sources' own constants in code; the loader call is the one member that reports itself. `PyDialog` is the *sources'* name for their module — this port's class is `Dialog` |
+| `PyEffects` | 26 | `effects` (2) | **ported 2026-09-26**: `py4gw/effect.py` carries the binding class, the two value snapshots and Reforged's `Effects` over them — 12 of 15 members; the alcohol level needs the entry hook, and the alcohol time names a binding member that does not exist |
 | `PyMerchant` | 17 | `merchant` (2) | **portable, class not ported** |
 | `PyChat` | 13 | `chat` (12) | **portable, class not ported** |
 | `PyKeystroke` / `PyMouse` | 12 / 12 | — | the client's own input synthesis; still to port |
@@ -195,13 +209,13 @@ ported context and resolvers already in the catalog:
 | `Inventory` | 1477 | `ItemContext` |
 | `Pathing` | 862 | `MapContext` pathing |
 | `Item` | 827 | `ItemContext` |
-| `AgentArray` | 482 | its own context is ported |
+| `AgentArray` | 482 | its own context is ported — **and the class is now ported too**: `py4gw/agent_array.py`, every member (13 getters + `Manipulation`/`Sort`/`Filter`/`Routines`), with one recorded divergence on the twelve array getters |
 | `Camera` | 367 | `Camera` context |
 | `Quest` | 245 | `quest` resolvers + world context |
 | `ChatCommands` | 216 | `chat` resolvers + `ChatBuffer` |
 | `Skillbar` | 209 | `skillbar` resolvers + world context |
 | `Merchant` | 197 | `merchant` resolvers + `ItemContext` |
-| `Effect` | 176 | `effects` resolvers + agent records |
+| `Effect` | ~~176~~ **ported 2026-09-26** | `effects` resolvers + the ported `WorldContext.party_effects` array + the skill timer (`py4gw/effect.py`, [`EFFECT_PORT.md`](EFFECT_PORT.md)) |
 
 **B. Needs the string table (now ported).** The archive read and the decoder are ported and
 live; what these classes need is their own members, plus a place to put a string for the
@@ -271,7 +285,7 @@ each remaining member needs, and the state machine are in
 | layer | members | state |
 | --- | --- | --- |
 | `Dialog.py` (Reforged's facade) | 10 module members: two getters, two record classes, the sanitiser, the inline-choice parser, three helpers | 9 work; 1 reports a divergence (`_call_native_dialog_method`, which reaches a binding object by dynamic name and has no object to reach here) |
-| `PyDialog` (native surface) | 32 static methods + 6 record classes | **all 32 answer — nothing refuses.** What remains for this class is two things a member cannot *read* on this build, named below, not a member that is unwritten |
+| `PyDialog` (native surface) | 32 static methods + 6 record classes | **31 answer; 1 reports the work it needs** (`get_dialog_text_decoded`, and the catalog `content` behind `get_dialog_info`/`enumerate_available_dialogs`, which wait on this build's `DialogLoader_GetText`). The tables themselves answer: the sources' five constants, rebased in code |
 
 What is left is one work item, and it is porting work:
 
@@ -307,13 +321,24 @@ the call form, is **served**: it finds the client's `"NPC Dialog"` root frame **
 (`GetFrameIDByHash`, `dialog.cpp:1670-1683`), and the frame array's `frame_id_by_hash` is that
 lookup.
 
-**The metadata tables are ported, and they were the largest of the blockers** — 8
-members, held back only by a resolver op the native source's own note said the pattern
-system lacked (*"cannot move into `offsets/*.json` because the pattern system has no
-module-base-relative op"*, `dialog.h:80-85`). That op (`module_relative`) now exists, the
-addresses live in `offsets/dialog.json`, and the two-stage resolution with its validation
-pass and `.rdata` fallback is the port of `dialog_patterns.cpp`. Live, the fallback is
-what resolves them on this build; see [`DIALOG_PORT.md`](DIALOG_PORT.md).
+**The metadata tables are the source's own resolution, held where the source holds it** — 8
+members. Native keeps the five bases as constants in `DialogMemory` (`dialog.h:94-99`) and rebases
+them in `dialog_patterns.cpp`, the file it keeps them in *because* its pattern system has no
+module-base-relative op (`dialog.h:80-85`). This port does the same and nothing else: the six
+constants are `py4gw/dialog.py`'s own, rebased through `RemoteScanner.to_module_address()`, and
+the two-stage resolution with its validation pass and `.rdata` fallback is `DialogTables`, the port
+of `dialog_patterns.cpp`. **No catalog file carries them, and no resolver op was added for them**:
+an earlier pass had both (`offsets/dialog.json`, `module_relative`) and both were removed on the
+project owner's direction, 2026-09-26 — a file that exists in neither source is not this project's
+to add, and neither is a mechanism op its sources never had. Live, the fallback is what resolves
+the five bases on this build; see [`DIALOG_PORT.md`](DIALOG_PORT.md).
+
+**The loader is the one step that is not ported, and it reports itself.** The source rebases
+`DialogMemory::DIALOG_LOADER_GETTEXT` and calls it; on this build that address is not the loader,
+and calling it faulted the client (`RESEARCH.md`, 2026-09-25). `get_dialog_text_decoded` — and the
+catalog `content` behind `get_dialog_info` and `enumerate_available_dialogs` — says what it needs
+instead of calling it or answering an empty string in its place. Identifying this build's loader is
+the item the project owner parked.
 
 The five the state answers are `get_active_dialog`, `get_active_dialog_buttons`,
 `get_last_selected_dialog_id`, `is_dialog_displayed` and `clear_cache`; the six the tables
@@ -381,7 +406,34 @@ would port dead code.
    first: `Player.GetTargetID` is a captured value feeding a **read**, which is exactly
    what an `enable()` member is, so the shape is no longer only proven for actions.
 
-## 7. Reproducing these numbers
+## 7. The added classes, ranked by friction
+
+§6 is the *dependency* order. This is the *cost* order over the classes §4A lists as
+readable-but-unwritten (`Effect`, `Quest`, `Camera`, `Merchant`, `AgentArray`, `Pathing`,
+`Item`, `Inventory`, `ChatCommands`), measured from the two working trees on 2026-09-26.
+
+Friction here is not size. It is **how much of the source's own surface is already answered
+by something this port has** — a context read, a resolver, the decode path, the game-thread
+dispatcher — and what is left that is genuinely new.
+
+| # | Class | Source | Already answered | What is actually new |
+| --- | --- | --- | --- | --- |
+| 1 | ~~`Effects` (`Effect.py`)~~ **ported 2026-09-26** | 177 lines, 15 members | **12 of 15 work.** Native's `GetAgentEffects`/`GetAgentBuffs` are a walk of `Context::GetPartyEffectsArray()` (`effects_methods.cpp:29-63`), which is `WorldContext.party_effects_array` at `0x508` — already read (`world_context.py:1469,1795`, `AgentEffectsStruct.effects/buffs`), and `BuffExists`/`EffectExists`/`HasEffect`/`GetBuffID`/`EffectAttributeLevel` are that same walk; the two computed fields (`GetTimeElapsed`/`GetTimeRemaining`, `skill.cpp:39-45`) needed only the skill timer, which landed with this port (`py4gw/memory/memory_manager.py` — `timeGetTime()` plus the client global the catalog names `memory.skill_timer_ptr`) | **What is left is three members, and two are findings.** `DropBuff` and `ApplyDrunkEffect` work — the two resolvers (`effects.drop_buff_func`, `effects.post_process_effect_func`) called through the existing forms; `get_instance` works and is *not* an artifact: native's binding is a wrapper holding one `uint32_t` (`effects_bindings.cpp:130`), so the port's `PyEffects(agent_id)` is that object. `GetAlcoholLevel` **raises naming the entry hook it needs** (native captures the post-process call's first argument, `effects.cpp:24-41`; recorded in [`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md)), and `GetAlcoholTimeRemaining` **raises naming a source-vs-source disagreement**: its body calls a binding member the binding does not implement (`effects_bindings.cpp:181-183`), which the stub declares and native does not track. Per-member detail in [`EFFECT_PORT.md`](EFFECT_PORT.md). **It closed `Agent.IsMartial`/`IsMelee` and `Skillbar`'s slot `get_recharge`.** |
+| 2 | `Quest` | 246 lines, 26 members | Reads are `GW::quest::GetQuest`, `Context::GetQuestLog` and `GetActiveQuestId` → the ported world context. Actions are 3 of the 5 resolvers the catalog already has (`set_active_quest_func`, `abandon_quest_func`, `request_quest_info_func`). Text is the client's own `AsyncGetQuestName`/`Description`/`NPC`/`Location`/`Objectives` plus `AsyncDecodeAnyEncStr` → the **ported async-decode path**, the one a dialog caption already uses | the per-field request bookkeeping (`quest_bindings.cpp:121-183` keeps a map per text field, keyed by quest id) |
+| 3 | `Camera` | 368 lines, 46 members | The reads are free: 31 of the 46 members are single field reads off `camera_ptr` (30 `Get*` plus `IsPointInFOV`), and the ported `CameraStruct` (`camera_context.py:31-64`) already declares **every field they touch** (`yaw_to_go`, `pitch_to_go`, `dist_to_go`, `look_at_to_go`, `cam_pos_inverted_to_go`, `time_in_the_map`, `time_in_the_district`, `field_of_view`, `max_distance2`, …); `IsPointInFOV` is arithmetic over them, and `GetCurrentYaw` over two of them | the fourteen members that **act** on the camera: the eight `Set*` (`SetCameraPosition`, `SetLookAtTarget`, `SetYaw`, `SetPitch`, `SetCameraUnlock`, `SetMaxDistance`, `SetFieldOfView`, `SetFog`), the four movement helpers (`Forward`/`Vertical`/`Side`/`RotateMovement`), and `ComputeCameraPos`/`UpdateCameraPos` — every one of them a method call on the native camera object. Native runs them on the game thread (`camera_bindings.cpp:100-103`, `GW::game_thread::Enqueue`) and either writes the camera struct or calls `GW::camera::SetMaxDist`/`SetFieldOfView`/`SetFog` (`camera_methods.cpp:78,87,145`; `fog_patch_addr` is already in the catalog). Our dispatcher runs work on that same thread — but a **field write into the client** is an operation this port has not performed, and that is the decision this class carries |
+| 4 | `Merchant` (`Trading`) | 198 lines, 17 members | Quotes and transactions are the existing `request_quote_func`/`transact_item_func`; the items are `ItemContext`, ported | the three list reads come from `PY4GW::listeners::Merchant()` (`merchant_bindings.cpp:199-201`) — the injected runtime's own UI-message listener, so a merchant-window capture has to be identified and copied: the shape of the chat-log watch, with a message still to find. The source's `@frame_cache` decorators drop, as they do everywhere |
+| 5 | ~~`AgentArray`~~ **ported 2026-09-26** | 482 lines, 28 members | **every member is in** (`py4gw/agent_array.py`): the thirteen getters, `Manipulation` (3), `Sort` (4), `Filter` (3) and `Routines.DetectLargestAgentCluster`, over the ported `Agent`, `Utils` and the context view. The helpers are pure Python and are pinned by `tests/test_agent_array_class_offline.py`, which reads the source's own surface with `ast` and compares it member for member | **one recorded divergence, on the twelve array getters.** The source's live path is `SystemShaMemMgr.get_agent_array_wrapper()` — the injected runtime's shared-memory channel — and its second route, `GWContext.AgentArray.GetContext()`, is unreachable code after the `return` (`AgentArray.py:23-29`). This project has no such channel, so the members answer from that second route over this project's own context view, which reads the same client array. Closing it means the shared-memory channel, and that is the work item. **Also fixed with this port:** the package root now exposes the *class* as `AgentArray`, the way Reforged's `__init__.py:101` does, with the context view at `py4gw.context.AgentArray` (Reforged's `GWContext.AgentArray`, `Context.py:54`), and the three helper classes the context view had copied from this file are gone |
+| 6 | `Pathing` | 863 lines, 45 members | the bulk is pure A*/navmesh arithmetic over the ported `MapContext` trapezoids, and `find_path_func` is in the catalog | `PyPathing.PathPlanner` (native's planner object, with its `PathStatus`) and `enums.name_to_map_id`, from an enum module that is not ported |
+| 7 | `Item` | 828 lines, 92 members | `ItemContext` and the 28 item resolvers | `mods_core` (25 KB), `mods_types` (48 KB) and `mods_upgrades` (36 KB), none of them ported; `enums_src/Item_enums.py`; and the name/description text |
+| 8 | `Inventory` | 1478 lines, 59 members | `ItemContext`, ported | `Item` first, then the `PyInventory` actions, and `PySystem` (`Console`), which is unwritten |
+| 9 | `ChatCommands` | 217 lines, 22 members | the `chat` senders are ported and live | native's registry is *invoked by the client*: `chat_commands.cpp:56-79` hooks `kSendChatMessage`, checks `CHANNEL_COMMAND` and sets `blocked` to swallow the command before the game's own callback runs. A **blocking** UI-message hook is a capability this port does not have — its observer runs after the call and cannot swallow — and `PySystem.Console` is unwritten. The smallest member count in the list and the most new capability |
+
+**The order this gives: `Effects`, then `Quest`, then `Camera`, then `Merchant`.** `Effects`
+is first because it is the only class whose work is entirely inside things that already
+exist, and because it closes two `Agent` members on the way. `ChatCommands` is last despite
+being second-smallest: its size is the part that is already cheap.
+
+## 8. Reproducing these numbers
 
 Resolver counts per catalog area, from the project root. `crash.json` and `guild.json`
 carry only `patterns` and no `resolvers`, so the lookup is a `.get`:

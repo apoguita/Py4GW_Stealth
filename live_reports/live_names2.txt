@@ -1,0 +1,16 @@
+﻿python.exe : test_encoded_names_are_the_clients_own_bytes 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_encoded_names_are_the_clients_own_bytes)
+At line:1 char:201
++ ... W_Stealth'; & python -m unittest tests.test_live_agent_effects -v 2>& ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (test_encoded_na...ents_own_bytes):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+``Agent.GetEncNameByID`` returns the binding's bytes, terminator included. ... ok
+test_get_instance_holds_the_agent_id 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_get_instance_holds_the_agent_id)
+``Effects.get_instance`` is the binding object (``Effect.py:6-14``). ... ok
+test_martial_and_melee_follow_the_weapon_table 
+(tests.test_live_agent_effects.LiveAgentEffectsTests.test_martial_and_melee_follow_the_weapon_table)
+``IsMartial``/``IsMelee`` are the source's body: the effect first, then the pet, then the ... FAIL
+test_names_decode_to_text (tests.test_live_agent_effects.LiveAgentEffectsTests.test_names_decode_to_text)

@@ -1,0 +1,12 @@
+{"stage": "client", "pid": 35416, "path": "F:\\GW\\GW1\\Gw.exe"}
+{"stage": "connect", "ms": 1027.917, "table": {"entries": 0, "slots_read": 0, "loaded": false, "status": "not requested"}, "note": "the connection starts the string-table warm-up; connect does not wait for it"}
+{"stage": "player", "agent_id": 25, "xy": [-6496.63427734375, -2817.952392578125]}
+{"stage": "pass", "index": 1, "agents": 41, "names_answered": 0, "ms": 947.716, "name_call_ms": {"min": 0.0759, "median": 0.0849, "max": 127.6044}, "matches": 0, "closest": null, "table": {"entries": 0, "slots_read": 0, "loaded": false, "status": "not requested"}}
+{"stage": "pass", "index": 2, "agents": 41, "names_answered": 22, "ms": 1662.93, "name_call_ms": {"min": 0.0855, "median": 0.2118, "max": 133.5037}, "matches": 1, "closest": {"agent_id": 53, "name": "Master of Winds", "distance": 79.531}, "table": {"entries": 0, "slots_read": 0, "loaded": false, "status": "not requested"}}
+{"stage": "found", "name": "Master of Winds", "agent_id": 53, "decoded_name": "Master of Winds", "distance": 79.531, "passes": 2, "search_ms": 2866.259}
+{"stage": "target", "agent_id": 53, "call_ms": 31.965, "observed_target_id": 0, "agreed": false, "note": "the id is what the client last announced, read once after the call"}
+{"stage": "interact", "agent_id": 53, "ms": 33.175}
+{"stage": "research", "agents": 41, "names_answered": 36, "ms": 465.704, "name_call_ms": {"min": 0.0763, "median": 0.0933, "max": 117.041}, "note": "the same pass with the files already read: no warm-up left to pay"}
+{"stage": "total", "run_ms": 4017.612, "connect_ms": 1027.917, "search_ms": 3977.093, "target_call_ms": 31.965, "interact_ms": 33.175, "warm_research_ms": 465.704, "table": {"entries": 0, "slots_read": 0, "loaded": false, "status": "not requested"}}
+{"stage": "finished"}
+{"stage": "disconnected", "ms": 579.129}

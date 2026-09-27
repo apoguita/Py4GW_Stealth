@@ -1,0 +1,79 @@
+{"stage": "warmup_stopped", "status": "loaded 1024 entries from 1 files"}
+{"stage": "attempt", "index": 0, "agent_id": 15, "text": "", "ms": 111.002, "in_flight": 1, "states": ["IN_FLIGHT"], "cached": 0}
+{"stage": "attempt", "index": 0, "agent_id": 16, "text": "", "ms": 116.642, "in_flight": 2, "states": ["FREE", "DONE"], "cached": 0}
+{"stage": "attempt", "index": 0, "agent_id": 26, "text": "", "ms": 116.851, "in_flight": 3, "states": ["DONE", "FREE", "DONE"], "cached": 0}
+{"stage": "attempt", "index": 0, "agent_id": 27, "text": "", "ms": 115.565, "in_flight": 4, "states": ["FREE", "IN_FLIGHT", "FREE", "IN_FLIGHT"], "cached": 0}
+{"stage": "attempt", "index": 0, "agent_id": 28, "text": "", "ms": 115.729, "in_flight": 5, "states": ["DONE", "FREE", "DONE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 0, "agent_id": 29, "text": "", "ms": 116.672, "in_flight": 6, "states": ["FREE", "IN_FLIGHT", "FREE", "IN_FLIGHT"], "cached": 0}
+{"stage": "progress", "attempt": 0, "cached": 0, "in_flight": 6, "states": ["FREE", "IN_FLIGHT", "FREE", "IN_FLIGHT", "FREE", "IN_FLIGHT"]}
+{"stage": "attempt", "index": 1, "agent_id": 15, "text": "", "ms": 0.252, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 1, "agent_id": 16, "text": "", "ms": 0.138, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 1, "agent_id": 26, "text": "", "ms": 0.112, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 1, "agent_id": 27, "text": "", "ms": 0.097, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 1, "agent_id": 28, "text": "", "ms": 0.118, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 1, "agent_id": 29, "text": "", "ms": 0.128, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 2, "agent_id": 15, "text": "", "ms": 0.255, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 2, "agent_id": 16, "text": "", "ms": 0.15, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 2, "agent_id": 26, "text": "", "ms": 0.122, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 2, "agent_id": 27, "text": "", "ms": 0.119, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 2, "agent_id": 28, "text": "", "ms": 0.124, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 2, "agent_id": 29, "text": "", "ms": 0.151, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 3, "agent_id": 15, "text": "", "ms": 0.2, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 3, "agent_id": 16, "text": "", "ms": 0.133, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 3, "agent_id": 26, "text": "", "ms": 0.115, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 3, "agent_id": 27, "text": "", "ms": 0.099, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 3, "agent_id": 28, "text": "", "ms": 0.121, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 3, "agent_id": 29, "text": "", "ms": 0.127, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "progress", "attempt": 3, "cached": 0, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE", "FREE", "FREE"]}
+{"stage": "attempt", "index": 4, "agent_id": 15, "text": "", "ms": 0.196, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 4, "agent_id": 16, "text": "", "ms": 0.134, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 4, "agent_id": 26, "text": "", "ms": 0.108, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 4, "agent_id": 27, "text": "", "ms": 0.1, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 4, "agent_id": 28, "text": "", "ms": 0.122, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 4, "agent_id": 29, "text": "", "ms": 0.128, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 5, "agent_id": 15, "text": "", "ms": 0.325, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 5, "agent_id": 16, "text": "", "ms": 0.132, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 5, "agent_id": 26, "text": "", "ms": 0.114, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 5, "agent_id": 27, "text": "", "ms": 0.105, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 5, "agent_id": 28, "text": "", "ms": 0.131, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 5, "agent_id": 29, "text": "", "ms": 0.15, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 6, "agent_id": 15, "text": "", "ms": 0.264, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 6, "agent_id": 16, "text": "", "ms": 0.14, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 6, "agent_id": 26, "text": "", "ms": 0.112, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 6, "agent_id": 27, "text": "", "ms": 0.098, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 6, "agent_id": 28, "text": "", "ms": 0.118, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 6, "agent_id": 29, "text": "", "ms": 0.13, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 7, "agent_id": 15, "text": "", "ms": 0.216, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 7, "agent_id": 16, "text": "", "ms": 0.809, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 7, "agent_id": 26, "text": "", "ms": 0.212, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 7, "agent_id": 27, "text": "", "ms": 0.341, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 7, "agent_id": 28, "text": "", "ms": 0.148, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 7, "agent_id": 29, "text": "", "ms": 0.527, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "progress", "attempt": 7, "cached": 0, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE", "FREE", "FREE"]}
+{"stage": "attempt", "index": 8, "agent_id": 15, "text": "", "ms": 0.232, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 8, "agent_id": 16, "text": "", "ms": 0.139, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 8, "agent_id": 26, "text": "", "ms": 0.116, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 8, "agent_id": 27, "text": "", "ms": 0.099, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 8, "agent_id": 28, "text": "", "ms": 0.122, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 8, "agent_id": 29, "text": "", "ms": 0.18, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 9, "agent_id": 15, "text": "", "ms": 0.235, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 9, "agent_id": 16, "text": "", "ms": 0.125, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 9, "agent_id": 26, "text": "", "ms": 0.109, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 9, "agent_id": 27, "text": "", "ms": 0.097, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 9, "agent_id": 28, "text": "", "ms": 0.12, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 9, "agent_id": 29, "text": "", "ms": 0.133, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 10, "agent_id": 15, "text": "", "ms": 0.213, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 10, "agent_id": 16, "text": "", "ms": 0.135, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 10, "agent_id": 26, "text": "", "ms": 0.113, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 10, "agent_id": 27, "text": "", "ms": 0.097, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 10, "agent_id": 28, "text": "", "ms": 0.119, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 10, "agent_id": 29, "text": "", "ms": 0.127, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 11, "agent_id": 15, "text": "", "ms": 0.192, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 11, "agent_id": 16, "text": "", "ms": 0.145, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 11, "agent_id": 26, "text": "", "ms": 0.109, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 11, "agent_id": 27, "text": "", "ms": 0.101, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 11, "agent_id": 28, "text": "", "ms": 0.118, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "attempt", "index": 11, "agent_id": 29, "text": "", "ms": 0.127, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE"], "cached": 0}
+{"stage": "progress", "attempt": 11, "cached": 0, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE", "FREE", "FREE"]}
+{"stage": "done", "cached": {}, "in_flight": 6, "states": ["FREE", "FREE", "FREE", "FREE", "FREE", "FREE"], "decoded_states": ["DONE", "FAILED"]}
+{"stage": "disconnected"}

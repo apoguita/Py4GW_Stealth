@@ -42,20 +42,22 @@ from py4gw.context.skill_context import (
     SkillStruct,
 )
 from py4gw.skill import (
-    PROFESSION_NAMES,
-    SKILL_TYPE_NAMES,
     PySkill,
     Skill,
     SkillID,
     SkillProfession,
     SkillType,
 )
-from py4gw.skill_names import (
+from py4gw.enums_src.skill_names import (
     ID_TO_NAME,
     NAME_TO_ID,
+    PROFESSION_NAMES,
     SKILL_NAME_TABLE,
+    SKILL_TYPE_NAMES,
+    GetProfessionNameById,
     GetSkillIDByName,
     GetSkillNameByID,
+    GetSkillTypeNameByID,
 )
 
 #: Reforged's own file, and the native sources the binding and the record come from.

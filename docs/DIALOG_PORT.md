@@ -21,7 +21,7 @@ what each one unblocks beyond `Dialog` — is
 | Layer | In the source | Here |
 | --- | --- | --- |
 | Facade | `Dialog.py` — 10 module members | module functions and two of the six records |
-| Surface | `PyDialog` (32 statics + 6 records) | `class PyDialog` and the state it reads |
+| Surface | `PyDialog` (32 statics + 6 records) | `class Dialog` and the state it reads |
 | State | `dialog.cpp` file-scope variables, written by four message handlers | module-level state in `dialog.py`, written by the connection's capture |
 
 The facade is small and its member list is exact. `Dialog.py` declares ten: `_safe_call`,
@@ -103,11 +103,15 @@ Transcribed from `dialog.cpp`, with the source's order and short-circuits:
    the same process cannot be read as if it belonged to the client now connected. `_reset()` is
    the *offline suite's* way back to the module's as-loaded state; the connection never calls it.
 
-## The surface: 32 of 32 answer
+## The surface: 31 of 32 answer
 
-Every name below is native's, in native's declaration order. Nothing is added. **No member
-refuses**; the two items that are not finished work are named after the table and are both about
-*what a member can read on this build*, not about the member being written.
+Every name below is native's, in native's declaration order. Nothing is added. **One member
+refuses**: `get_dialog_text_decoded`, and with it the catalog `content` that `get_dialog_info`
+and `enumerate_available_dialogs` carry, all three waiting on this build's
+`DialogLoader_GetText`. It reports the work in the source's own terms rather than calling the
+sources' stale constant or answering an empty string in its place. The one other refusal is the
+facade helper that would reach a binding object by dynamic name — a documented divergence, not a
+member.
 
 | Member | State |
 | --- | --- |
@@ -177,12 +181,15 @@ one-argument loader. The port therefore:
   loader rewrites its header to the address it was loaded at, so a header-based rebase was a
   no-op and put the first call 0x210000 below the address the sources mean
   (`RemoteScanner._LINK_IMAGE_BASE`, and the crash record in [`RESEARCH.md`](RESEARCH.md));
-- **confirms a candidate's entry bytes** (a prologue, or a `jmp rel32` thunk to one, inside
-  `.text`) and answers `0` otherwise, which is the source's own "no loader" path — empty text,
-  pending cleared (`dialog.cpp:1166-1177`);
-- **does not walk back to a function start**, deliberately: `to_function_start(0x9AEEF0)` is
-  `0x9AEEB0`, a real entry the check would accept, and calling *that* with a dialog id would
-  dereference an integer.
+- **does not call the address**, and does not check its bytes either. The source rebases
+  `DialogMemory::DIALOG_LOADER_GETTEXT` and calls it unconditionally
+  (`dialog_patterns.cpp:261-269`); on this build that address is inside another function, and a
+  call to it faulted the client on 2026-09-25. **An earlier pass answered this with a
+  byte-shape check of its own — a prologue, or a `jmp rel32` thunk to one — and that check is
+  gone**: a guard the source does not make is not this project's to add, whatever it prevents
+  (`PORTING_RULES.md`). What stands there now is the port's own refusal: the member that needs
+  the loader reports it and names the work, instead of calling an address the sources only
+  guarantee on their own build.
 
 So the remaining work is a **resolver for this build's `DialogLoader_GetText`** — identified by a
 signature rather than by the table's address. The client carries its own dialog assertion strings
@@ -199,12 +206,19 @@ onto the live module, with a validation pass and a heuristic .rdata fallback sca
 They cannot move into `offsets/*.json` because the pattern system has no
 module-base-relative op."*
 
-**That op now exists**, which is the whole fix: `module_relative` in
-`py4gw/scanner/patterns.py`, with `RemoteScanner.to_module_address()` behind it. The five
-`DialogMemory` addresses live in `offsets/dialog.json` exactly as the source keeps them
-in `dialog.h:94-99`, and everything that is dialog semantics rather than pattern
-mechanics — the two resolution stages, the validation pass, the derivation of the other
-four bases — is `DialogTables` in `py4gw/dialog.py`, the port of `dialog_patterns.cpp`.
+**The fix is the source's own code, in the source's own place — and it is not a catalog entry.**
+Native keeps those addresses as constants in `DialogMemory` (`dialog.h:94-99`) and rebases them
+in `dialog_patterns.cpp`, precisely because its pattern system cannot express them
+(`dialog.h:80-85`). This port does the same: the six constants are `py4gw/dialog.py`'s own,
+rebased through `RemoteScanner.to_module_address()`, and everything that is dialog semantics
+rather than pattern mechanics — the two resolution stages, the validation pass, the derivation of
+the other four bases — is `DialogTables` in the same file, the port of `dialog_patterns.cpp`.
+
+**An earlier pass had put them in `offsets/dialog.json`, with a `module_relative` op added to the
+resolver engine to read them, and both are removed** (2026-09-26, on the project owner's
+direction): a file that exists in no source project is not this project's to add, and neither is
+a mechanism op its sources never had. The removal is why the port now carries the constants in
+code — which is where the source keeps them — instead of spelling them as catalog data.
 
 The arithmetic is the source's: `module_base + (va - kGwImageBase)`, the constant
 `0x00400000` that `ToRuntimeAddress` uses (`dialog_patterns.cpp:23-31`). **The module's own
@@ -228,8 +242,10 @@ The five hardcoded addresses do **not** validate on this client, so the static s
 rejected and the `.rdata` scan supplies the bases — which is the source's design working
 as written, not a workaround. The scan's result then passes the source's own validation
 rules over all 58 rows: **56 rows enabled**, every flags word within `0xFFFF`, and every
-nonzero event handler inside `.text` (`0x0070B8D0`, `0x00AF3450`, …). `DialogLoader_GetText`
-rebases to `0x0079EEF0`.
+nonzero event handler inside `.text` (`0x0070B8D0`, `0x00AF3450`, …). The loader's constant is
+`0x0079EEF0` (`dialog.h:99`), which this module rebases to `0x9AEEF0`; **that is not the loader
+on this build** — the address lands inside another function and calling it faulted the client —
+so the port's members that need it report the need instead of calling it (below).
 
 ## What is still open, and it is not a member
 
@@ -241,8 +257,10 @@ carry what the source's do: the packet bytes the client sent, the tick, the map 
 and the ``map:model:agent`` uid.
 
 **One thing no member can produce on this build yet**, and it is **deferred to a later pass by the
-project owner**: this build's ``DialogLoader_GetText``, so a catalog dialog's ``content`` is empty
-(the refusal is the source's own "no loader" value).
+project owner**: this build's ``DialogLoader_GetText``, so a catalog dialog's ``content`` is empty.
+The member that needs it — ``get_dialog_text_decoded``, and through it ``get_dialog_info`` and
+``enumerate_available_dialogs`` — **reports the need and names the work; it does not call the
+sources' constant and it does not answer a plausible empty string in place of one.**
 The button **caption** used to be listed here beside it, and it is the one item in this port whose
 finding was wrong for a reason worth keeping: the label was read from the host, after the client's
 own call, and what it read there was a buffer the client reuses. The paragraph below is what the
@@ -270,12 +288,12 @@ own decoder, with both ``recv_choice`` rows carrying them. The announced pointer
 still holds ``743b c047 0a92 4006`` and names nothing — which is what the port was reading before.
 
 **One item remains, and the project owner has deferred it to a later pass: this build's
-`DialogLoader_GetText`.** Every member of the class answers, and a button's caption is produced; a
-catalog dialog's `content` is empty because the client function the source calls through has not been
-identified here yet. **The sources are complete and working** — `Reforged Native` resolves a loader
-and calls it — so the function exists to find, and the last pass settled where to look. Until it is
-identified the loader resolution answers the source's own "no loader" value, so the content is empty
-rather than wrong. **It stopped asking the client and read the
+`DialogLoader_GetText`.** Every member of the class answers except the text the loader supplies, and
+a button's caption is produced; a catalog dialog's `content` is not produced because the client
+function the source calls through has not been identified here yet, and the member that needs it
+says so rather than calling the sources' stale constant. **The sources are complete and working** —
+`Reforged Native` resolves a loader and calls it — so the function exists to find, and the last pass
+settled where to look. **It stopped asking the client and read the
 file** (`Gw.exe` on disk, no hook, no elevation; `tools/dialog_loader_hunt.py` and
 `tools/ghidra_scripts/`), and what it establishes sharpens the search:
 
@@ -325,7 +343,7 @@ real button's id (`MAX_DIALOG_ID = 0x39`).
 | The decode's **request and transport** | the request is a heap object, handed to `AsyncDecodeStr` as `param`, and the client calls back into the runtime (`dialog.cpp:863-882`, `1239`, `692`, `885`) | the request is recorded against a **decode slot** of the shared block, the copy is placed in that slot, `validate_async_decode_str_func` is called with the emitted stub as the callback, and the completion arrives as a `STRING_DECODED` event (`py4gw/ui/async_decode.py`) | Nothing of this project's runs inside the client, so the callback has to be machine code placed there and the text has to be carried out. The order is the source's — prepare the request, then call — and the wrapper's three refusals answer with the source's own values (`L""`, `L"!!!"`, `L""`). |
 | The string a decode is handed | `DupWideStringSafe` copies a NUL-terminated wide string with `wcslen` inside a `__try` (`dialog.cpp:237-252`) | a bounded read of at most `MAX_DIALOG_TEXT_CODE_UNITS` (4096) units, no terminator inside it being the failed copy | This side has no SEH frame, so the read is bounded instead. The bound is far past any dialog text; a longer string is reported as a failed copy rather than read on. |
 | The drain in `terminate` | waits on a condition variable its decode callbacks notify, logs past `kDialogAsyncDrainTimeout` and **keeps waiting** (`dialog.cpp:1343-1358`, `1367-1385`) | waits up to the same timeout, then raises naming the count | Waiting for ever would hang a disconnect on a stub the client may never call, and continuing past the timeout would free memory the client can still write into. The fail-closed part is kept; the log has no external equivalent (see the diagnostics row), so the report is the exception. |
-| The loader's address | `ResolveDialogLoaderGetText` returns the rebased constant unconditionally (`dialog_patterns.cpp:261-269`) | the candidate's entry bytes are confirmed first, and a candidate that is not a function answers `0` | An address was called here that crashed the client on 2026-09-25; the sources' constant is stale on this build and lands inside a packet deserializer (`FUN_0079EEB0` — the file, decompiled, in [`RESEARCH.md`](RESEARCH.md)). The confirmation is this project's, and it is why every catalog id caches empty text today — the finding, with its search method, is in [`RESEARCH.md`](RESEARCH.md). **The four helpers it uses** (`_is_function_entry`, `_entry_kind`, `_is_prologue`, `_read_head`) have no source counterpart, and the check answers the source's own "no loader" branch (`1166-1177`), which is what keeps the behaviour legal: an unresolved loader is one of the source's cases, not a substitute for one. |
+| The loader's address | `ResolveDialogLoaderGetText` returns the rebased constant unconditionally (`dialog_patterns.cpp:261-269`), and `QueueDialogTextDecode` calls it (`dialog.cpp:1166`) | the constant is the port's own (`py4gw/dialog.py`, `DIALOG_LOADER_GETTEXT`) and is rebased the same way, but **the member that needs it reports the need instead of calling it** | An earlier pass called an address here and crashed the client on 2026-09-25; the sources' constant is stale on this build and lands inside a packet deserializer (`FUN_0079EEB0` — the file, decompiled, in [`RESEARCH.md`](RESEARCH.md)). That pass then added a byte-shape check of its own — **removed 2026-09-26**: the source makes no such check, and a guard of this project's is not a legal way to keep a member answering. What is legal is what stands there now: `get_dialog_text_decoded` raises and names the work item, and everything the source does after the loader call is ported below that point and waits on it. **The four helpers the check used** (`_is_function_entry`, `_entry_kind`, `_is_prologue`, `_read_head`) went with it; so did the "no loader" branch, which was the check's own answer rather than the source's — the source's `ResolveDialogLoaderGetText` never returns zero. |
 | The body case's **flow** | one `append_immediate` flag and one `immediate_text`, set by the branches and appended **once** under one guard at the end (`dialog.cpp:827-928`) | three early returns, each with its own guarded append (`_append_body_text_row`) | **A shape divergence with no value difference found**, named here as work rather than left implicit: the guards reproduce the source's, but the *flow* is not the source's, and the same applies to the button case (`_append_button_journal_entry`) and to the three row builders that carry both of the source's sites' guard sets. Closing it means the source's flag-and-append-once structure, one case at a time, verified as it moves. |
 
 One facade behaviour is worth noting because it looks like a gap and is not:
@@ -336,7 +354,7 @@ an empty body — this is a **pending decode**, not a missing branch.
 
 ## Verification
 
-- `tests/test_dialog_offline.py` — **120 tests**. They pin the surface by name: the 32
+- `tests/test_dialog_offline.py` — **110 tests**. They pin the surface by name: the 32
   statics and their order (the list *is* the binding's, and the test fails if a member is
   dropped or added), the 6 record classes, that **no member of the surface refuses** — the
   one refusal left in the module is the facade helper that would reach a binding object by
@@ -349,11 +367,13 @@ an empty body — this is a **pending decode**, not a missing branch.
   makes before any body arrives, `clear_cache`, the served getters' own cases, and the
   inline-choice parser and sanitiser on the source's.
 - **The table resolver, offline but against a synthetic client** (`DialogTableTests`):
-  the static rebase when it validates, the `.rdata` fallback when it does not, the
-  derivation of the other four bases from the scanned one, a table that fails validation
-  resolving to nothing (and staying marked resolved, as native does), a static stage that
-  fails falling through to the scan, invalidation re-resolving, the loader address
-  surviving invalidation, and an unreadable word reporting `None` rather than raising.
+  the static rebase from the sources' own constants when it validates, the `.rdata` fallback when
+  it does not, the derivation of the other four bases from the scanned one, a table that fails
+  validation resolving to nothing (and staying marked resolved, as native does), a static stage
+  that fails falling through to the scan, invalidation re-resolving, the sources' loader constant
+  rebasing and surviving invalidation, and an unreadable word reporting `None` rather than raising.
+  (The suite had tests for the port's own byte-shape check; they went with the check on
+  2026-09-26.)
 - **Live, read-only** (`tests/probe_dialog_tables.py`): the five bases, the stage that
   supplied them, and the 56 enabled rows — the table above.
 - **Offline, against `Gw.exe` itself** (`tools/dialog_loader_hunt.py`; no client, no elevation):

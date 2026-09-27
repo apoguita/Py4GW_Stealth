@@ -1,0 +1,41 @@
+{"stage": "client", "pid": 20496, "path": "F:\\GW\\GW1\\Gw.exe"}
+{"stage": "connected", "string_table_loaded": false, "table_status": "language 0: read on demand, one file per entry (0 file(s) read)"}
+{"stage": "slots", "available": true, "language_id": 0, "entries_per_file": 1024, "slot_count": 99}
+{"stage": "slot", "index": 0, "present": true, "lang_id": 0, "start_index": 0, "end_index": 1024, "assumed_start_index": 0, "hash_code_units": 2}
+{"stage": "slot", "index": 1, "present": true, "lang_id": 0, "start_index": 1024, "end_index": 2048, "assumed_start_index": 1024, "hash_code_units": 2}
+{"stage": "slot", "index": 2, "present": true, "lang_id": 0, "start_index": 2048, "end_index": 3072, "assumed_start_index": 2048, "hash_code_units": 2}
+{"stage": "slot", "index": 3, "present": true, "lang_id": 0, "start_index": 3072, "end_index": 4096, "assumed_start_index": 3072, "hash_code_units": 2}
+{"stage": "slot", "index": 4, "present": true, "lang_id": 0, "start_index": 4096, "end_index": 5120, "assumed_start_index": 4096, "hash_code_units": 2}
+{"stage": "slot", "index": 5, "present": true, "lang_id": 0, "start_index": 5120, "end_index": 6144, "assumed_start_index": 5120, "hash_code_units": 2}
+{"stage": "slot", "index": 6, "present": true, "lang_id": 0, "start_index": 6144, "end_index": 7168, "assumed_start_index": 6144, "hash_code_units": 2}
+{"stage": "slot", "index": 7, "present": true, "lang_id": 0, "start_index": 7168, "end_index": 8192, "assumed_start_index": 7168, "hash_code_units": 2}
+{"stage": "agents", "total": 43, "own_agent": 25}
+{"stage": "candidates", "ids": [15, 16, 26, 27, 28, 29]}
+{"stage": "agent", "agent_id": 15, "type": 512, "is_gadget": true, "name_bytes": [110, 12, 0, 0], "pointer": 672027352}
+{"stage": "compare", "agent_id": 15, "client_name": "", "client_ms": 136.905, "client_call_started": true, "port_name": "Random Arenas", "port_ms": 2067.753, "agree": false, "table_status": "slot 2: 1024 entries from one file (1 file(s) read, 1024 entries held)"}
+{"stage": "gadget_walk", "agent_id": 15, "available": true, "summary_valid": true, "summary_size": 1010}
+{"stage": "gadget_walk_record", "agent_id": 15, "record": true, "extra_info_sub_ptr": 663221008}
+{"stage": "gadget_walk_sub", "agent_id": 15, "sub": true, "gadget_name_enc": 0, "gadget_id": 75, "composite_agent_id": 3266593668}
+{"stage": "gadget_walk_info", "agent_id": 15, "gadget_info_valid": true, "gadget_info_size": 9524, "gadget_id": 75}
+{"stage": "gadget_walk_info_record", "agent_id": 15, "record": true, "name_enc": 672027352}
+{"stage": "agent", "agent_id": 16, "type": 512, "is_gadget": true, "name_bytes": [158, 12, 0, 0], "pointer": 672027304}
+{"stage": "compare", "agent_id": 16, "client_name": "", "client_ms": 131.237, "client_call_started": true, "port_name": "Great Temple of Balthazar", "port_ms": 20.675, "agree": false, "table_status": "slot 2: 1024 entries from one file (1 file(s) read, 1024 entries held)"}
+{"stage": "gadget_walk", "agent_id": 16, "available": true, "summary_valid": true, "summary_size": 1010}
+{"stage": "gadget_walk_record", "agent_id": 16, "record": true, "extra_info_sub_ptr": 663223568}
+{"stage": "gadget_walk_sub", "agent_id": 16, "sub": true, "gadget_name_enc": 0, "gadget_id": 3651, "composite_agent_id": 3287564868}
+{"stage": "gadget_walk_info", "agent_id": 16, "gadget_info_valid": true, "gadget_info_size": 9524, "gadget_id": 3651}
+{"stage": "gadget_walk_info_record", "agent_id": 16, "record": true, "name_enc": 672027304}
+{"stage": "agent", "agent_id": 26, "type": 219, "is_gadget": false, "name_bytes": [2, 129, 79, 6, 0, 0], "pointer": 672041352}
+{"stage": "compare", "agent_id": 26, "client_name": "", "client_ms": 132.624, "client_call_started": true, "port_name": "Vekk", "port_ms": 1060.147, "agree": false, "table_status": "slot 64: 1024 entries from one file (2 file(s) read, 2048 entries held)"}
+{"stage": "agent", "agent_id": 27, "type": 219, "is_gadget": false, "name_bytes": [1, 129, 170, 56, 0, 0], "pointer": 672041368}
+{"stage": "compare", "agent_id": 27, "client_name": "", "client_ms": 144.845, "client_call_started": true, "port_name": "Dunkoro", "port_ms": 1055.677, "agree": false, "table_status": "slot 45: 1024 entries from one file (3 file(s) read, 3072 entries held)"}
+{"stage": "agent", "agent_id": 28, "type": 219, "is_gadget": false, "name_bytes": [170, 11, 7, 1, 77, 0, 121, 0, 32, 0, 80, 0, 101, 0, 116, 0, 1, 0, 0, 0], "pointer": 1316731064}
+{"stage": "compare", "agent_id": 28, "client_name": "", "client_ms": 121.679, "client_call_started": true, "port_name": "Pet - %str1%", "port_ms": 20.729, "agree": false, "table_status": "slot 45: 1024 entries from one file (3 file(s) read, 3072 entries held)"}
+{"stage": "agent", "agent_id": 29, "type": 512, "is_gadget": true, "name_bytes": [2, 129, 181, 55, 170, 233, 10, 235, 12, 92, 0, 0], "pointer": 177651040}
+{"stage": "compare", "agent_id": 29, "client_name": "", "client_ms": 139.241, "client_call_started": true, "port_name": "Zaishen Chest", "port_ms": 1066.793, "agree": false, "table_status": "slot 77: 1024 entries from one file (4 file(s) read, 4096 entries held)"}
+{"stage": "gadget_walk", "agent_id": 29, "available": true, "summary_valid": true, "summary_size": 1010}
+{"stage": "gadget_walk_record", "agent_id": 29, "record": true, "extra_info_sub_ptr": 1160690248}
+{"stage": "gadget_walk_sub", "agent_id": 29, "sub": true, "gadget_name_enc": 0, "gadget_id": 9523, "composite_agent_id": 3345050285}
+{"stage": "gadget_walk_info", "agent_id": 29, "gadget_info_valid": true, "gadget_info_size": 9524, "gadget_id": 9523}
+{"stage": "gadget_walk_info_record", "agent_id": 29, "record": true, "name_enc": 177651040}
+{"stage": "done", "compared": 6}

@@ -42,24 +42,31 @@ DIALOG_SEND = dialog.DIALOG_SEND_AGENT_MESSAGE
 #: The synthetic client the table resolver reads: an ``.rdata`` window it can read a
 #: word from or buffer whole, and the two section ranges the source's rules compare
 #: against. It stands in for ``RemoteScanner`` plus ``ProcessMemoryReader``, and it
-#: serves the resolver's two read paths from the same bytes so a test can place a table
-#: in one place and see both stages agree about it.
-RDATA_START = 0x1000
-RDATA_END = 0x11000
-TEXT_START = 0x20000
-TEXT_END = 0x30000
+#: serves the resolver's read paths from the same bytes so a test can place a table in
+#: one place and see both stages agree about it.
+#:
+#: The layout is the sources' own arithmetic. ``kGwImageBase`` is ``0x00400000``
+#: (``dialog_patterns.cpp:21``) and ``ToRuntimeAddress`` is
+#: ``module_base + (va - kGwImageBase)`` (``:25-31``), so a synthetic client is a module
+#: base plus the delta the module was loaded at, and the constants the resolver rebases are
+#: the real ones (:data:`py4gw.dialog.FLAGS_BASE` and its neighbours). With
+#: :data:`LOAD_DELTA` as the delta they land exactly on :data:`FLAGS_AT`.
+IMAGE_BASE = 0x00400000
+LOAD_DELTA = 0x600000
+MODULE_BASE = IMAGE_BASE + LOAD_DELTA
 
-#: Where a valid flags column is placed in the synthetic ``.rdata``.
-FLAGS_AT = 0x2000
+#: Where the five columns of a table sit once ``DialogMemory``'s constants are rebased
+#: onto the synthetic module, and the section windows around it. The window holds the
+#: table and the text section the handler column has to point into.
+FLAGS_AT = dialog.FLAGS_BASE + LOAD_DELTA
+RDATA_START = FLAGS_AT - 0x2000
+RDATA_END = FLAGS_AT + 0x2000
+TEXT_START = FLAGS_AT + 0x10000
+TEXT_END = TEXT_START + 0x10000
 
 
 class _Memory:
-    """A flat byte image with the two reads the resolver makes.
-
-    It covers ``.rdata`` and ``.text`` — not just the data section — because the loader check
-    reads the candidate's entry bytes, and a client whose code section cannot be read is a
-    client whose loader cannot be confirmed.
-    """
+    """A flat byte image with the reads the resolver makes."""
 
     def __init__(self, start: int, size: int) -> None:
         self.start = start
@@ -86,11 +93,14 @@ class _Range:
 
 
 class _FakeScanner:
-    """``RemoteScanner``'s two operations, over one :class:`_Memory`."""
+    """``RemoteScanner``'s operations, over one :class:`_Memory`."""
 
-    def __init__(self, memory: _Memory, sections: dict[str, _Range]) -> None:
+    def __init__(
+        self, memory: _Memory, sections: dict[str, _Range], module_base: int
+    ) -> None:
         self._memory = memory
         self._sections = sections
+        self._module_base = module_base
 
     def read_uint32(self, address: int) -> int:
         return self._memory.read_u32(address)
@@ -100,32 +110,29 @@ class _FakeScanner:
             raise ValueError(f"Unknown module section: {name}")
         return self._sections[name]
 
+    @property
+    def image_base(self) -> int:
+        """``kGwImageBase``: the base the sources rebase with (``remote.py:160-168``)."""
 
-class _Resolution:
-    def __init__(self, value: int) -> None:
-        self.ok = value != 0
-        self.value = value
+        return IMAGE_BASE
 
+    def to_module_address(self, va: int) -> int:
+        """``ToRuntimeAddress`` (``dialog_patterns.cpp:25-31``)."""
 
-class _FakePatterns:
-    """``PatternCatalog.resolve`` for the six dialog resolvers."""
-
-    def __init__(self, bases: dict[str, int], loader: int = 0) -> None:
-        self.bases = dict(bases)
-        self.loader = loader
-
-    def resolve(self, name: str, scanner: object) -> _Resolution:
-        if name == dialog.DialogTables._LOADER_RESOLVER:
-            return _Resolution(self.loader)
-        return _Resolution(self.bases.get(name, 0))
+        return self._module_base + (va - self.image_base)
 
 
 def _client_memory(
-    bases: dict[str, int] | None = None,
     *,
     mode: str = "empty",
-) -> tuple[_Memory, _FakeScanner, _FakePatterns]:
+    shift: int = 0,
+) -> tuple[_Memory, _FakeScanner]:
     """Build one synthetic client for the resolver.
+
+    ``shift`` is how far the module is loaded from where the source's constants describe
+    it. At ``0`` the five constants land exactly on the table at :data:`FLAGS_AT`, so
+    ``BuildStaticDialogTables`` validates and is the stage in use; any other value moves
+    them off it, which is the case ``ResolveFlagsBase``'s scan exists for.
 
     The window starts filled with ``0xFFFFFFFF``, which is what makes the source's two
     rules mean something: a word above ``0xFFFF`` fails the flags rule, and a word that
@@ -159,15 +166,7 @@ def _client_memory(
         "rdata": _Range(RDATA_START, RDATA_END),
         "text": _Range(TEXT_START, TEXT_END),
     }
-    names = (
-        "flags_base",
-        "frame_type_base",
-        "event_handler_base",
-        "content_id_base",
-        "property_id_base",
-    )
-    resolved = {f"dialog.{name}": (bases or {}).get(name, 0) for name in names}
-    return memory, _FakeScanner(memory, sections), _FakePatterns(resolved)
+    return memory, _FakeScanner(memory, sections, MODULE_BASE + shift)
 
 
 #: The five bases as the source lays them out: the event handler eight bytes below the
@@ -175,11 +174,11 @@ def _client_memory(
 #: ``DialogMemory`` (``dialog.h:94-99``) is exactly this shape, and so is the derivation
 #: ``BuildResolvedDialogTables`` makes from a scanned flags base.
 STATIC_BASES = {
-    "flags_base": FLAGS_AT,
-    "frame_type_base": FLAGS_AT - 0x4,
-    "event_handler_base": FLAGS_AT - 0x8,
-    "content_id_base": FLAGS_AT + 0x4,
-    "property_id_base": FLAGS_AT + 0x8,
+    "flags_base": dialog.FLAGS_BASE + LOAD_DELTA,
+    "frame_type_base": dialog.FRAME_TYPE_BASE + LOAD_DELTA,
+    "event_handler_base": dialog.EVENT_HANDLER_BASE + LOAD_DELTA,
+    "content_id_base": dialog.CONTENT_ID_BASE + LOAD_DELTA,
+    "property_id_base": dialog.PROPERTY_ID_BASE + LOAD_DELTA,
 }
 
 #: Every module member of Reforged's ``Py4GWCoreLib/Dialog.py``, transcribed from that
@@ -247,35 +246,35 @@ PYDIALOG_RECORDS = (
 
 #: The five whose data this port already has, and what each returns with no dialog.
 SERVED_BY_STATE = (
-    ("get_active_dialog", lambda: dialog.PyDialog.get_active_dialog()),
-    ("get_active_dialog_buttons", lambda: dialog.PyDialog.get_active_dialog_buttons()),
-    ("get_last_selected_dialog_id", lambda: dialog.PyDialog.get_last_selected_dialog_id()),
-    ("is_dialog_displayed", lambda: dialog.PyDialog.is_dialog_displayed(7)),
-    ("clear_cache", lambda: dialog.PyDialog.clear_cache()),
+    ("get_active_dialog", lambda: dialog.Dialog.get_active_dialog()),
+    ("get_active_dialog_buttons", lambda: dialog.Dialog.get_active_dialog_buttons()),
+    ("get_last_selected_dialog_id", lambda: dialog.Dialog.get_last_selected_dialog_id()),
+    ("is_dialog_displayed", lambda: dialog.Dialog.is_dialog_displayed(7)),
+    ("clear_cache", lambda: dialog.Dialog.clear_cache()),
 )
 
 #: The six the metadata tables answer. They read the connected client, so a test needs
 #: a client with a scanner; what is pinned here is that they are *served* — the read
 #: path itself is exercised against the live client.
 SERVED_BY_TABLES = (
-    ("is_dialog_available", lambda: dialog.PyDialog.is_dialog_available(1)),
-    ("read_dialog_flags", lambda: dialog.PyDialog.read_dialog_flags(1)),
-    ("read_dialog_frame_type", lambda: dialog.PyDialog.read_dialog_frame_type(1)),
-    ("read_dialog_event_handler", lambda: dialog.PyDialog.read_dialog_event_handler(1)),
-    ("read_dialog_content_id", lambda: dialog.PyDialog.read_dialog_content_id(1)),
-    ("read_dialog_property_id", lambda: dialog.PyDialog.read_dialog_property_id(1)),
+    ("is_dialog_available", lambda: dialog.Dialog.is_dialog_available(1)),
+    ("read_dialog_flags", lambda: dialog.Dialog.read_dialog_flags(1)),
+    ("read_dialog_frame_type", lambda: dialog.Dialog.read_dialog_frame_type(1)),
+    ("read_dialog_event_handler", lambda: dialog.Dialog.read_dialog_event_handler(1)),
+    ("read_dialog_content_id", lambda: dialog.Dialog.read_dialog_content_id(1)),
+    ("read_dialog_property_id", lambda: dialog.Dialog.read_dialog_property_id(1)),
 )
 
 #: The member the frame array answers (``dialog.cpp:1666-1682``). Like the table readers it
 #: needs a connected client; what is pinned here is that it is *served*, and the lookup and
 #: state bits themselves are pinned in ``test_ui_frame_offline.py``.
 SERVED_BY_FRAMES = (
-    ("is_dialog_active", lambda: dialog.PyDialog.is_dialog_active()),
+    ("is_dialog_active", lambda: dialog.Dialog.is_dialog_active()),
 )
 
 #: The lifecycle member the connection now calls at install (``dialog.cpp:1315-1331``).
 SERVED_BY_LIFECYCLE = (
-    ("initialize", lambda: dialog.PyDialog.initialize()),
+    ("initialize", lambda: dialog.Dialog.initialize()),
 )
 
 #: The five the catalog's decode queue answers (``dialog.cpp:1136-1254`` and the members
@@ -284,57 +283,57 @@ SERVED_BY_LIFECYCLE = (
 #: the source's empty value rather than refusing. The queue itself is driven in
 #: ``DialogDecodeQueueTests``.
 SERVED_BY_CATALOG = (
-    ("get_dialog_info", lambda: dialog.PyDialog.get_dialog_info(1)),
-    ("enumerate_available_dialogs", lambda: dialog.PyDialog.enumerate_available_dialogs()),
-    ("get_dialog_text_decoded", lambda: dialog.PyDialog.get_dialog_text_decoded(1)),
+    ("get_dialog_info", lambda: dialog.Dialog.get_dialog_info(1)),
+    ("enumerate_available_dialogs", lambda: dialog.Dialog.enumerate_available_dialogs()),
+    ("get_dialog_text_decoded", lambda: dialog.Dialog.get_dialog_text_decoded(1)),
     (
         "is_dialog_text_decode_pending",
-        lambda: dialog.PyDialog.is_dialog_text_decode_pending(1),
+        lambda: dialog.Dialog.is_dialog_text_decode_pending(1),
     ),
     (
         "get_dialog_text_decode_status",
-        lambda: dialog.PyDialog.get_dialog_text_decode_status(),
+        lambda: dialog.Dialog.get_dialog_text_decode_status(),
     ),
 )
 
 #: The thirteen the runtime's journals answer (``dialog.cpp:1693-1817``). The getters answer
 #: the source's empty list with nothing recorded, and the clears answer by doing their job.
 SERVED_BY_JOURNALS = (
-    ("get_dialog_event_logs", lambda: dialog.PyDialog.get_dialog_event_logs()),
+    ("get_dialog_event_logs", lambda: dialog.Dialog.get_dialog_event_logs()),
     (
         "get_dialog_event_logs_received",
-        lambda: dialog.PyDialog.get_dialog_event_logs_received(),
+        lambda: dialog.Dialog.get_dialog_event_logs_received(),
     ),
-    ("get_dialog_event_logs_sent", lambda: dialog.PyDialog.get_dialog_event_logs_sent()),
-    ("clear_dialog_event_logs", lambda: dialog.PyDialog.clear_dialog_event_logs()),
+    ("get_dialog_event_logs_sent", lambda: dialog.Dialog.get_dialog_event_logs_sent()),
+    ("clear_dialog_event_logs", lambda: dialog.Dialog.clear_dialog_event_logs()),
     (
         "clear_dialog_event_logs_received",
-        lambda: dialog.PyDialog.clear_dialog_event_logs_received(),
+        lambda: dialog.Dialog.clear_dialog_event_logs_received(),
     ),
-    ("clear_dialog_event_logs_sent", lambda: dialog.PyDialog.clear_dialog_event_logs_sent()),
-    ("get_dialog_callback_journal", lambda: dialog.PyDialog.get_dialog_callback_journal()),
+    ("clear_dialog_event_logs_sent", lambda: dialog.Dialog.clear_dialog_event_logs_sent()),
+    ("get_dialog_callback_journal", lambda: dialog.Dialog.get_dialog_callback_journal()),
     (
         "get_dialog_callback_journal_received",
-        lambda: dialog.PyDialog.get_dialog_callback_journal_received(),
+        lambda: dialog.Dialog.get_dialog_callback_journal_received(),
     ),
     (
         "get_dialog_callback_journal_sent",
-        lambda: dialog.PyDialog.get_dialog_callback_journal_sent(),
+        lambda: dialog.Dialog.get_dialog_callback_journal_sent(),
     ),
-    ("clear_dialog_callback_journal", lambda: dialog.PyDialog.clear_dialog_callback_journal()),
+    ("clear_dialog_callback_journal", lambda: dialog.Dialog.clear_dialog_callback_journal()),
     (
         "clear_dialog_callback_journal_received",
-        lambda: dialog.PyDialog.clear_dialog_callback_journal_received(),
+        lambda: dialog.Dialog.clear_dialog_callback_journal_received(),
     ),
     (
         "clear_dialog_callback_journal_sent",
-        lambda: dialog.PyDialog.clear_dialog_callback_journal_sent(),
+        lambda: dialog.Dialog.clear_dialog_callback_journal_sent(),
     ),
     (
         "clear_dialog_callback_journal_filtered",
-        lambda: dialog.PyDialog.clear_dialog_callback_journal_filtered(),
+        lambda: dialog.Dialog.clear_dialog_callback_journal_filtered(),
     ),
-    ("terminate", lambda: dialog.PyDialog.terminate()),
+    ("terminate", lambda: dialog.Dialog.terminate()),
 )
 
 #: Nothing refuses. The surface is complete: every one of the 32 bound methods answers, and the
@@ -501,7 +500,7 @@ class DialogGateTests(unittest.TestCase):
         dialog._maybe_resume(7, True)
         self.assertFalse(dialog._callbacks_suspended)
 
-        dialog.PyDialog.clear_cache()
+        dialog.Dialog.clear_cache()
 
         # With no connection the ported map reads answer "not loaded", so the gate is
         # suspended again and the observed map is the empty one.
@@ -567,9 +566,9 @@ class DialogSurfaceTests(unittest.TestCase):
     def test_every_pydialog_method_exists_and_is_static(self) -> None:
         for name in PYDIALOG_MEMBERS:
             with self.subTest(member=name):
-                self.assertTrue(hasattr(dialog.PyDialog, name))
+                self.assertTrue(hasattr(dialog.Dialog, name))
                 self.assertIsInstance(
-                    inspect.getattr_static(dialog.PyDialog, name), staticmethod
+                    inspect.getattr_static(dialog.Dialog, name), staticmethod
                 )
 
     def test_every_bound_record_class_exists(self) -> None:
@@ -671,7 +670,7 @@ class DialogServedMembersTests(unittest.TestCase):
     def test_the_open_dialog_is_read_from_the_state(self) -> None:
         dialog._dispatch_message(message(DIALOG_BODY, arg1=241))
 
-        info = dialog.PyDialog.get_active_dialog()
+        info = dialog.Dialog.get_active_dialog()
 
         self.assertEqual(info.agent_id, 241)
         self.assertEqual(info.dialog_id, 0)
@@ -680,7 +679,7 @@ class DialogServedMembersTests(unittest.TestCase):
         dialog._dispatch_message(message(DIALOG_BODY, arg1=241))
         dialog._dispatch_message(message(DIALOG_BUTTON, arg0=7, arg2=0x0A00002A))
 
-        buttons = dialog.PyDialog.get_active_dialog_buttons()
+        buttons = dialog.Dialog.get_active_dialog_buttons()
 
         self.assertEqual([button.dialog_id for button in buttons], [0x0A00002A])
 
@@ -689,22 +688,22 @@ class DialogServedMembersTests(unittest.TestCase):
 
         dialog._dispatch_message(message(DIALOG_BODY, arg1=241))
 
-        self.assertFalse(dialog.PyDialog.is_dialog_displayed(0))
-        self.assertFalse(dialog.PyDialog.is_dialog_displayed(7))
+        self.assertFalse(dialog.Dialog.is_dialog_displayed(0))
+        self.assertFalse(dialog.Dialog.is_dialog_displayed(7))
 
         dialog._note_sent_dialog(0x0A00002A, DIALOG_SEND)
         dialog._dispatch_message(message(DIALOG_BODY, arg1=241))
 
-        self.assertTrue(dialog.PyDialog.is_dialog_displayed(0x0A00002A))
+        self.assertTrue(dialog.Dialog.is_dialog_displayed(0x0A00002A))
 
     def test_the_last_selected_dialog_id_is_what_was_sent(self) -> None:
         """``dialog.cpp:967``, set in the branch that handles a sent dialog."""
 
-        self.assertEqual(dialog.PyDialog.get_last_selected_dialog_id(), 0)
+        self.assertEqual(dialog.Dialog.get_last_selected_dialog_id(), 0)
 
         dialog._note_sent_dialog(0x0A00002A, DIALOG_SEND)
 
-        self.assertEqual(dialog.PyDialog.get_last_selected_dialog_id(), 0x0A00002A)
+        self.assertEqual(dialog.Dialog.get_last_selected_dialog_id(), 0x0A00002A)
 
     def test_clear_cache_empties_the_state(self) -> None:
         """``dialog.cpp:1819-1835`` clears the cache, the buttons and the sent id."""
@@ -713,11 +712,11 @@ class DialogServedMembersTests(unittest.TestCase):
         dialog._dispatch_message(message(DIALOG_BUTTON, arg2=7))
         dialog._note_sent_dialog(9, DIALOG_SEND)
 
-        dialog.PyDialog.clear_cache()
+        dialog.Dialog.clear_cache()
 
-        self.assertEqual(dialog.PyDialog.get_active_dialog().agent_id, 0)
-        self.assertEqual(dialog.PyDialog.get_active_dialog_buttons(), [])
-        self.assertEqual(dialog.PyDialog.get_last_selected_dialog_id(), 0)
+        self.assertEqual(dialog.Dialog.get_active_dialog().agent_id, 0)
+        self.assertEqual(dialog.Dialog.get_active_dialog_buttons(), [])
+        self.assertEqual(dialog.Dialog.get_last_selected_dialog_id(), 0)
 
 
 class DialogStateTests(unittest.TestCase):
@@ -873,7 +872,7 @@ class DialogStateTests(unittest.TestCase):
         self.assertEqual(active.dialog_id, 0)
         self.assertEqual(active.context_dialog_id, 0x0A00002A)
         self.assertFalse(active.dialog_id_authoritative)
-        self.assertTrue(dialog.PyDialog.is_dialog_displayed(0x0A00002A))
+        self.assertTrue(dialog.Dialog.is_dialog_displayed(0x0A00002A))
         self.assertEqual(dialog._pending_context_dialog_id, 0x0A00002A)
         self.assertEqual(dialog._pending_context_agent_id, 241)
 
@@ -882,7 +881,7 @@ class DialogStateTests(unittest.TestCase):
         after = dialog.get_active_dialog()
         assert after is not None
         self.assertEqual(after.context_dialog_id, 0)
-        self.assertFalse(dialog.PyDialog.is_dialog_displayed(0x0A00002A))
+        self.assertFalse(dialog.Dialog.is_dialog_displayed(0x0A00002A))
 
     def test_reset_empties_the_state(self) -> None:
         """A connection calls this at install so a previous one cannot be read as this one."""
@@ -904,18 +903,19 @@ class DialogTableTests(unittest.TestCase):
     heuristic ``.rdata`` scan that derives four of the five bases from the third — and
     the same two stages are exercised here against a synthetic client, because the
     rules are arithmetic and bounds rather than anything a live client has to agree to.
+
+    The constants are the source's and the rebase is the source's, so the only thing a
+    test chooses is where the synthetic module sits: see :func:`_client_memory`.
     """
 
-    def _resolver(self, bases: dict[str, int] | None, mode: str) -> dialog.DialogTables:
-        memory, scanner, patterns = _client_memory(bases, mode=mode)
-        return dialog.DialogTables(
-            cast(Any, memory), cast(Any, scanner), cast(Any, patterns)
-        )
+    def _resolver(self, *, mode: str = "valid", shift: int = 0) -> dialog.DialogTables:
+        memory, scanner = _client_memory(mode=mode, shift=shift)
+        return dialog.DialogTables(cast(Any, scanner))
 
     def test_the_static_rebase_is_used_when_it_validates(self) -> None:
         """``BuildStaticDialogTables`` (``dialog_patterns.cpp:175-197``)."""
 
-        tables = self._resolver(STATIC_BASES, "valid").get()
+        tables = self._resolver().get()
 
         self.assertTrue(tables.resolved)
         self.assertEqual(tables.flags_base, STATIC_BASES["flags_base"])
@@ -927,12 +927,12 @@ class DialogTableTests(unittest.TestCase):
     def test_the_fallback_scan_finds_the_flags_column(self) -> None:
         """``BuildResolvedDialogTables`` (``dialog_patterns.cpp:199-225``).
 
-        With every static base failing, the scan finds the one column that looks like a
-        flags table, and the other four are derived from it: handler ``-8``, frame type
-        ``-4``, content id ``+4``, property id ``+8``.
+        With the five constants rebased off the table, the scan finds the one column that
+        looks like a flags table, and the other four are derived from it: handler ``-8``,
+        frame type ``-4``, content id ``+4``, property id ``+8``.
         """
 
-        tables = self._resolver(None, "valid").get()
+        tables = self._resolver(shift=0x48).get()
 
         self.assertEqual(tables.flags_base, FLAGS_AT)
         self.assertEqual(tables.event_handler_base, FLAGS_AT - 0x8)
@@ -943,7 +943,7 @@ class DialogTableTests(unittest.TestCase):
     def test_a_table_that_fails_validation_resolves_to_nothing(self) -> None:
         """Both stages failing leaves every base zero, and that is the answer."""
 
-        tables = self._resolver(None, "empty").get()
+        tables = self._resolver(mode="empty").get()
 
         self.assertEqual(tables.flags_base, 0)
         self.assertEqual(tables.frame_type_base, 0)
@@ -959,27 +959,25 @@ class DialogTableTests(unittest.TestCase):
     def test_a_static_rebase_that_fails_validation_falls_through_to_the_scan(self) -> None:
         """The stages are ordered: a static address that does not validate is not used.
 
-        The static bases here are shifted by two rows, so their flags column runs off
-        the end of the table into the filler and the validation pass refuses them. What
-        is left is the scan, which finds the column the table is actually at.
+        The module sits ``0x48`` further along than the source's constants describe it, so
+        the flags column they name runs two rows past the table into the filler and the
+        validation pass refuses them. What is left is the scan, which finds the column the
+        table is actually at.
         """
 
-        shifted = {
-            name: value + 0x48 for name, value in STATIC_BASES.items()
-        }
-        tables = self._resolver(shifted, "valid").get()
+        tables = self._resolver(shift=0x48).get()
 
         self.assertEqual(tables.flags_base, FLAGS_AT)
         self.assertNotEqual(
             tables.flags_base,
-            shifted["flags_base"],
+            STATIC_BASES["flags_base"] + 0x48,
             "the static address failed validation and must not be the one in use",
         )
 
     def test_invalidate_forces_another_resolution(self) -> None:
         """``InvalidateDialogTables`` (``dialog_patterns.cpp:257-259``)."""
 
-        resolver = self._resolver(STATIC_BASES, "valid")
+        resolver = self._resolver()
         resolver.get()
 
         resolver.invalidate()
@@ -987,127 +985,30 @@ class DialogTableTests(unittest.TestCase):
 
         self.assertEqual(again.flags_base, STATIC_BASES["flags_base"])
 
-    def test_the_loader_address_survives_invalidation(self) -> None:
-        """Native caches it in a function-static that ``InvalidateDialogTables`` leaves."""
+    def test_the_loader_is_the_rebased_constant_and_survives_invalidation(self) -> None:
+        """``ResolveDialogLoaderGetText`` (``dialog_patterns.cpp:261-269``).
 
-        memory, scanner, patterns = _client_memory(STATIC_BASES, mode="valid")
-        patterns.loader = TEXT_START
-        offset = TEXT_START - memory.start
-        memory.data[offset : offset + 3] = b"\x55\x8b\xec"
-        resolver = dialog.DialogTables(
-            cast(Any, memory), cast(Any, scanner), cast(Any, patterns)
-        )
+        The source rebases ``DialogMemory::DIALOG_LOADER_GETTEXT``, keeps the answer in a
+        function-static, and reads nothing at the address; ``InvalidateDialogTables``
+        leaves that static alone. **On this build that address is not the loader** — the
+        finding is ``docs/RESEARCH.md`` 2026-09-25 — so this test asserts the rebase the
+        source performs and nothing about what is at the far end of it. Identifying this
+        build's own loader is the item the project owner has deferred.
+        """
 
-        self.assertEqual(resolver.resolve_loader_get_text(), TEXT_START)
+        resolver = self._resolver()
+        expected = dialog.DIALOG_LOADER_GETTEXT + LOAD_DELTA
+
+        self.assertEqual(resolver.resolve_loader_get_text(), expected)
 
         resolver.invalidate()
 
-        self.assertEqual(resolver.resolve_loader_get_text(), TEXT_START)
-
-    def test_a_loader_that_does_not_begin_a_function_is_refused(self) -> None:
-        """**This is the check that the crash of 2026-09-25 added.**
-
-        On build 38888 the rebased constant ``0x0079EEF0`` lands in the middle of another
-        function, and calling it faulted the client. A candidate whose bytes do not begin a
-        function is answered as "no loader", which the queue already handles by caching empty
-        text.
-        """
-
-        memory, scanner, patterns = _client_memory(STATIC_BASES, mode="valid")
-        patterns.loader = TEXT_START
-        # Text that is not a function entry: the address holds whatever the client's code has
-        # there, and this port may not assume it is a prologue.
-        memory.data[TEXT_START - memory.start : TEXT_START - memory.start + 4] = (
-            b"\xc4\x10\x83\xf8"
-        )
-        resolver = dialog.DialogTables(
-            cast(Any, memory), cast(Any, scanner), cast(Any, patterns)
-        )
-
-        self.assertEqual(resolver.resolve_loader_get_text(), 0)
-
-    def test_a_loader_that_begins_a_function_is_accepted(self) -> None:
-        """``push ebp`` / ``mov ebp, esp`` — what this client's function entries look like."""
-
-        for prefix in (
-            b"\x55\x8b\xec\x83\xec\x0c",
-            b"\x8b\xff\x55\x8b\xec\x83\xec\x0c",
-        ):
-            with self.subTest(prefix=prefix.hex(" ")):
-                memory, scanner, patterns = _client_memory(STATIC_BASES, mode="valid")
-                patterns.loader = TEXT_START
-                offset = TEXT_START - memory.start
-                memory.data[offset : offset + len(prefix)] = prefix
-                resolver = dialog.DialogTables(
-                    cast(Any, memory), cast(Any, scanner), cast(Any, patterns)
-                )
-
-                self.assertEqual(resolver.resolve_loader_get_text(), TEXT_START)
-
-    def test_a_loader_that_is_a_thunk_to_a_function_is_accepted(self) -> None:
-        """Most of this client's dialog handlers are ``jmp rel32`` thunks, and those are callable.
-
-        ``0x0070B8D0`` is ``E9 6B 00 00 00`` — a jump to ``0x0070B940`` — so an entry check that
-        only accepted a prologue would refuse a real function pointer.
-        """
-
-        memory, scanner, patterns = _client_memory(STATIC_BASES, mode="valid")
-        target = TEXT_START + 0x40
-        thunk = TEXT_START + 0x10
-        patterns.loader = thunk
-        target_offset = target - memory.start
-        memory.data[target_offset : target_offset + 3] = b"\x55\x8b\xec"
-        thunk_offset = thunk - memory.start
-        displacement = target - (thunk + 5)
-        memory.data[thunk_offset : thunk_offset + 5] = b"\xe9" + displacement.to_bytes(
-            4, "little", signed=True
-        )
-        resolver = dialog.DialogTables(
-            cast(Any, memory), cast(Any, scanner), cast(Any, patterns)
-        )
-
-        self.assertEqual(resolver.resolve_loader_get_text(), thunk)
-
-    def test_a_thunk_that_leaves_the_code_section_is_refused(self) -> None:
-        """A jump out of ``.text`` is not a function this project may call."""
-
-        memory, scanner, patterns = _client_memory(STATIC_BASES, mode="valid")
-        thunk = TEXT_START + 0x10
-        patterns.loader = thunk
-        thunk_offset = thunk - memory.start
-        outside = RDATA_START + 0x100
-        displacement = outside - (thunk + 5)
-        memory.data[thunk_offset : thunk_offset + 5] = b"\xe9" + displacement.to_bytes(
-            4, "little", signed=True
-        )
-        resolver = dialog.DialogTables(
-            cast(Any, memory), cast(Any, scanner), cast(Any, patterns)
-        )
-
-        self.assertEqual(resolver.resolve_loader_get_text(), 0)
-
-    def test_a_thunk_to_something_that_is_not_a_function_is_refused(self) -> None:
-        memory, scanner, patterns = _client_memory(STATIC_BASES, mode="valid")
-        target = TEXT_START + 0x40
-        thunk = TEXT_START + 0x10
-        patterns.loader = thunk
-        target_offset = target - memory.start
-        memory.data[target_offset : target_offset + 4] = b"\xc4\x10\x83\xf8"
-        thunk_offset = thunk - memory.start
-        displacement = target - (thunk + 5)
-        memory.data[thunk_offset : thunk_offset + 5] = b"\xe9" + displacement.to_bytes(
-            4, "little", signed=True
-        )
-        resolver = dialog.DialogTables(
-            cast(Any, memory), cast(Any, scanner), cast(Any, patterns)
-        )
-
-        self.assertEqual(resolver.resolve_loader_get_text(), 0)
+        self.assertEqual(resolver.resolve_loader_get_text(), expected)
 
     def test_a_word_that_cannot_be_read_is_none(self) -> None:
         """``TryReadU32`` reports failure by its result, not by raising."""
 
-        resolver = self._resolver(STATIC_BASES, "valid")
+        resolver = self._resolver()
 
         self.assertIsNotNone(resolver.read_uint32(RDATA_START))
         self.assertIsNone(resolver.read_uint32(0x7FFFFFFF))
@@ -1381,9 +1282,24 @@ class _FakeClient:
             self.bridge.answers[slot] = self.decoded
         return _FakeCommand(0)
 
-    def read_agent_by_id(self, agent_id: int) -> Any:
-        """No agent stands behind a fake client, so the row's model id is ``0``."""
+    @property
+    def agent_array(self) -> "_FakeAgentArrayFacade":
+        """The array facade ``Agent.GetAgentByID`` reaches on the source's chain."""
 
+        return _FakeAgentArrayFacade()
+
+
+class _FakeAgentArrayFacade:
+    """``get_context`` returns the view the ported members read."""
+
+    def get_context(self) -> "_FakeAgentArrayView":
+        return _FakeAgentArrayView()
+
+
+class _FakeAgentArrayView:
+    """No agent stands behind a fake client, so the row's model id is ``0``."""
+
+    def GetAgentByID(self, agent_id: int) -> Any:
         return None
 
 
@@ -1420,11 +1336,15 @@ def deliver_decodes(client: _FakeClient) -> None:
 
 
 class DialogDecodeQueueTests(unittest.TestCase):
-    """The catalog's decode queue (``dialog.cpp:1136-1254``) and the members around it.
+    """The catalog's decode queue (``dialog.cpp:1136-1254``) up to the call this port cannot make.
 
-    The client is faked at exactly two points — the loader call and the codepoint read — so the
-    render, the table lookup and the queue's own state machine are the real ones: the string
-    table holds a synthetic entry, and what the members return is what the port decoded.
+    The source's queue calls ``DialogLoader_GetText`` for the id and then walks four failure
+    branches, the string validation and the decode hand-off (``1166-1253``). **Every one of
+    those lines sits below that call**, and the call is not ported: the sources' loader
+    constant is stale on this build, so the member reports what it needs there instead of
+    calling it (``py4gw/dialog.py``, ``_queue_dialog_text_decode``; ``docs/RESEARCH.md``,
+    2026-09-25). What is exercised here is therefore the source's guards, which run *before*
+    that point, the port's own reads, and the cache members around it.
     """
 
     #: A one-word string-table entry: ``[u16 size | u16 base_char | u8 bits | u8 flags | text]``.
@@ -1482,71 +1402,50 @@ class DialogDecodeQueueTests(unittest.TestCase):
 
     # -- the queue ---------------------------------------------------------
 
-    def test_the_first_call_queues_the_decode_and_answers_nothing(self) -> None:
-        serve_encoded_text(self.tables, self.encoded(5))
+    def test_the_first_call_reports_the_loader_it_needs(self) -> None:
+        """The step the port cannot take, and the state it must not leave behind.
 
-        self.assertEqual(dialog.PyDialog.get_dialog_text_decoded(9), "")
+        A refusal that had already flagged the id pending would answer "" for that id for
+        the life of the connection, so the flag is set only after the loader step — which is
+        where the source sets it too, one line later.
+        """
 
-        self.assertEqual(len(self.client.calls), 1)
-        target, form, words = self.client.calls[0]
-        self.assertEqual(target, LOADER_ADDRESS)
-        self.assertEqual(form, CallFormat.U32)
-        self.assertEqual(words, (9,))
+        with self.assertRaises(NotImplementedError) as raised:
+            dialog.Dialog.get_dialog_text_decoded(9)
+
+        self.assertIn("DialogLoader_GetText", str(raised.exception))
+        self.assertNotIn(9, dialog._decoded_text_pending)
+        self.assertNotIn(9, dialog._decoded_text_cache)
 
     def test_the_second_call_answers_from_the_cache(self) -> None:
-        """The first call queues the decode; the text is there once the client has answered."""
+        """The member answers from the cache, and a cached dialog is not queued again."""
 
-        serve_encoded_text(self.tables, self.encoded(5))
+        dialog._decoded_text_cache[9] = "Foreman"
 
-        dialog.PyDialog.get_dialog_text_decoded(9)
-        deliver_decodes(self.client)
-        text = dialog.PyDialog.get_dialog_text_decoded(9)
-
-        self.assertEqual(text, "Foreman")
-        self.assertEqual(len(self.client.calls), 1, "a cached dialog is not queued again")
-        self.assertFalse(dialog.PyDialog.is_dialog_text_decode_pending(9))
+        self.assertEqual(dialog.Dialog.get_dialog_text_decoded(9), "Foreman")
+        self.assertEqual(self.client.calls, [])
+        self.assertFalse(dialog.Dialog.is_dialog_text_decode_pending(9))
 
     def test_the_queue_requests_nothing_for_an_id_past_the_maximum(self) -> None:
         self.assertEqual(
-            dialog.PyDialog.get_dialog_text_decoded(dialog.MAX_DIALOG_ID + 1), ""
+            dialog.Dialog.get_dialog_text_decoded(dialog.MAX_DIALOG_ID + 1), ""
         )
         self.assertEqual(self.client.calls, [])
 
     def test_a_dialog_already_pending_is_not_queued_again(self) -> None:
         dialog._decoded_text_pending[9] = True
 
-        self.assertEqual(dialog.PyDialog.get_dialog_text_decoded(9), "")
+        self.assertEqual(dialog.Dialog.get_dialog_text_decoded(9), "")
 
         self.assertEqual(self.client.calls, [])
 
-    def test_a_missing_loader_caches_empty_text(self) -> None:
-        """``dialog.cpp:1166-1177``: no loader is an answer of "", not a refusal."""
+    def test_the_read_takes_the_codepoints_at_the_pointer_it_was_given(self) -> None:
+        """``_read_encoded_text``: one UTF-16 code unit at a time, up to the terminator."""
 
-        self.client.dialog_tables.loader = 0
+        codepoints = self.encoded(5)
+        serve_encoded_text(self.tables, codepoints, address=0x04000200)
 
-        self.assertEqual(dialog.PyDialog.get_dialog_text_decoded(9), "")
-
-        self.assertEqual(dialog._decoded_text_cache.get(9), "")
-        self.assertNotIn(9, dialog._decoded_text_pending)
-        self.assertEqual(self.client.calls, [])
-
-    def test_a_null_pointer_caches_empty_text(self) -> None:
-        """``dialog.cpp:1179-1190``."""
-
-        self.client.value = 0
-
-        self.assertEqual(dialog.PyDialog.get_dialog_text_decoded(9), "")
-
-        self.assertEqual(dialog._decoded_text_cache.get(9), "")
-        self.assertNotIn(9, dialog._decoded_text_pending)
-
-    def test_a_string_that_cannot_be_read_caches_empty_text(self) -> None:
-        """``dialog.cpp:1192-1203``: the copy failed, so nothing was decoded."""
-
-        self.assertEqual(dialog.PyDialog.get_dialog_text_decoded(9), "")
-
-        self.assertEqual(dialog._decoded_text_cache.get(9), "")
-        self.assertNotIn(9, dialog._decoded_text_pending)
+        self.assertEqual(dialog._read_encoded_text(0x04000200), codepoints)
 
     def test_a_string_without_a_terminator_is_not_read_as_text(self) -> None:
         """A pointer that is not a string is the failed copy, not a long string."""
@@ -1554,92 +1453,15 @@ class DialogDecodeQueueTests(unittest.TestCase):
         for index in range(dialog.MAX_DIALOG_TEXT_CODE_UNITS + 1):
             self.tables.words[ENCODED_POINTER + index * 2] = 0x41
 
-        self.assertEqual(dialog.PyDialog.get_dialog_text_decoded(9), "")
-
-        self.assertEqual(dialog._decoded_text_cache.get(9), "")
-
-    def test_a_string_that_is_not_an_encoded_reference_is_cached_as_it_stands(self) -> None:
-        """``dialog.cpp:1205-1216``: the raw string, not a decode of it."""
-
-        serve_encoded_text(self.tables, [0x41, 0x42])
-
-        dialog.PyDialog.get_dialog_text_decoded(9)
-        text = dialog.PyDialog.get_dialog_text_decoded(9)
-
-        self.assertEqual(text, "AB")
-        self.assertFalse(dialog.PyDialog.is_dialog_text_decode_pending(9))
-
-    def test_the_queue_reads_the_codepoints_at_the_pointer_it_was_given(self) -> None:
-        serve_encoded_text(self.tables, self.encoded(5), address=0x04000200)
-        self.client.value = 0x04000200
-
-        dialog.PyDialog.get_dialog_text_decoded(9)
-        deliver_decodes(self.client)
-
-        self.assertEqual(
-            dialog.PyDialog.get_dialog_text_decoded(9), "Foreman"
-        )
-
-    # -- the epoch and the shutdown flag -----------------------------------
-
-    def test_a_clear_during_the_decode_discards_the_result(self) -> None:
-        """An epoch that moved means the cache was emptied for this decode, not by it."""
-
-        serve_encoded_text(self.tables, self.encoded(5))
-        original = self.client.call_address
-
-        def clearing_call(target: int, form: Any, *words: int) -> Any:
-            record = original(target, form, *words)
-            dialog._clear_catalog_cache()
-            return record
-
-        self.client.call_address = clearing_call  # type: ignore[method-assign]
-
-        with mock.patch("py4gw.client.current_client", return_value=self.client):
-            self.assertEqual(dialog.PyDialog.get_dialog_text_decoded(9), "")
-
-        deliver_decodes(self.client)
-
-        self.assertEqual(dialog._decoded_text_cache, {})
-        self.assertEqual(dialog._decoded_text_pending, {})
-        self.assertGreaterEqual(self.tables.invalidated, 1, "the tables go with it")
-
-    def test_a_shutdown_before_the_read_stops_the_queue(self) -> None:
-        """``dialog.cpp:1147-1149``."""
-
-        serve_encoded_text(self.tables, self.encoded(5))
-        dialog._catalog_shutdown_requested = True
-
-        self.assertEqual(dialog.PyDialog.get_dialog_text_decoded(9), "")
-
-        self.assertEqual(self.client.calls, [])
-
-    def test_a_shutdown_after_the_read_discards_the_result(self) -> None:
-        """``dialog.cpp:1233-1240``: the second check, after the string is in hand."""
-
-        serve_encoded_text(self.tables, self.encoded(5))
-        original = self.tables.read_uint32
-
-        def shutting_down_read(address: int) -> int | None:
-            dialog._catalog_shutdown_requested = True
-            return original(address)
-
-        self.tables.read_uint32 = shutting_down_read  # type: ignore[method-assign]
-
-        self.assertEqual(dialog.PyDialog.get_dialog_text_decoded(9), "")
-
-        self.assertEqual(dialog._decoded_text_cache, {})
+        self.assertIsNone(dialog._read_encoded_text(ENCODED_POINTER))
 
     # -- the members around it ---------------------------------------------
 
     def test_the_status_lists_cached_rows_and_pending_ones(self) -> None:
-        serve_encoded_text(self.tables, self.encoded(5))
-        dialog.PyDialog.get_dialog_text_decoded(9)
-        deliver_decodes(self.client)
-        dialog.PyDialog.get_dialog_text_decoded(9)
+        dialog._decoded_text_cache[9] = "Foreman"
         dialog._decoded_text_pending[11] = True
 
-        status = dialog.PyDialog.get_dialog_text_decode_status()
+        status = dialog.Dialog.get_dialog_text_decode_status()
 
         self.assertEqual(
             [(row.dialog_id, row.text, row.pending) for row in status],
@@ -1650,7 +1472,7 @@ class DialogDecodeQueueTests(unittest.TestCase):
         dialog._decoded_text_cache[9] = "Foreman"
         dialog._decoded_text_pending[9] = True
 
-        status = dialog.PyDialog.get_dialog_text_decode_status()
+        status = dialog.Dialog.get_dialog_text_decode_status()
 
         self.assertEqual([(row.dialog_id, row.pending) for row in status], [(9, False)])
 
@@ -1665,7 +1487,7 @@ class DialogDecodeQueueTests(unittest.TestCase):
     def test_get_dialog_info_carries_the_cached_text(self) -> None:
         dialog._decoded_text_cache[9] = "Foreman"
 
-        info = dialog.PyDialog.get_dialog_info(9)
+        info = dialog.Dialog.get_dialog_info(9)
 
         self.assertEqual(info.dialog_id, 9)
         self.assertEqual(info.content, "Foreman")
@@ -1675,9 +1497,9 @@ class DialogDecodeQueueTests(unittest.TestCase):
         dialog._decoded_text_cache[2] = "Foreman"
 
         with mock.patch.object(
-            dialog.PyDialog, "read_dialog_flags", side_effect=lambda dialog_id: 1 if dialog_id == 2 else 0
+            dialog.Dialog, "read_dialog_flags", side_effect=lambda dialog_id: 1 if dialog_id == 2 else 0
         ):
-            rows = dialog.PyDialog.enumerate_available_dialogs()
+            rows = dialog.Dialog.enumerate_available_dialogs()
 
         self.assertEqual([(row.dialog_id, row.content) for row in rows], [(2, "Foreman")])
 
@@ -1686,7 +1508,7 @@ class DialogDecodeQueueTests(unittest.TestCase):
         dialog._decoded_text_pending[10] = True
         epoch = dialog._catalog_decode_epoch
 
-        dialog.PyDialog.clear_cache()
+        dialog.Dialog.clear_cache()
 
         self.assertEqual(dialog._decoded_text_cache, {})
         self.assertEqual(dialog._decoded_text_pending, {})
@@ -1795,7 +1617,7 @@ class DialogBodyTextTests(unittest.TestCase):
 
     @staticmethod
     def rows() -> list[Any]:
-        return dialog.PyDialog.get_dialog_callback_journal()
+        return dialog.Dialog.get_dialog_callback_journal()
 
     # -- the three outcomes -------------------------------------------------
 
@@ -1842,7 +1664,7 @@ class DialogBodyTextTests(unittest.TestCase):
         self.body()
         self.answer()
 
-        active = dialog.PyDialog.get_active_dialog()
+        active = dialog.Dialog.get_active_dialog()
         self.assertEqual(
             active.raw_message,
             "Foreman",
@@ -1858,7 +1680,7 @@ class DialogBodyTextTests(unittest.TestCase):
         self.body()
 
         self.assertEqual(self.rows()[0].text, "Hi")
-        self.assertEqual(dialog.PyDialog.get_active_dialog().message, "Hi")
+        self.assertEqual(dialog.Dialog.get_active_dialog().message, "Hi")
 
     def test_a_body_with_no_string_gets_a_row_and_no_text(self) -> None:
         """``dialog.cpp:831``: ``message_enc`` is null, so ``immediate_text`` stays empty."""
@@ -1867,7 +1689,7 @@ class DialogBodyTextTests(unittest.TestCase):
 
         self.assertEqual(len(self.rows()), 1)
         self.assertEqual(self.rows()[0].text, "")
-        self.assertEqual(dialog.PyDialog.get_active_dialog().raw_message, "")
+        self.assertEqual(dialog.Dialog.get_active_dialog().raw_message, "")
 
     def test_a_string_that_reads_empty_is_cached_as_the_empty_string(self) -> None:
         """``dialog.cpp:834-841``: a bare terminator is a plain string, and that is what it is."""
@@ -1878,7 +1700,7 @@ class DialogBodyTextTests(unittest.TestCase):
 
         self.assertEqual(self.rows()[0].text, "")
         self.assertEqual(
-            dialog.PyDialog.get_active_dialog().raw_message,
+            dialog.Dialog.get_active_dialog().raw_message,
             "",
             "the wide string is stored without its terminator, as std::wstring assign stores it",
         )
@@ -1934,7 +1756,7 @@ class DialogBodyTextTests(unittest.TestCase):
 
         self.assertEqual(len(self.rows()), 1)
         self.assertEqual(self.rows()[0].text, "")
-        self.assertEqual(dialog.PyDialog.get_active_dialog().raw_message, "")
+        self.assertEqual(dialog.Dialog.get_active_dialog().raw_message, "")
 
     def test_the_text_a_dialog_advertises_is_readable_from_it(self) -> None:
         """The facade's inline-choice fallback has text to work on, because the body has it."""
@@ -1944,7 +1766,7 @@ class DialogBodyTextTests(unittest.TestCase):
         self.body()
 
         choices = dialog.extract_inline_dialog_choices_from_text(
-            dialog.PyDialog.get_active_dialog().raw_message
+            dialog.Dialog.get_active_dialog().raw_message
         )
         self.assertEqual([choice.dialog_id for choice in choices], [7])
         self.assertEqual(choices[0].message, "Yes")
@@ -1962,7 +1784,7 @@ class DialogBodyTextTests(unittest.TestCase):
         serve_encoded_text(self.tables, self.encoded(5))
         self.body()
         self.answer()
-        self.assertEqual(dialog.PyDialog.get_active_dialog().message, "Foreman")
+        self.assertEqual(dialog.Dialog.get_active_dialog().message, "Foreman")
 
         dialog._on_body_decoded(
             tick=dialog._now_ms(),
@@ -1976,7 +1798,7 @@ class DialogBodyTextTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            dialog.PyDialog.get_active_dialog().message,
+            dialog.Dialog.get_active_dialog().message,
             "Foreman",
             "the text belongs to the body whose nonce it carries",
         )
@@ -2016,7 +1838,7 @@ class DialogBodyTextTests(unittest.TestCase):
         )
 
         self.assertEqual(self.rows(), [])
-        self.assertEqual(dialog.PyDialog.get_active_dialog().raw_message, "")
+        self.assertEqual(dialog.Dialog.get_active_dialog().raw_message, "")
 
     def test_a_body_that_arrives_suspended_appends_no_row(self) -> None:
         """``dialog.cpp:906-910``: the immediate append is guarded by the gate too."""
@@ -2153,13 +1975,13 @@ class DialogButtonLabelTests(unittest.TestCase):
 
         self.button()
 
-        buttons = dialog.PyDialog.get_active_dialog_buttons()
+        buttons = dialog.Dialog.get_active_dialog_buttons()
         self.assertEqual(buttons[0].dialog_id, 4484)
         self.assertEqual(buttons[0].message_decoded, "Accept")
         self.assertFalse(buttons[0].message_decode_pending)
         self.assertEqual(len(self.client.calls), 0, "a plain label is not decoded")
         self.assertEqual(
-            [row.text for row in dialog.PyDialog.get_dialog_callback_journal()],
+            [row.text for row in dialog.Dialog.get_dialog_callback_journal()],
             ["Accept"],
             "the row carries the label the packet carried",
         )
@@ -2208,14 +2030,14 @@ class DialogButtonLabelTests(unittest.TestCase):
 
         self.answer("Tell me more")
 
-        button = dialog.PyDialog.get_active_dialog_buttons()[0]
+        button = dialog.Dialog.get_active_dialog_buttons()[0]
         self.assertFalse(button.message_decode_pending)
         self.assertEqual(button.message_decoded, "Tell me more")
         self.assertEqual(dialog._decoded_button_label_cache[4484], "Tell me more")
         self.assertEqual(dialog._decoded_button_label_pending, {})
         self.assertEqual(dialog._button_decodes, {})
         self.assertEqual(dialog._pending_decodes("dialog"), 0)
-        rows = dialog.PyDialog.get_dialog_callback_journal()
+        rows = dialog.Dialog.get_dialog_callback_journal()
         self.assertEqual([row.event_type for row in rows], ["recv_choice"])
         self.assertEqual(rows[0].text, "Tell me more")
         self.assertEqual(rows[0].dialog_id, 4484)
@@ -2227,7 +2049,7 @@ class DialogButtonLabelTests(unittest.TestCase):
 
         self.button()
 
-        self.assertEqual(dialog.PyDialog.get_dialog_callback_journal(), [])
+        self.assertEqual(dialog.Dialog.get_dialog_callback_journal(), [])
         self.assertEqual(
             dialog._dialog_buttons[0].message_decode_pending,
             True,
@@ -2251,10 +2073,10 @@ class DialogButtonLabelTests(unittest.TestCase):
         self.assertNotIn(4484, dialog._decoded_button_label_pending)
         self.assertEqual(dialog._button_decodes, {})
         self.assertEqual(dialog._pending_decodes("dialog"), 0)
-        button = dialog.PyDialog.get_active_dialog_buttons()[0]
+        button = dialog.Dialog.get_active_dialog_buttons()[0]
         self.assertFalse(button.message_decode_pending)
         self.assertEqual(
-            len(dialog.PyDialog.get_dialog_callback_journal()),
+            len(dialog.Dialog.get_dialog_callback_journal()),
             1,
             "a label that is not waited for is recorded here",
         )
@@ -2266,11 +2088,11 @@ class DialogButtonLabelTests(unittest.TestCase):
 
         self.button()
 
-        button = dialog.PyDialog.get_active_dialog_buttons()[0]
+        button = dialog.Dialog.get_active_dialog_buttons()[0]
         self.assertTrue(button.message_decoded)
         self.assertEqual(button.message, button.message_decoded)
         self.assertFalse(button.message_decode_pending)
-        rows = dialog.PyDialog.get_dialog_callback_journal()
+        rows = dialog.Dialog.get_dialog_callback_journal()
         self.assertEqual([row.event_type for row in rows], ["recv_choice"])
         self.assertEqual(rows[0].text, button.message_decoded)
         self.assertEqual(rows[0].dialog_id, 4484)
@@ -2287,7 +2109,7 @@ class DialogButtonLabelTests(unittest.TestCase):
         dialog._decoded_text_cache[9] = "Northern Support"
 
         with mock.patch.object(dialog, "_is_dialog_map_ready", return_value=True):
-            button = dialog.PyDialog.get_active_dialog_buttons()[0]
+            button = dialog.Dialog.get_active_dialog_buttons()[0]
 
         self.assertEqual(button.message_decoded, "Northern Support")
 
@@ -2296,8 +2118,8 @@ class DialogButtonLabelTests(unittest.TestCase):
 
         self.button(dialog_id=0, pointer=0)
 
-        self.assertEqual(dialog.PyDialog.get_active_dialog_buttons()[0].dialog_id, 0)
-        self.assertEqual(dialog.PyDialog.get_active_dialog_buttons()[0].message_decoded, "")
+        self.assertEqual(dialog.Dialog.get_active_dialog_buttons()[0].dialog_id, 0)
+        self.assertEqual(dialog.Dialog.get_active_dialog_buttons()[0].message_decoded, "")
 
 
 class DialogJournalTests(unittest.TestCase):
@@ -2346,7 +2168,7 @@ class DialogJournalTests(unittest.TestCase):
     def test_a_body_is_recorded_with_its_packet_and_its_direction(self) -> None:
         dialog._dispatch_message(message(DIALOG_BODY, arg0=1, arg1=241, arg2=0x1234))
 
-        logs = dialog.PyDialog.get_dialog_event_logs()
+        logs = dialog.Dialog.get_dialog_event_logs()
         self.assertEqual(len(logs), 1)
         entry = logs[0]
         self.assertEqual(entry.message_id, DIALOG_BODY)
@@ -2359,15 +2181,15 @@ class DialogJournalTests(unittest.TestCase):
             "a DialogBodyInfo is three words, and the whole packet is copied",
         )
         self.assertEqual(entry.l_bytes, b"")
-        self.assertEqual(len(dialog.PyDialog.get_dialog_event_logs_received()), 1)
-        self.assertEqual(dialog.PyDialog.get_dialog_event_logs_sent(), [])
+        self.assertEqual(len(dialog.Dialog.get_dialog_event_logs_received()), 1)
+        self.assertEqual(dialog.Dialog.get_dialog_event_logs_sent(), [])
 
     def test_a_button_is_recorded_with_its_whole_sixteen_byte_packet(self) -> None:
         dialog._dispatch_message(
             message(DIALOG_BUTTON, arg0=11, arg1=0x2222, arg2=4484, arg3=0)
         )
 
-        entry = dialog.PyDialog.get_dialog_event_logs()[0]
+        entry = dialog.Dialog.get_dialog_event_logs()[0]
 
         self.assertEqual(entry.message_id, DIALOG_BUTTON)
         self.assertEqual(
@@ -2379,12 +2201,12 @@ class DialogJournalTests(unittest.TestCase):
 
         dialog._note_sent_dialog(4484, DIALOG_SEND)
 
-        logs = dialog.PyDialog.get_dialog_event_logs()
+        logs = dialog.Dialog.get_dialog_event_logs()
         self.assertEqual(len(logs), 1)
         self.assertFalse(logs[0].incoming)
         self.assertEqual(logs[0].w_bytes, struct.pack("<I", 4484))
-        self.assertEqual(dialog.PyDialog.get_dialog_event_logs_received(), [])
-        self.assertEqual(len(dialog.PyDialog.get_dialog_event_logs_sent()), 1)
+        self.assertEqual(dialog.Dialog.get_dialog_event_logs_received(), [])
+        self.assertEqual(len(dialog.Dialog.get_dialog_event_logs_sent()), 1)
 
     def test_the_event_log_drops_the_oldest_entries_past_its_cap(self) -> None:
         for index in range(dialog.MAX_DIALOG_EVENT_LOGS + 3):
@@ -2392,21 +2214,21 @@ class DialogJournalTests(unittest.TestCase):
                 message(DIALOG_BODY, arg0=1, arg1=index, arg2=0)
             )
 
-        logs = dialog.PyDialog.get_dialog_event_logs()
+        logs = dialog.Dialog.get_dialog_event_logs()
         self.assertEqual(len(logs), dialog.MAX_DIALOG_EVENT_LOGS)
         self.assertEqual(logs[0].w_bytes, struct.pack("<3I", 1, 3, 0), "the oldest went")
         self.assertEqual(
-            len(dialog.PyDialog.get_dialog_event_logs_received()),
+            len(dialog.Dialog.get_dialog_event_logs_received()),
             dialog.MAX_DIALOG_EVENT_LOGS,
         )
 
     def test_the_returned_lists_are_copies(self) -> None:
         dialog._dispatch_message(message(DIALOG_BODY, arg1=7))
 
-        returned = dialog.PyDialog.get_dialog_event_logs()
+        returned = dialog.Dialog.get_dialog_event_logs()
         returned.clear()
 
-        self.assertEqual(len(dialog.PyDialog.get_dialog_event_logs()), 1)
+        self.assertEqual(len(dialog.Dialog.get_dialog_event_logs()), 1)
 
     # -- the callback journal ----------------------------------------------
 
@@ -2414,7 +2236,7 @@ class DialogJournalTests(unittest.TestCase):
         dialog._note_sent_dialog(4484, DIALOG_SEND)
         dialog._dispatch_message(message(DIALOG_BODY, arg0=1, arg1=17, arg2=0))
 
-        entries = dialog.PyDialog.get_dialog_callback_journal()
+        entries = dialog.Dialog.get_dialog_callback_journal()
         body = [entry for entry in entries if entry.event_type == "recv_body"][0]
 
         self.assertEqual(body.context_dialog_id, 4484)
@@ -2434,7 +2256,7 @@ class DialogJournalTests(unittest.TestCase):
 
         choice = [
             entry
-            for entry in dialog.PyDialog.get_dialog_callback_journal()
+            for entry in dialog.Dialog.get_dialog_callback_journal()
             if entry.event_type == "recv_choice"
         ][0]
 
@@ -2449,7 +2271,7 @@ class DialogJournalTests(unittest.TestCase):
         dialog._dispatch_message(message(DIALOG_BODY, arg1=17))
         dialog._note_sent_dialog(6020, DIALOG_SEND)
 
-        sent = dialog.PyDialog.get_dialog_callback_journal_sent()
+        sent = dialog.Dialog.get_dialog_callback_journal_sent()
         self.assertEqual([entry.event_type for entry in sent], ["sent_choice"])
         self.assertEqual(sent[0].dialog_id, 6020)
         self.assertTrue(sent[0].dialog_id_authoritative)
@@ -2504,7 +2326,7 @@ class DialogJournalTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            [entry.event_type for entry in dialog.PyDialog.get_dialog_callback_journal()],
+            [entry.event_type for entry in dialog.Dialog.get_dialog_callback_journal()],
             ["sent_choice", "recv_body", "recv_choice", "sent_choice"],
             "the earlier tick first, then the event priority",
         )
@@ -2516,7 +2338,7 @@ class DialogJournalTests(unittest.TestCase):
             )
 
         self.assertEqual(
-            len(dialog.PyDialog.get_dialog_callback_journal()),
+            len(dialog.Dialog.get_dialog_callback_journal()),
             dialog.MAX_DIALOG_CALLBACK_JOURNAL,
         )
 
@@ -2533,13 +2355,13 @@ class DialogJournalTests(unittest.TestCase):
         dialog._dispatch_message(message(DIALOG_BUTTON, arg0=11, arg2=4484))
         dialog._note_sent_dialog(6020, DIALOG_SEND)
 
-        dialog.PyDialog.clear_dialog_callback_journal_filtered(incoming=True)
+        dialog.Dialog.clear_dialog_callback_journal_filtered(incoming=True)
 
-        remaining = dialog.PyDialog.get_dialog_callback_journal()
+        remaining = dialog.Dialog.get_dialog_callback_journal()
         self.assertEqual([entry.event_type for entry in remaining], ["sent_choice"])
-        self.assertEqual(dialog.PyDialog.get_dialog_callback_journal_received(), [])
+        self.assertEqual(dialog.Dialog.get_dialog_callback_journal_received(), [])
         self.assertEqual(
-            len(dialog.PyDialog.get_dialog_callback_journal_sent()),
+            len(dialog.Dialog.get_dialog_callback_journal_sent()),
             1,
             "the direction lists are rebuilt from what is left",
         )
@@ -2548,25 +2370,25 @@ class DialogJournalTests(unittest.TestCase):
         dialog._dispatch_message(message(DIALOG_BODY, arg1=17))
         dialog._dispatch_message(message(DIALOG_BUTTON, arg0=11, arg2=4484))
 
-        dialog.PyDialog.clear_dialog_callback_journal_filtered(event_type="recv_body")
+        dialog.Dialog.clear_dialog_callback_journal_filtered(event_type="recv_body")
         self.assertEqual(
-            [entry.event_type for entry in dialog.PyDialog.get_dialog_callback_journal()],
+            [entry.event_type for entry in dialog.Dialog.get_dialog_callback_journal()],
             ["recv_choice"],
         )
 
-        dialog.PyDialog.clear_dialog_callback_journal_filtered(
+        dialog.Dialog.clear_dialog_callback_journal_filtered(
             message_id=DIALOG_BUTTON
         )
-        self.assertEqual(dialog.PyDialog.get_dialog_callback_journal(), [])
+        self.assertEqual(dialog.Dialog.get_dialog_callback_journal(), [])
 
     def test_a_filtered_clear_with_no_filters_clears_everything(self) -> None:
         dialog._dispatch_message(message(DIALOG_BODY, arg1=17))
 
-        dialog.PyDialog.clear_dialog_callback_journal_filtered()
+        dialog.Dialog.clear_dialog_callback_journal_filtered()
 
-        self.assertEqual(dialog.PyDialog.get_dialog_callback_journal(), [])
-        self.assertEqual(dialog.PyDialog.get_dialog_callback_journal_received(), [])
-        self.assertEqual(dialog.PyDialog.get_dialog_callback_journal_sent(), [])
+        self.assertEqual(dialog.Dialog.get_dialog_callback_journal(), [])
+        self.assertEqual(dialog.Dialog.get_dialog_callback_journal_received(), [])
+        self.assertEqual(dialog.Dialog.get_dialog_callback_journal_sent(), [])
 
     def test_an_empty_event_type_is_no_filter_and_so_removes_everything(self) -> None:
         """``dialog.cpp:1783``: an empty string is treated as absent.
@@ -2578,9 +2400,9 @@ class DialogJournalTests(unittest.TestCase):
 
         dialog._dispatch_message(message(DIALOG_BODY, arg1=17))
 
-        dialog.PyDialog.clear_dialog_callback_journal_filtered(event_type="")
+        dialog.Dialog.clear_dialog_callback_journal_filtered(event_type="")
 
-        self.assertEqual(dialog.PyDialog.get_dialog_callback_journal(), [])
+        self.assertEqual(dialog.Dialog.get_dialog_callback_journal(), [])
 
     # -- the lifecycle -----------------------------------------------------
 
@@ -2589,10 +2411,10 @@ class DialogJournalTests(unittest.TestCase):
         epoch = dialog._decode_epoch
         nonce = dialog._body_decode_nonce
 
-        dialog.PyDialog.clear_cache()
+        dialog.Dialog.clear_cache()
 
-        self.assertEqual(dialog.PyDialog.get_dialog_event_logs(), [])
-        self.assertEqual(dialog.PyDialog.get_dialog_callback_journal(), [])
+        self.assertEqual(dialog.Dialog.get_dialog_event_logs(), [])
+        self.assertEqual(dialog.Dialog.get_dialog_callback_journal(), [])
         self.assertEqual(dialog._decode_epoch, epoch + 1)
         self.assertEqual(dialog._body_decode_nonce, nonce + 1)
 
@@ -2601,18 +2423,18 @@ class DialogJournalTests(unittest.TestCase):
         dialog._decoded_text_pending[6] = True
         dialog._dispatch_message(message(DIALOG_BODY, arg1=17))
 
-        dialog.PyDialog.terminate()
+        dialog.Dialog.terminate()
 
         self.assertTrue(dialog._shutdown_requested)
         self.assertTrue(dialog._catalog_shutdown_requested)
         self.assertEqual(dialog._decoded_text_cache, {})
         self.assertEqual(dialog._decoded_text_pending, {})
-        self.assertEqual(dialog.PyDialog.get_dialog_event_logs(), [])
+        self.assertEqual(dialog.Dialog.get_dialog_event_logs(), [])
 
     def test_a_shutdown_stops_the_queue_from_running_again(self) -> None:
         """``ClearCatalogCache`` and the flag are what a later decode sees."""
 
-        dialog.PyDialog.terminate()
+        dialog.Dialog.terminate()
         epoch = dialog._catalog_decode_epoch
 
         dialog._queue_dialog_text_decode(5)

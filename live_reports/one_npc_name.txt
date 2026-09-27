@@ -1,0 +1,9 @@
+{"stage": "client", "pid": 20496, "path": "F:\\GW\\GW1\\Gw.exe"}
+{"stage": "connected", "string_table_loaded": false, "table_status": "language 0: read on demand, one file per entry (0 file(s) read)", "entries": 0}
+{"stage": "agents", "total": 43, "own_agent": 25}
+{"stage": "npc", "agent_id": 15, "name_bytes": [110, 12, 0, 0], "byte_count": 4, "encoded_string": "\\\\x0C6E"}
+{"stage": "timing_fetch_ms", "value": 0.147}
+{"stage": "timing_first_decode_ms", "value": 2084.099, "answer": "", "table_status": "slot 2: 1024 entries from one file (1 file(s) read, 1024 entries held)"}
+{"stage": "timing_cached_decode_ms", "value": 0.104, "answer": "Random Arenas", "table_status": "slot 2: 1024 entries from one file (1 file(s) read, 1024 entries held)"}
+{"stage": "result", "ok": true, "agent_id": 15, "name": "Random Arenas", "is_name_ready": true}
+{"stage": "disconnected"}

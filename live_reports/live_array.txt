@@ -1,0 +1,32 @@
+﻿python.exe : test_exposes_source_category_methods 
+(tests.test_agent_array.LiveAgentArrayTests.test_exposes_source_category_methods)
+At line:1 char:358
++ ... oding utf8; & python -m unittest tests.test_agent_array -v 2>&1 | Out ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (test_exposes_so...tegory_methods):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Expose the source ``AgentArrayStruct`` category methods over one view. ... ok
+test_reads_live_effect_surface (tests.test_agent_array.LiveAgentArrayTests.test_reads_live_effect_surface)
+Expose the native effects bitmap and visible-effect list. ... skipped 'The connected client has no living agent 
+records.'
+test_reads_live_equipment_and_tags (tests.test_agent_array.LiveAgentArrayTests.test_reads_live_equipment_and_tags)
+Read optional equipment and tag records through target pointers. ... skipped 'The connected client has no living agent 
+records.'
+test_reads_one_complete_live_agent (tests.test_agent_array.LiveAgentArrayTests.test_reads_one_complete_live_agent)
+Materialize one selected typed agent record through the source's own lookup. ... ok
+test_reads_the_live_agent_array_header 
+(tests.test_agent_array.LiveAgentArrayTests.test_reads_the_live_agent_array_header)
+Read the maintained header into a local copy, externally. ... ok
+test_resolves_live_agent_array (tests.test_agent_array.LiveAgentArrayTests.test_resolves_live_agent_array)
+Resolve the native agent-array address from the JSON resolver. ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.550s
+
+OK (skipped=2)
+Live AgentArray source view: all=43, ally=3, neutral=0, enemy=10, dead_ally=0, dead_enemy=0, items=0, owned_items=0, gadgets=3, raw=188
+Live Agent detail: id=15, type=0x200, position=(-1943.0, -1725.0, 0), read=0.003 ms
+Live AgentArray header: buffer=0x54079C90, size=188, capacity=251, non_null=43, read=6.058 ms
+Live AgentArray: 0x00E0C714
+  resolve (cached after connect): 0.003 ms

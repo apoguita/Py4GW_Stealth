@@ -21,10 +21,11 @@ from py4gw.win32 import Win32
 
 REPORT_PATH = sys.argv[1] if len(sys.argv) > 1 else ""
 
-#: The sources' constant (``DialogMemory::DIALOG_LOADER_GETTEXT``) and the addresses around it
-#: that are worth looking at: the unrebased value, the value rebased by the PE image base, and
-#: the value rebased as if the image base were the module base.
-CONSTANT = 0x0079EEF0
+#: The sources' constant (``DialogMemory::DIALOG_LOADER_GETTEXT``, ``dialog.h:99``), read from
+#: the port rather than repeated, and the addresses around it that are worth looking at: the
+#: unrebased value, the value rebased by the PE image base, and the value rebased as if the
+#: image base were the module base.
+CONSTANT = dialog.DIALOG_LOADER_GETTEXT
 LINK_IMAGE_BASE = 0x00400000
 
 #: How many bytes to read at each address.
@@ -109,25 +110,25 @@ def main() -> int:
                 heads[name] = f"unreadable: {error}"
         report["bytes"] = heads
 
-        # What the port's own resolver answers, and whether the entry check accepts it.
+        # What the port's own resolver answers for the source's constant, and what the scanner
+        # rebases. The constant is ``DialogMemory::DIALOG_LOADER_GETTEXT`` (``dialog.h:99``),
+        # which the port holds in ``py4gw/dialog.py`` beside the resolution that uses it — the
+        # sources keep it in code, not in their pattern catalog.
         tables = client.dialog_tables
         tables.invalidate()
         resolved = tables.resolve_loader_get_text()
         report["resolve_loader_get_text"] = hex(resolved)
-        report["resolver_catalog_value"] = hex(
-            client._patterns.resolve(  # type: ignore[attr-defined]
-                dialog.DialogTables._LOADER_RESOLVER, scanner
-            ).value
-        )
+        report["source_constant"] = hex(dialog.DIALOG_LOADER_GETTEXT)
 
         # The same addresses the source's own table carries, for comparison: the five data
-        # columns, which the port resolves with the .rdata fallback.
+        # columns, which the port resolves with the module-relative rebase and, when that does
+        # not validate, the ``.rdata`` fallback.
         addrs = tables.get()
         report["data_bases"] = {
             "event_handler": hex(addrs.event_handler_base),
             "flags": hex(addrs.flags_base),
             "static_flags_rebased": hex(
-                scanner.to_module_address(0x00913920)
+                scanner.to_module_address(dialog.FLAGS_BASE)
             ),
         }
 

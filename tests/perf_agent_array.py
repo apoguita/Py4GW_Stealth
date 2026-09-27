@@ -1,4 +1,4 @@
-"""Measure repeated complete AgentArray and living-agent access.
+"""Measure repeated AgentArray view reads and nested agent-record access.
 
 Run from the project directory while Guild Wars is running::
 
@@ -78,51 +78,53 @@ def main() -> int:
     counter = PerfCounter()
     client = ConnectedClient(process, win32=win32, perf_counter=counter)
     try:
-        last_snapshot = None
-        last_living = None
+        context = client.agent_array.read_context()
+        agents = context.GetAgentArray()
+        first_record = context.GetAgentByID(int(agents[0])) if agents else None
+        if not isinstance(first_record, AgentLivingStruct):
+            first_record = None
+
         for _ in range(arguments.samples):
-            last_living = client.refresh_living_agents(counter)
-            if last_living is None:
-                continue
-            last_snapshot = client.agent_array.living_snapshot
-            first = last_living.records[0] if last_living.records else None
-            if first is not None:
-                record: AgentLivingStruct = first
+            measure_nested(
+                counter,
+                "agent_array.context_read",
+                client.agent_array.read_context,
+            )
+            measure_nested(
+                counter,
+                "agent_array.category_access",
+                context.GetAgentArray,
+            )
+            if first_record is not None:
                 measure_nested(
                     counter,
                     "agent.visible_effects",
-                    lambda: record.visible_effects,
+                    lambda: first_record.visible_effects,
                 )
-                measure_nested(counter, "agent.equipment", lambda: record.equipment)
-                measure_nested(counter, "agent.tags", lambda: record.tags)
+                measure_nested(counter, "agent.equipment", lambda: first_record.equipment)
+                measure_nested(counter, "agent.tags", lambda: first_record.tags)
 
         print(f"PID: {client.pid}")
         print(f"Samples: {arguments.samples}")
+        print(f"Agent array address: 0x{client.agent_array.get_ptr():08X}")
         print(
-            f"Safety limits: pointer_slots={client.agent_array.max_pointer_slots}, "
-            f"references={client.agent_array.max_references}"
+            "Last view: "
+            f"buffer=0x{int(context.agent_array.m_buffer):08X}, "
+            f"size={int(context.agent_array.m_size)}, "
+            f"capacity={int(context.agent_array.m_capacity)}, "
+            f"raw_slots={len(context.raw_agents)}"
         )
-        if last_snapshot is not None:
+        if first_record is not None:
             print(
-                "Last living snapshot: "
-                f"records={last_snapshot.count}, "
-                f"generation={last_snapshot.generation}, "
-                f"stale={last_snapshot.stale_count}, "
-                f"unreadable={last_snapshot.unreadable_count}"
+                "Last living record: "
+                f"agent_id={int(first_record.agent_id)}, "
+                f"effects=0x{int(first_record.effects):08X}"
             )
-        if last_living is not None:
-            print(f"Last snapshot age: {last_living.age_ms:.3f} ms")
         print()
         for name in (
             "agent_array.resolver",
-            "agent_array.read",
-            "agent_array.pointer_table",
             "agent_array.context_read",
-            "agent_array.movement_table",
-            "agent_array.classification",
-            "agent_array.living_refresh",
-            "agent_array.reference_validation",
-            "agent_array.agent_record",
+            "agent_array.category_access",
             "agent.visible_effects",
             "agent.equipment",
             "agent.tags",

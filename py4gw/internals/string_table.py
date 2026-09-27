@@ -26,15 +26,23 @@ chain behind it: ``FileHashToFileId`` → ``FileHashToRecObj`` (or ``OpenFileByF
 ``ReadFileBuffer`` → the bounded copy → ``FreeFileBuffer`` → ``CloseRecObj``. Each of those
 is issued on the client's own thread by the capability layer.
 
-**Two adaptations, both of them this project's read model**:
+**Three adaptations, all of them this project's read model**:
 
 1. **The refresh is lazy.** The source's ``TextParser`` cache is filled by an in-process
    callback that runs every game frame (``TextContext.py:152-166``), so by the time a load
    asks for the context it is fresh. There is no frame loop here, so the refresh happens at
    the point of use through the source's own ``TextParser._update_ptr()`` — the same two
    lines ``py4gw/context/gw_context.py`` uses for every other context facade.
-2. **The load runs where it is asked for, not at the next frame.** The source hands the load
-   to ``PyGameThread.enqueue``; see :func:`load_string_table`.
+2. **The load runs on a worker thread instead of at the next game frame.** The source hands the
+   load to ``PyGameThread.enqueue`` and its frame callback runs it on the game thread, so the
+   script that asked for a name never waits for ``gw.dat``. This port starts one worker at the
+   same place (:func:`load_string_table`, called by the ``TextParser`` refresh), and the table
+   becomes readable **slot by slot** as it fills.
+3. **A decode asks for the slot it needs instead of reading it.** The source's ``decode`` calls
+   ``load_string_table`` and answers ``""`` until the table is up; this port's ``decode`` asks
+   the worker for the one slot its entry lives in (:func:`_request_slot`) and answers ``""``
+   the same way. **No caller ever waits on the archive**, and the slot it asked for is read
+   first.
 """
 
 from __future__ import annotations
@@ -43,8 +51,10 @@ import ctypes
 import ctypes.wintypes
 import re
 import struct
+import threading
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor as _TPE
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Deque, Iterator, Optional
 
 from ..context.text_parser_context import TextParser
 from .helpers import read_wstr
@@ -228,6 +238,25 @@ _load_enqueued: bool = False
 _loaded_language: int = 0
 _string_tables_by_language: dict[int, dict[int, bytes]] = {}
 _last_load_status: str = "not requested"
+
+#: Which ``(language, file slot)`` pairs have been read into ``_string_table``. The source keeps the
+#: whole table for the language in memory; externally each file is a GW.dat fetch through the command
+#: ring, so the port keeps the *files it has read* and the entries they contributed -- the same table,
+#: filled the same way, readable slot by slot while the warm-up is still filling it.
+_loaded_slots: set[tuple[int, int]] = set()
+
+#: The slots a read was attempted for and produced nothing. The source's own load reads each file of
+#: the language exactly once and moves on, so these are not retried either.
+_failed_slots: set[tuple[int, int]] = set()
+
+#: The warm-up: one worker thread filling the table, and the slots a decode has asked for, which that
+#: worker reads before the ones nobody is waiting for. This is the port's substitution for the
+#: source's game-frame callback -- see :func:`load_string_table` and :func:`_request_slot`.
+_warmup_lock = threading.Lock()
+_warmup_thread: Optional[threading.Thread] = None
+_warmup_language: Optional[int] = None
+_warmup_stop = threading.Event()
+_warmup_requests: Deque[int] = deque()
 
 _decode_cache: dict[bytes, str] = {}
 _decode_cache_by_language: dict[tuple[int, bytes], str] = {}
@@ -757,6 +786,172 @@ def _parse_string_file(
     return count
 
 
+def _read_slot(
+    language: int,
+    slot_index: int,
+    entries_per_file: int,
+    table: Optional[dict[int, bytes]] = None,
+) -> Optional[bool]:
+    """Read one string file of a language into the table.
+
+    The body of the source's loop (``_load_table_for_language``) for one iteration: the slot's file
+    hash, :func:`_load_dat_file`, and the source's own :func:`_parse_string_file` into the table. What
+    it adds is that the entries land in ``_string_table`` **as the file is parsed**, so a caller whose
+    entry is already read gets its name while the rest of the language is still loading.
+
+    ``None`` for a slot that was read or attempted before (the source reads each file once),
+    ``True`` when this call read it, ``False`` when it could not be read.
+    """
+
+    key = (language, slot_index)
+    if key in _loaded_slots or key in _failed_slots:
+        return None
+
+    # The source's cache is kept fresh by the frame callback; here the port refreshes at the point of
+    # use, which is the same call the trigger makes.
+    TextParser._update_ptr()
+    context = TextParser.get_context()
+    if context is None:
+        _failed_slots.add(key)
+        _set_load_status("TextParser context unavailable")
+        return False
+
+    file_slot = context.get_file_slot(slot_index, language)
+    if file_slot is None or not int(file_slot.file_hash_ptr):
+        # The source's ``continue``: a slot with no hash is nothing to read.
+        _failed_slots.add(key)
+        return False
+
+    try:
+        file_data = _load_dat_file(file_slot.file_hash)
+    except Exception as error:  # noqa: BLE001 - reported through the status, as the source reports
+        _failed_slots.add(key)
+        _set_load_status(f"slot {slot_index}: {type(error).__name__}: {error}")
+        return False
+    if not file_data:
+        _failed_slots.add(key)
+        _set_load_status(f"slot {slot_index}: the GW.dat read answered nothing")
+        return False
+
+    entries: dict[int, bytes] = {}
+    count = _parse_string_file(file_data, slot_index * entries_per_file, entries)
+    _string_table.update(entries)
+    if table is not None:
+        table.update(entries)
+    _loaded_slots.add(key)
+    _set_load_status(
+        f"slot {slot_index}: {count} entries from one file "
+        f"({len(_loaded_slots)} file(s) read, {len(_string_table)} entries held)"
+    )
+    return True
+
+
+def _take_request() -> Optional[int]:
+    """Return the next slot a decode asked for, or ``None`` when nobody is waiting."""
+
+    with _warmup_lock:
+        while _warmup_requests:
+            return _warmup_requests.popleft()
+    return None
+
+
+def _slot_order(slot_count: int) -> Iterator[int]:
+    """The order the warm-up reads the language's files in.
+
+    The source walks ``for slot_idx in range(lang_slot.slot_count)``. The files read here are exactly
+    those; only the order differs, and only while somebody is waiting: a slot a decode has asked for
+    (``_request_slot``) is yielded before the next one in the source's own order, and the check is
+    made before every single yield, so a request that arrives while a file is being read is served as
+    soon as that read finishes.
+    """
+
+    served: set[int] = set()
+    next_in_order = 0
+    while True:
+        requested = _take_request()
+        if requested is not None:
+            if 0 <= requested < slot_count and requested not in served:
+                served.add(requested)
+                yield requested
+            continue
+        while next_in_order < slot_count and next_in_order in served:
+            next_in_order += 1
+        if next_in_order >= slot_count:
+            return
+        served.add(next_in_order)
+        yield next_in_order
+
+
+def _request_slot(language: int, slot_index: int) -> None:
+    """Ask the warm-up for the one file an entry lives in, and start it when nothing is loading.
+
+    The source's ``decode`` reads every file of the language at this point (``load_string_table``);
+    here the read is asked for instead of taken, and the caller answers the source's own pending value
+    while it waits. A slot already read, already attempted or already asked for is not asked again.
+    """
+
+    key = (language, slot_index)
+    if key in _loaded_slots or key in _failed_slots:
+        return
+    with _warmup_lock:
+        if slot_index not in _warmup_requests:
+            _warmup_requests.append(slot_index)
+    _start_warmup(language)
+
+
+def _start_warmup(language: int) -> None:
+    """Start the worker that fills the table, unless one is already filling it for this language."""
+
+    global _warmup_thread, _warmup_language
+    with _warmup_lock:
+        if _warmup_thread is not None and _warmup_thread.is_alive():
+            if _warmup_language == language:
+                return
+            # ``switch_language``'s own case: the language changed under a load that is still
+            # running. The old load stops, and what it already read stays in the table it read
+            # into -- the source clears the caches and starts the new language's load the same way.
+            _warmup_stop.set()
+            _warmup_thread.join(5.0)
+        if _string_table_loaded and _loaded_language == language:
+            return
+        _warmup_stop.clear()
+        _warmup_language = language
+        _warmup_thread = threading.Thread(
+            target=_warmup_worker, args=(language,), name="py4gw-string-table", daemon=True
+        )
+        _warmup_thread.start()
+
+
+def _warmup_worker(language: int) -> None:
+    """Fill the table for one language, off the caller's stack.
+
+    This is where the source's frame callback would call ``_do_load_string_table``; the load itself is
+    untouched, including its own guard against loading a language twice.
+    """
+
+    try:
+        _do_load_string_table(language)
+    except Exception as error:  # noqa: BLE001 - the source's status line, and the worker ends
+        _set_load_status(f"load exception: {type(error).__name__}")
+
+
+def _stop_warmup(timeout_s: float = 5.0) -> None:
+    """Stop the warm-up and wait for it.
+
+    A connection that is closing frees the block the worker reads the client through, so the worker
+    has to be finished with it first. Its own current call is bounded by the bridge's timeout, which
+    is why the wait is bounded too.
+    """
+
+    global _warmup_thread
+    thread = _warmup_thread
+    if thread is None:
+        return
+    _warmup_stop.set()
+    thread.join(timeout_s)
+    _warmup_thread = None
+
+
 def _load_table_for_language(language: int) -> dict[int, bytes]:
     global _last_load_status
     existing = _string_tables_by_language.get(language)
@@ -783,20 +978,17 @@ def _load_table_for_language(language: int) -> dict[int, bytes]:
     readable_files = 0
     failed_files = 0
 
-    for slot_idx in range(lang_slot.slot_count):
-        file_slot = tp.get_file_slot(slot_idx, language)
-        if file_slot is None or not file_slot.file_hash_ptr:
-            continue
-        try:
-            file_data = _load_dat_file(file_slot.file_hash)
-        except Exception:
+    # The source's own loop is ``for slot_idx in range(lang_slot.slot_count)``; ``_slot_order`` yields
+    # the same slots, with the ones a caller is waiting for first. Each file is still read once, by
+    # the source's own parser, into the same table.
+    for slot_index in _slot_order(int(lang_slot.slot_count)):
+        if _warmup_stop.is_set():
+            break
+        read = _read_slot(language, slot_index, int(epf), table)
+        if read is True:
+            readable_files += 1
+        elif read is False:
             failed_files += 1
-            continue
-        if not file_data:
-            failed_files += 1
-            continue
-        readable_files += 1
-        _parse_string_file(file_data, slot_idx * epf, table)
 
     if table:
         _string_tables_by_language[language] = table
@@ -836,6 +1028,50 @@ def _do_load_string_table(language: int) -> None:
     _loaded_language = language
 
 
+def _entry_index(raw: bytes) -> int:
+    """The string-table entry an encoded string refers to (``_parse_codepoints``'s own index)."""
+
+    n = len(raw) & ~1
+    if n < 2:
+        return 0
+    codepoints = struct.unpack_from(f"<{n >> 1}H", raw)
+    try:
+        codepoints = codepoints[: codepoints.index(0)]
+    except ValueError:
+        pass
+    if not codepoints:
+        return 0
+    index, _ = _parse_codepoints(codepoints)
+    return index
+
+
+def _set_load_status(message: str) -> None:
+    """Record one line of the table's state, which the live tests and probes print."""
+
+    global _last_load_status
+    _last_load_status = message
+
+
+def _slot_of_entry(index: int) -> Optional[int]:
+    """The file slot an entry index lives in: ``index // entries_per_file``.
+
+    ``None`` while the client's ``entries_per_file`` cannot be read, which is the same condition the
+    source's load answers with an empty table -- asking the warm-up for slot ``0`` in that state would
+    be guessing at a file, so nothing is asked for.
+    """
+
+    if not index:
+        return None
+    TextParser._update_ptr()
+    context = TextParser.get_context()
+    if context is None:
+        return None
+    entries_per_file = int(context.entries_per_file)
+    if not entries_per_file:
+        return None
+    return index // entries_per_file
+
+
 def load_string_table(language: int = 0) -> None:
     """Enqueue string table load on the game thread.
 
@@ -852,17 +1088,12 @@ def load_string_table(language: int = 0) -> None:
     _last_load_status = "queued for game thread"
 
     # Source: ``import PyGameThread; PyGameThread.enqueue(lambda: _do_load_string_table(language))``
-    # — Reforged's injected runtime runs that callable at the next game frame. There is no
-    # frame loop here, so the load runs at the point of request: the host-side work (parsing
-    # entries into the table) runs on this thread, and every call the load makes into the
-    # client is issued on the client's own thread by the capability layer. An inline call can
-    # fail where a deferred one could not, so the guard's flag is put back before the failure
-    # leaves: otherwise every later decode would answer "" for a load that is not running.
-    try:
-        _do_load_string_table(language)
-    except BaseException:
-        _load_enqueued = False
-        raise
+    # — Reforged's injected runtime runs that callable at the next game frame, on the game thread,
+    # while the script that asked for a name goes on with its own work. There is no frame callback
+    # here, so the deferral is one worker thread: it returns here immediately and the table fills
+    # behind the caller (``_start_warmup``/``_warmup_worker``). Every call the load makes into the
+    # client is still issued on the client's own thread by the capability layer.
+    _start_warmup(language)
 
 
 def _get_client_language() -> int:
@@ -1080,9 +1311,15 @@ def decode(raw: bytes, language: Optional[int] = None) -> str:
     if cached is not None:
         return cached
 
-    # Kick off string table load if needed
-    if not _string_table_loaded and not _load_enqueued:
-        load_string_table(_get_client_language())
+    # The source calls ``load_string_table(_get_client_language())`` here, which reads every string
+    # file of the language. The port's table is filled by the warm-up worker the connection starts
+    # (``load_string_table``, called by the ``TextParser`` refresh at connect), so a decode whose
+    # entry is not in it yet *asks* for the one slot that entry lives in and answers the source's own
+    # pending value. Nothing on a caller's path opens a file.
+    if not _string_table_loaded:
+        slot_index = _slot_of_entry(_entry_index(raw))
+        if slot_index is not None:
+            _request_slot(_get_client_language(), slot_index)
 
     if not _string_table or raw in _pending:
         return ""

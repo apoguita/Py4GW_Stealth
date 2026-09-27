@@ -169,7 +169,7 @@ readable **without any client call at all**.
 
 | Consumer | Source route |
 | --- | --- |
-| `Agent.GetNameByID` | A (`Agent.py:9,147` → `decode_raw`) · B (`agent_methods.cpp:323`) |
+| `Agent.GetNameByID` | A (`Agent.py:9,147` → `decode_raw`) · B (`agent_methods.cpp:323`) — **ported 2026-09-26**: route A, with the encoded name read by the ported `PyAgent.get_agent_enc_name` (`py4gw/agent.py`); the first call answers `""` and the next the text, which is the source's own two-call shape |
 | item names and descriptions | A (`encoded_strings.py`, with amount/rarity/singular variants) · B (`item_methods.cpp:362`) |
 | quest name, description, objectives, location, npc | B (`quest_methods.cpp:105-135`, `AsyncDecodeAnyEncStr`) · A for the Python wrappers |
 | chat log text | B (`player_bindings.cpp:296`) · A for the Python wrappers |
@@ -254,3 +254,162 @@ Recorded so they are not mistaken for settled facts:
    loader" value otherwise, so the catalog text is empty here until the loader is identified by a
    signature. [`RESEARCH.md`](RESEARCH.md) has the crash this came from and the two probes that
    narrowed it.
+
+## 10. Which route a name takes now, and why (2026-09-27)
+
+**Route A (the host-side table) is no longer on any member's path. Route B (the client's own decoder)
+is what `Agent.GetNameByID` uses** — the owner's instruction, and the measurement behind it:
+
+| | Route A, the table (Reforged's Python decode) | Route B, the client's decoder (Native's `AsyncGetAgentName`) |
+| --- | ---: | ---: |
+| one string file / one name, cold | **~2.1 s** per file (record open ~1.1 s, 91 KB read+decompress ~0.9 s) | **~115 ms** per name (17 ms ring pickup + the client's decode) |
+| a name already answered | 0.74 ms | **0.09-0.5 ms** |
+| a cold map-wide sweep (~41 agents) | 7.8 s (6 files, 20 passes) | **2.9 s** (41 first-time decodes, serialised) |
+| a warm sweep | 91 ms | 4-466 ms (all names cached: ~0.09 ms each) |
+| dat records | one per file, each held across four commands | **none** |
+| text quality | stops at `Pet - %str1%` | resolves it: `Pet - My Pet` |
+| needs | the client's archive (and the block) | the client's decoder (and the block) |
+
+Route A stays in the tree, complete and tested, and `load_string_table` remains the source's own entry
+point to it for a caller that needs a table entry rendered on the host — but the `TextParser` refresh no
+longer starts it (`context/text_parser_context.py`), because nothing reads it and the background load was
+competing with Route B's decodes for the game thread.
+
+**Three things about Route B that are measured rather than assumed**, and each is why the member is
+written the way it is:
+
+1. **The client answers a few decodes at a time, not many.** A sweep that placed one per decode slot
+   (32) answered **none**; `_name_requests` therefore holds at most 8, and the rest answer `""` for the
+   caller to ask again — the source's own two-call contract.
+2. **A slot's *state* is what says a decode finished, not the `STRING_DECODED` event.** Taken on the
+   event the text reads empty; read by state it is the name. The member polls its own slot on the next
+   call, which is also what keeps it from competing with the dialog, whose strings do take that event
+   (and which — a defect found and fixed the same day — used to take *everything*, discarding other
+   modules' text).
+3. **A name left in flight holds a decode slot**, and the bridge refuses to free a block while a decode
+   is outstanding: the connection gives those slots back in `close`, without which a disconnect could
+   fail and orphan the block.
+
+## 11. The warm-up: what pre-reading the table can and cannot buy (2026-09-27)
+
+The owner's question: *can the dat handling be pre-cached on connect (or a map change) so a name never
+pays the warm-up, and would a thread make connect slower?* Answers, with the numbers from
+[`RESEARCH.md`](RESEARCH.md) § *Access cost, measured (2026-09-27)*.
+
+**A thread does not lengthen `connect()`.** Connect's own cost is its pattern scan (~128 ms) and the
+capability layer's install; a warm-up adds one thread start (microseconds) plus, before it starts, the
+host-side enumeration of which entries the current map's agents need (43 agents x ~0.15 ms of reads
+= ~6 ms). What a thread does **not** change is the total ring time: the table fills at the same speed;
+it is simply filled off the caller's stack.
+
+**The ring, not the read, is what a warm-up pays.** One command is taken per hook hit, so any warm-up's
+wall clock is `(commands) x (hit interval) + the client's own work inside those commands`. The GW.dat
+chain is four commands per file -- open, read buffer, free, close, the source's own shape -- so one
+string file is ~1.0 s measured, and all 99 files of a language are ~396 commands, ~100 s.
+
+**Three shapes, and they differ in what they buy:**
+
+| shape | ring cost | first name after connect | note |
+| --- | --- | --- | --- |
+| **today**: read the one file an entry names, at the point of use | 4 commands per *new slot* | 1.0-2.1 s, then 0.104 ms | the port's current divergence; nothing to undo |
+| **source order** (all 99 files, as `_do_load_string_table` loops them) | ~396 commands, ~100 s of background ring time | ready when its slot comes round: ~50 s average, ~100 s worst | *worse* than today for the first name, better afterwards |
+| **map-first** (the slots the agents actually present need, then the rest) | ~4 commands per slot in play; measured **5 slots for 8 sampled agents** | ~0.1 ms once its slot is read -- and its slot is read first, because the order is computed from the present agents | the same reads, the same parser, the same table; only *when* and *in what order* |
+
+**Recommended: the third shape, with the per-language table kept across reconnects.** It is the
+source's table read with the source's parser and slot arithmetic; what differs is the order (the source
+loops `range(slot_count)`, which for a mechanism that is free in-process is an arbitrary order) and the
+fact that it starts at connect instead of at the first name.
+
+**Two costs that come with it, stated plainly:**
+
+1. **The ring is serialized per command.** The warm-up holds the bridge for one command at a time
+   (~130 ms), so a foreground *action* is delayed by at most one command rather than by the whole
+   warm-up -- the bridge's lock is per call. A foreground *name* whose slot the warm-up has not reached
+   is read by that foreground call itself: the existing on-demand path stays as the fallback.
+2. **A wider window for the open-record hazard.** A controller killed during a warm-up leaves the
+   Gw.dat record it was reading open in the client -- exactly what the client's `Gw.dat still open`
+   assertion reported on 2026-09-26 ([`RESEARCH.md`](RESEARCH.md)). Today that window is the few hundred
+   milliseconds of one on-demand read; a warm-up widens it to as long as the table is loading. The rule
+   is unchanged and matters more: **a run must be allowed to finish**, and a run that dies leaves a
+   client to restart.
+
+**A map change needs no re-read.** The string table is the client's *language* table: the same files and
+the same entries for the whole session. A map change changes *which slots the names in play need*, so
+the map-first warm-up is worth re-running on a map change (cheap -- a handful of slots, and a slot
+already read is skipped), but the table itself is never re-read for a map. It is also kept per language
+**across reconnects inside one controller process** (`_string_tables_by_language`), so a script that
+reconnects does not pay twice.
+
+**Persisting the table between runs is not on the table.** Writing it to disk and reusing it next run is
+a mechanism neither Reforged nor Native has (both read the client's own archive at startup, in process),
+so it would be this project's own invention -- and the cornerstones forbid one however much time it
+saves.
+
+### 10.2 Is the table static? (the owner's question, answered with what identifies it)
+
+**Yes, in the only sense that matters, and the split is exact:**
+
+| part | static? | where it comes from |
+| --- | --- | --- |
+| the **entry bytes** (`index -> encrypted entry`) | **static per (game build, language)** | `Gw.dat`, through the client's own reader; nothing in a session or a map change touches it |
+| the **file-slot metadata** (99 slots, their hashes, the stride `entries_per_file`) | **static per `Gw.dat`** | published by the client's `TextParser`; a game patch changes the hashes, a language setting changes the slot array |
+| **which names exist** and the encoded string each agent carries | **live, always** | the agent records and the world/player/gadget tables -- the fetch, 0.147 ms of host reads, no ring, never cacheable |
+
+So the *archive* half is a constant of the installation and the *names* half is per-moment state. What
+the sources do follows from that: they read the archive **once per process** (in-process, so it is
+free) and keep the table in memory; nothing in either source persists it.
+
+**What is already free here:** the table is kept **per language across reconnects inside one controller
+process** (`_string_tables_by_language`), so a script that connects, disconnects and connects again does
+not read it twice. What is *not* free is a new controller process: that pays the warm-up again (~100 s
+of ring time for all 99 files at ~4 commands each).
+
+**What a persisted cache would buy, and what it would have to prove.** It would replace the warm-up with
+a *validation*: the slot array is contiguous (`TextFileSlotStruct` is 0x24 bytes, so 99 slots are
+8.9 KB, one read at ~7 µs) plus loading a file of ours (~ms), and then the first name is 0.25 ms on the
+very first call -- with the ring left free at connect. Its validity has to come from the client's own
+published metadata, never from a timestamp: `(game build/version, language, entries_per_file,
+slot_count, the 99 slot hashes)`; any difference means the archive is not the one the entries came out
+of, and the load runs live instead. **That fingerprint is what `tests/probe_name_scheme.py` now prints**
+(`cache_premise`: version, language, stride, count, first and last hash, and a SHA-256 over all of
+them), so "two runs of the same installation print the same digest, and a patch changes it" is a
+measurement rather than an assumption.
+
+**This is a decision for the owner, not for the port.** Neither source persists the table, so building
+one would be this project's own mechanism -- exactly the class of thing the cornerstones forbid. Two
+things belong in that decision: the cache file is the game's own text in a file of ours, and its
+invalidation must be the metadata above rather than a date. The route that needs no cache at all is
+Native's: let the client decode the string (one command per name, no `gw.dat` read); it answers empty
+today, and the control string in `tests/probe_name_scheme.py` settles whether that is this side's stub
+or the client.
+
+**What sizes the warm-up, and is still unmeasured:** the *pure* pickup latency of one command (a PING,
+with no client work in it) and the hook-hit rate. `tests/perf_access_cost.py --live` prints both, plus
+the GW.dat chain phase by phase. If a command's pickup is ~130 ms, the numbers above hold and taking
+more than one command per hook hit is the only lever that shrinks them; if it is far smaller, then the
+~1 s a string file costs is mostly the client's own decompression, and the warm-up is bounded by that
+instead.
+
+### 10.1 Built (2026-09-27)
+
+The recommended shape is in the tree, and it deleted the two members the earlier rounds had invented
+for the on-demand path (`use_string_table_language`, `_ensure_entry_loaded`):
+
+| what | where | what it does |
+| --- | --- | --- |
+| the trigger calls the source's enqueue | `context/text_parser_context.py:274-282` | the first successful `TextParser` refresh (which is what connect does) calls `load_string_table(language_id)` — the source's own call is `_do_load_string_table(language_id)`, and the enqueue is what defers it |
+| the enqueue defers to a worker | `internals/string_table.py` `load_string_table` → `_start_warmup` → `_warmup_worker` | `load_string_table` returns immediately; `_do_load_string_table` runs on one daemon thread, exactly as the source's frame callback would run it on the game thread |
+| the load is readable file by file | `_load_table_for_language` + `_read_slot` + `_slot_order` | the source's loop over `range(slot_count)`, with each file parsed into `_string_table` **as it is read**, so a name whose entry has been read answers while the rest of the language is still loading |
+| a decode asks instead of reading | `decode` → `_request_slot` | the source calls `load_string_table` here; this asks for the one slot the entry names and answers `""` — the source's own pending value. **No caller opens a file** |
+| a connection stops it | `client.py` `ConnectedClient.close` | `string_table._stop_warmup()` joins the worker before the block it reads through is released, and before the dat record it holds could be left open in the client |
+
+Two consequences worth naming: a decode can now answer **while the table is still loading** (the entry
+is there because its file has been read, not because the whole language has), and a slot a caller asks
+for is read **next**, so the worst case for the first name is one file rather than the rest of the
+language. `tests/test_string_table_offline.py`'s `WarmupTests` pins both: the enqueue returns while the
+worker is still inside its first read, and a requested slot is read before the ones nobody wants.
+Offline: **1073 tests OK**; `pyright` on the five touched files `0 errors`.
+
+**Still to measure, live:** the first-name latency at connect with the warm-up running (it should be
+the fetch + cached decode whenever the slot has already been read), and how long the whole 99-file
+warm-up takes in practice — `live_reports/name_scheme7*` and `tests/perf_access_cost.py --live`.

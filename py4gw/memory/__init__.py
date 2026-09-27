@@ -2,5 +2,6 @@
 
 from .mailbox import MailboxRecord, MailboxState
 from .memory import ProcessMemoryReader
+from .memory_manager import MemoryManager
 
-__all__ = ["MailboxRecord", "MailboxState", "ProcessMemoryReader"]
+__all__ = ["MailboxRecord", "MailboxState", "MemoryManager", "ProcessMemoryReader"]

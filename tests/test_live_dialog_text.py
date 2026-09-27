@@ -1,6 +1,6 @@
-"""Live Guild Wars test for the dialog text members.
+"""Live Guild Wars test for the dialog metadata tables and the loader step.
 
-Five members of ``PyDialog`` exist to return a dialog's text:
+The five `PyDialog` members that return a dialog's *text* are:
 
 ```text
 get_dialog_text_decoded(id)          the text, or "" while the decode is queued
@@ -10,19 +10,30 @@ get_dialog_info(id)                  the row's columns plus its content
 enumerate_available_dialogs()        every available row, each with its content
 ```
 
-The source fills the text by calling the client's ``DialogLoader_GetText`` for a dialog id and
-handing the encoded string to ``AsyncDecodeStr``, which decodes it in the client and calls back.
-This port calls the same loader through the capability layer and renders the string on the host
-with the game's own string table (``py4gw/dat_reader.py`` + ``py4gw/internals/string_table.py``).
+The source fills that text by rebasing `DialogMemory::DIALOG_LOADER_GETTEXT`
+(`dialog.h:99`), calling it for a dialog id, and handing the encoded string to
+`AsyncDecodeStr`, which decodes it **inside the client** and calls back
+(`dialog.cpp:1166-1253`); the port drives the same protocol through
+`py4gw/ui/async_decode.py`. It does not render dialog text on the host.
 
-**What only a running client can prove**, and what this test asserts: the loader resolves and
-answers for a real dialog id, the members' two-call contract holds against it (empty on the call
-that queues, text on the next), and the text the port renders is readable.
+**One step of that chain is not ported, and this run proves which.** On this build the
+rebased constant is not the loader — it lands inside another function, and calling it
+faulted the client on 2026-09-25 (`docs/RESEARCH.md`) — so the port's own answer is a
+refusal that names the work, not a call and not a check of its own. What only a running
+client can prove, and what this test asserts:
 
-**The one thing this test changes**: it connects, which installs the capability layer — two entry
-hooks, a block, a dispatcher and a listener. It sends nothing and interacts with nothing. Both
-hooked functions are back to their own bytes afterwards and the code section is compared with the
-one hashed before the run.
+* the sources' constant rebases into the client's module, where the call path bounds it;
+* the five metadata bases resolve, live, by the source's two stages (the constants first,
+  the `.rdata` fallback behind them) and validate over all 58 rows;
+* the loader step **reports** `this build's DialogLoader_GetText` and publishes no command,
+  which is the difference between a refusal and the crash of 2026-09-25;
+* the state members around it answer: a dialog id's columns read, and an id past
+  `MAX_DIALOG_ID` answers nothing.
+
+**The one thing this test changes**: it connects, which installs the capability layer — two
+entry hooks, a block, a dispatcher and a listener. It sends nothing and interacts with
+nothing. Both hooked functions are back to their own bytes afterwards and the code section
+is compared with the one hashed before the run.
 
 Run it from an **elevated** shell, in a map, with Guild Wars running::
 
@@ -45,18 +56,18 @@ OBSERVE_ENTRY = bytes.fromhex("55 8B EC 8B 45 08 83 F8 56")
 
 TEXT_CHUNK = 0x10000
 
-#: How many ids the second pass reports text for before the test stops printing.
-PRINTED = 6
-
 
 class LiveDialogTextTests(unittest.TestCase):
-    """The five text members, against the client's own dialog catalog."""
+    """The dialog tables and the loader step, against the client's own dialog catalog."""
 
     pid: int
     client: py4gw.ConnectedClient
     text_before: tuple[str, int]
-    first: list[dialog.DialogInfo]
-    second: list[dialog.DialogInfo]
+    loader: int
+    refusal: str
+    bases: dialog.DialogTableAddrs
+    available: list[int]
+    commands: int
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -92,38 +103,52 @@ class LiveDialogTextTests(unittest.TestCase):
 
         cls.client = py4gw.connect(clients[0])
         try:
-            # The loader's address is a hardcoded client virtual address, and on this build the
-            # constant the sources carry does not point at a function entry — calling it crashed
-            # the client once (docs/RESEARCH.md, 2026-09-25). The port confirms the candidate's
-            # bytes before it hands the address out, so this is 0 when it cannot be confirmed,
-            # and the members then answer the source's own "no loader" value.
+            # 1. What the sources' constant rebases to. The source does this unconditionally
+            #    (`ResolveDialogLoaderGetText`, `dialog_patterns.cpp:261-269`) and reads nothing
+            #    at the address; so does the port.
             cls.loader = cls.client.dialog_tables.resolve_loader_get_text()
-            cls.first = dialog.PyDialog.enumerate_available_dialogs()
-            cls.second = dialog.PyDialog.enumerate_available_dialogs()
+
+            # 2. The step the port does not take, and what it says instead. Nothing may be
+            #    published by it: a command here is the call that faulted the client.
+            try:
+                dialog.Dialog.get_dialog_text_decoded(0)
+            except NotImplementedError as error:
+                cls.refusal = str(error)
+            else:
+                raise unittest.SkipTest(
+                    "the member answered without reaching its loader step: this run is not "
+                    "in a map, and the map gate runs before the loader (dialog.cpp:1138-1145)"
+                )
             cls.commands = cls.client.bridge.header().command_written
+
+            # 3. The five bases, resolved live by the source's own two stages.
+            cls.bases = cls.client.dialog_tables.get()
+
+            # 4. Which rows the table says are available, read through the member itself.
+            cls.available = [
+                dialog_id
+                for dialog_id in range(dialog.MAX_DIALOG_ID + 1)
+                if dialog.Dialog.is_dialog_available(dialog_id)
+            ]
         except BaseException:
             py4gw.disconnect()
             raise
 
-        with_text = [row for row in cls.second if row.content]
         print(
-            f"\n--- dialog text, live, pid {cls.pid} ---\n"
+            f"\n--- dialog tables, live, pid {cls.pid} ---\n"
             f"module                  = 0x{cls.module_base:08X} + "
             f"0x{cls.module_size:X}\n"
-            f"DialogLoader_GetText    = "
-            + (f"0x{cls.loader:08X} (confirmed as a function entry)" if cls.loader
-               else "refused: the rebased constant does not begin a function on this build")
-            + f"\navailable dialogs       = {len(cls.first)}\n"
-            f"first pass with text    = "
-            f"{sum(1 for row in cls.first if row.content)}\n"
-            f"second pass with text   = {len(with_text)}\n"
-            f"commands published      = {cls.commands}\n"
-            + "".join(
-                f"    {row.dialog_id:>3}  flags=0x{row.flags:04X}  "
-                f"event_handler=0x{row.event_handler:08X}  {row.content[:60]!r}\n"
-                for row in with_text[:PRINTED]
-            )
-            + "--- end of the text run ---\n"
+            f"loader constant          = 0x{dialog.DIALOG_LOADER_GETTEXT:08X} "
+            f"-> 0x{cls.loader:08X}\n"
+            f"loader step              = refused: {cls.refusal.splitlines()[0][:120]}\n"
+            f"commands published       = {cls.commands}\n"
+            f"flags_base               = 0x{cls.bases.flags_base:08X}\n"
+            f"event_handler_base       = 0x{cls.bases.event_handler_base:08X}\n"
+            f"frame_type_base          = 0x{cls.bases.frame_type_base:08X}\n"
+            f"content_id_base          = 0x{cls.bases.content_id_base:08X}\n"
+            f"property_id_base         = 0x{cls.bases.property_id_base:08X}\n"
+            f"available dialogs        = {len(cls.available)}\n"
+            "--- end of the dialog table run ---\n"
         )
 
     @classmethod
@@ -145,7 +170,7 @@ class LiveDialogTextTests(unittest.TestCase):
             f"({cls.text_before[1]} bytes)\n"
             f"code section after      = {text_after[0][:32]}... "
             f"({text_after[1]} bytes)\n"
-            "--- end of the live dialog text test ---"
+            "--- end of the live dialog table test ---"
         )
 
         if hook_after != HOOK_ENTRY or observe_after != OBSERVE_ENTRY:
@@ -159,120 +184,80 @@ class LiveDialogTextTests(unittest.TestCase):
                 f"{cls.text_before[0]} before, {text_after[0]} after."
             )
 
-    # -- the members -------------------------------------------------------
+    # -- the loader step ---------------------------------------------------
 
-    def _require_loader(self) -> int:
-        """Skip the text assertions when this build's loader address cannot be confirmed."""
+    def test_the_sources_constant_rebases_into_the_client_module(self) -> None:
+        """``ToRuntimeAddress`` (``dialog_patterns.cpp:25-31``), measured against the module."""
 
-        if not self.loader:
-            raise unittest.SkipTest(
-                "the rebased DialogLoader_GetText constant does not begin a function on this "
-                "build, so the port refuses it and the members have no text to fetch; the "
-                "confirmation and the refusal are asserted in the two tests before this one"
-            )
-        return self.loader
+        self.assertTrue(
+            self.module_base <= self.loader < self.module_base + self.module_size,
+            f"the rebased constant 0x{self.loader:08X} is outside the client's module",
+        )
+        self.assertEqual(
+            self.loader,
+            self.module_base
+            + (dialog.DIALOG_LOADER_GETTEXT - 0x00400000),
+            "the rebase must use the sources' constant image base, not the module header",
+        )
 
-    def test_a_refused_loader_means_nothing_is_called(self) -> None:
-        """The check that the crash added: an unconfirmed address is never called.
+    def test_the_loader_step_reports_the_work_it_needs(self) -> None:
+        """**This is the refusal that replaced the call of 2026-09-25.**
 
-        The refusal path is ``QueueDialogTextDecode``'s own: with no loader it caches empty text
-        and clears the pending flag (``dialog.cpp:1166-1177``). If the port had called the
-        rebased constant anyway, a command would have been published — and on 2026-09-25 that
-        is exactly what faulted the client.
+        A command published here would be the call that faulted the client; the port does not
+        make it and does not substitute a check of its own. What it does is name the work.
         """
 
-        if self.loader:
-            self.assertGreater(
-                self.commands, 0, "a confirmed loader is called for every queued dialog"
-            )
-            return
-
+        self.assertIn("DialogLoader_GetText", self.refusal)
         self.assertEqual(
-            self.commands, 0, "a refused loader must not produce a single command"
-        )
-        self.assertTrue(
-            all(row.content == "" for row in self.second),
-            "with no loader every dialog's content is empty, which is the source's answer",
-        )
-        raise unittest.SkipTest(
-            "DialogLoader_GetText is refused on this build, so no text can be fetched; the "
-            "refusal and its consequence are what this run proves"
+            self.commands,
+            0,
+            "the loader step published a command, which means it called something",
         )
 
-    def test_the_loader_resolves_for_this_build(self) -> None:
-        loader = self._require_loader()
-        self.assertTrue(
-            self.module_base <= loader < self.module_base + self.module_size,
-            "the loader must be inside the client's module, which is what the call path bounds",
-        )
+    # -- the tables --------------------------------------------------------
 
-    def test_the_first_pass_queues_and_the_second_carries_the_text(self) -> None:
-        """The source's own contract: "" on the call that queues, text on the next."""
+    def test_the_five_bases_resolve_and_are_inside_the_module(self) -> None:
+        """``BuildStaticDialogTables`` first, ``ResolveFlagsBase`` behind it (``:175-225``)."""
 
-        self._require_loader()
-        self.assertTrue(self.first, "no dialog is available in this client")
-        for row in self.first:
-            with self.subTest(dialog_id=row.dialog_id):
-                self.assertEqual(row.content, "", "the first pass queues, so it has no text")
-
-        with_text = [row for row in self.second if row.content]
-        self.assertTrue(
-            with_text,
-            "the second pass reported no text for any of the "
-            f"{len(self.second)} available dialogs",
-        )
-
-    def test_the_reported_text_is_readable(self) -> None:
-        self._require_loader()
-        for row in self.second:
-            if not row.content:
-                continue
-            with self.subTest(dialog_id=row.dialog_id):
+        for name in (
+            "flags_base",
+            "frame_type_base",
+            "event_handler_base",
+            "content_id_base",
+            "property_id_base",
+        ):
+            with self.subTest(base=name):
+                value = int(getattr(self.bases, name))
+                self.assertNotEqual(value, 0, f"{name} did not resolve")
                 self.assertTrue(
-                    all(
-                        character.isprintable() or character in "\n\t"
-                        for character in row.content
-                    ),
-                    f"dialog {row.dialog_id} rendered to {row.content!r}",
+                    self.module_base <= value < self.module_base + self.module_size,
+                    f"{name} = 0x{value:08X} is outside the client's module",
                 )
 
-    def test_the_columns_are_read_for_every_available_row(self) -> None:
-        """``is_dialog_available`` is ``flags & 0x1``, so every row must carry it."""
+    def test_the_available_rows_carry_their_columns(self) -> None:
+        """``is_dialog_available`` is ``flags & 0x1``, and the columns read for those rows."""
 
-        for row in self.second:
-            with self.subTest(dialog_id=row.dialog_id):
-                self.assertTrue(row.flags & 0x1)
-                self.assertLessEqual(row.dialog_id, dialog.MAX_DIALOG_ID)
+        text_start, text_end = self._text_range(Win32(), self.pid)
+        for dialog_id in self.available:
+            with self.subTest(dialog_id=dialog_id):
+                flags = dialog.Dialog.read_dialog_flags(dialog_id)
+                self.assertTrue(flags & 0x1)
+                self.assertLessEqual(flags, 0xFFFF)
+                handler = dialog.Dialog.read_dialog_event_handler(dialog_id)
+                if handler:
+                    self.assertTrue(text_start <= handler < text_end)
 
-    def test_the_status_reports_what_was_cached(self) -> None:
-        status = dialog.PyDialog.get_dialog_text_decode_status()
-
-        cached = {row.dialog_id for row in status if not row.pending}
-        self.assertTrue(cached, "nothing was reported as cached after two passes")
-        self.assertTrue(
-            cached <= {row.dialog_id for row in self.second},
-            "the cache holds ids the enumeration did not return",
-        )
-
-    def test_a_decoded_id_is_not_pending(self) -> None:
-        """The render happens in the call that queues, so the flag is down afterwards."""
-
-        self._require_loader()
-        for row in self.second:
-            if not row.content:
-                continue
-            with self.subTest(dialog_id=row.dialog_id):
-                self.assertFalse(
-                    dialog.PyDialog.is_dialog_text_decode_pending(row.dialog_id)
-                )
-                self.assertEqual(
-                    dialog.PyDialog.get_dialog_text_decoded(row.dialog_id), row.content
-                )
+    # -- the members around it ---------------------------------------------
 
     def test_an_id_past_the_maximum_answers_nothing(self) -> None:
         self.assertEqual(
-            dialog.PyDialog.get_dialog_text_decoded(dialog.MAX_DIALOG_ID + 1), ""
+            dialog.Dialog.get_dialog_text_decoded(dialog.MAX_DIALOG_ID + 1), ""
         )
+
+    def test_the_status_starts_with_nothing_cached(self) -> None:
+        """Nothing has been decoded on this build, so the status has no rows to report."""
+
+        self.assertEqual(dialog.Dialog.get_dialog_text_decode_status(), [])
 
     # -- helpers -----------------------------------------------------------
 
@@ -299,6 +284,22 @@ class LiveDialogTextTests(unittest.TestCase):
 
         with ProcessMemoryReader(win32, pid) as reader:
             return reader.read(address, size)
+
+    @staticmethod
+    def _text_range(win32: Win32, pid: int) -> tuple[int, int]:
+        """The client's ``.text`` range, which the handler column has to fall in."""
+
+        from py4gw.memory import ProcessMemoryReader
+        from py4gw.scanner import RemoteScanner
+
+        module = win32.get_main_module(pid)
+        with ProcessMemoryReader(win32, pid) as reader:
+            scanner = RemoteScanner(
+                reader, int(module["base_address"]), int(module["size"])
+            )
+            scanner.initialize()
+            section = scanner.get_section_range("text")
+        return section.start, section.end
 
     @staticmethod
     def _text_digest(win32: Win32, pid: int) -> tuple[str, int]:

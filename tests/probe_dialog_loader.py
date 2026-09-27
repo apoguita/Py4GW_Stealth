@@ -31,7 +31,9 @@ HANDLER_BYTES = 0x800
 ENTRY_BYTES = 8
 CALL_OPCODE = 0xE8
 
-#: The entry shapes a client function has on this build (see ``DialogTables._is_function_entry``).
+#: The entry shapes a client function has on this build. The port's own copy of this check — the
+#: one in ``DialogTables`` — was removed on 2026-09-26 (a guard the source does not make); the probe
+#: keeps it as a *reading* of what the bytes look like, which is what it was measuring.
 ENTRY_PREFIXES = (b"\x8b\xff\x55\x8b\xec", b"\x55\x8b\xec")
 
 

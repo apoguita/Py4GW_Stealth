@@ -1,4 +1,4 @@
-"""Live checks for the bounded external AgentArray reader."""
+"""Live checks for the external AgentArray reader."""
 
 from __future__ import annotations
 
@@ -8,17 +8,16 @@ import time
 import py4gw
 
 from py4gw import (
-    AgentAllegiance,
+    Allegiance,
     AgentGadgetStruct,
     AgentItemStruct,
     AgentLivingStruct,
-    PerfCounter,
     Win32,
 )
 
 
 class LiveAgentArrayTests(unittest.TestCase):
-    """Verify agent references against a running Guild Wars client."""
+    """Verify the source-shaped agent array against a running Guild Wars client."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -41,7 +40,6 @@ class LiveAgentArrayTests(unittest.TestCase):
                 "This suite connects to the client, and connecting requires an "
                 "elevated controller. Run it from an elevated shell."
             )
-        cls.connection_perf = PerfCounter()
         cls.client = py4gw.connect(clients[0])
 
     @classmethod
@@ -53,180 +51,155 @@ class LiveAgentArrayTests(unittest.TestCase):
     def test_resolves_live_agent_array(self) -> None:
         """Resolve the native agent-array address from the JSON resolver."""
 
-        address = self.client.agent_array.cached_array_address
-        self.assertIsNotNone(address)
-        self.assertGreater(address or 0, 0)
-        print(f"Live AgentArray: 0x{address or 0:08X}")
-        print(
-            "  agent_array.resolver: "
-            f"{self.connection_perf.calculate_report('agent_array.resolver').avg:.3f} ms"
-        )
+        started = time.perf_counter_ns()
+        address = self.client.agent_array.initialize()
+        elapsed_ms = (time.perf_counter_ns() - started) / 1_000_000
 
-    def test_reads_bounded_live_references(self) -> None:
-        """Traverse pointers and apply the native movement validity gate."""
+        self.assertEqual(address, self.client.agent_array.cached_array_address)
+        self.assertGreater(address, 0)
+        print(f"Live AgentArray: 0x{address:08X}")
+        print(f"  resolve (cached after connect): {elapsed_ms:.3f} ms")
 
-        perf = PerfCounter()
-        snapshot = self.client.read_agent_array(perf)
-        if snapshot is None:
-            self.skipTest("The connected client has no active AgentContext.")
+    def test_reads_the_live_agent_array_header(self) -> None:
+        """Read the maintained header into a local copy, externally.
 
-        self.assertGreaterEqual(snapshot.reported_size, snapshot.count)
-        self.assertLessEqual(snapshot.count, self.client.agent_array.max_references)
-        self.assertTrue(all(reference.agent_id > 0 for reference in snapshot.references))
-        self.assertTrue(all(reference.address >= 0x10000 for reference in snapshot.references))
-        self.assertTrue(
-            all(reference.slot < snapshot.reported_size for reference in snapshot.references)
-        )
-        self.assertEqual(
-            len(snapshot.living)
-            + len(snapshot.items)
-            + len(snapshot.gadgets)
-            + sum(
-                1
-                for reference in snapshot.references
-                if not reference.is_living
-                and not reference.is_item
-                and not reference.is_gadget
-            ),
-            snapshot.count,
-        )
-        self.assertEqual(
-            len(snapshot.dead_allies) <= len(snapshot.allies), True
-        )
-        self.assertEqual(
-            len(snapshot.dead_enemies) <= len(snapshot.enemies), True
-        )
-        self.assertTrue(
-            all(
-                reference.allegiance is None
-                or isinstance(reference.allegiance, AgentAllegiance)
-                for reference in snapshot.references
-            )
-        )
-        print(
-            "Live AgentArray: "
-            f"size={snapshot.reported_size}, capacity={snapshot.reported_capacity}, "
-            f"scanned={snapshot.scanned_slots}, non_null={snapshot.non_null_slots}, "
-            f"accepted={snapshot.count}, stale={snapshot.stale_slots}, "
-            f"unreadable={snapshot.unreadable_slots}, truncated={snapshot.truncated}, "
-            f"living={len(snapshot.living)}, items={len(snapshot.items)}, "
-            f"gadgets={len(snapshot.gadgets)}, enemies={len(snapshot.enemies)}, "
-            f"allies={len(snapshot.allies)}, unknown_allegiance="
-            f"{sum(reference.allegiance is None for reference in snapshot.living)}, "
-            f"dead_allies={len(snapshot.dead_allies)}, "
-            f"dead_enemies={len(snapshot.dead_enemies)}, "
-            f"owned_items={len(snapshot.owned_items)}, "
-            f"elapsed={perf.calculate_report('agent_array.read').avg:.3f} ms"
-        )
-        for metric_name in (
-            "agent_array.context_read",
-            "agent_array.pointer_table",
-            "agent_array.movement_table",
-            "agent_array.classification",
-        ):
-            report = perf.calculate_report(metric_name)
-            print(f"  {metric_name}: {report.avg:.3f} ms")
+        The source's ``AgentArrayStruct`` is the client's own structure, kept by its
+        ``UpdatePtr`` callback (``AgentContext.py:1405-1415``). This port reads the
+        fixed-width ``GWArray<Agent*>`` header addressing it into a copy and
+        materializes the records that header describes through the same view. What is
+        checked here is that the copy describes the array the client keeps: header
+        bounds, one entry per advertised slot, and nonzero ids.
+        """
 
-    def test_exposes_source_category_methods_and_struct_view(self) -> None:
-        """Expose the source AgentArray category names over one snapshot."""
-
-        snapshot = self.client.read_agent_array()
-        if snapshot is None:
-            self.skipTest("The connected client has no active AgentContext.")
-        cache_started = time.perf_counter_ns()
+        started = time.perf_counter_ns()
         context = self.client.agent_array.read_context()
-        cache_elapsed_ms = (time.perf_counter_ns() - cache_started) / 1_000_000
+        elapsed_ms = (time.perf_counter_ns() - started) / 1_000_000
+
         self.assertIsNotNone(context)
         assert context is not None
-        self.assertEqual(context.GetAgentArray(), snapshot.GetAgentArray())
-        self.assertEqual(context.GetAllyArray(), snapshot.GetAllyArray())
-        self.assertEqual(context.GetEnemyArray(), snapshot.GetEnemyArray())
-        self.assertEqual(context.GetItemAgentArray(), snapshot.GetItemAgentArray())
-        self.assertEqual(context.GetGadgetAgentArray(), snapshot.GetGadgetAgentArray())
-        self.assertEqual(
-            context.GetOwnedItemAgentArray(), snapshot.GetOwnedItemAgentArray()
+        self.assertIs(self.client.agent_array.get_context(), context)
+
+        size = int(context.agent_array.m_size)
+        capacity = int(context.agent_array.m_capacity)
+        self.assertGreater(capacity, 0)
+        self.assertGreater(size, 0)
+        self.assertLessEqual(size, capacity)
+        self.assertGreater(int(context.agent_array.m_buffer), 0x10000)
+
+        agents = context.raw_agents
+        self.assertEqual(len(agents), size)
+        present = [agent for agent in agents if agent is not None]
+        self.assertTrue(all(int(agent.agent_id) > 0 for agent in present))
+
+        print(
+            "Live AgentArray header: "
+            f"buffer=0x{int(context.agent_array.m_buffer):08X}, "
+            f"size={size}, capacity={capacity}, "
+            f"non_null={len(present)}, read={elapsed_ms:.3f} ms"
         )
-        if context.GetAgentArray():
-            first_id = context.GetAgentArray()[0]
+
+    def test_exposes_source_category_methods(self) -> None:
+        """Expose the source ``AgentArrayStruct`` category methods over one view."""
+
+        context = self.client.agent_array.get_context()
+        if context is None:
+            self.skipTest("The connected client has no active AgentContext.")
+
+        from py4gw.agent_array import AgentArray
+
+        agents = context.GetAgentArray()
+        self.assertEqual(agents, AgentArray.GetAgentArray())
+        self.assertEqual(
+            len(agents),
+            len(set(agents)),
+            "the source's category lists hold each id once",
+        )
+
+        for name, category in (
+            ("ally", context.GetAllyArray()),
+            ("neutral", context.GetNeutralArray()),
+            ("enemy", context.GetEnemyArray()),
+            ("spirit_pet", context.GetSpiritPetArray()),
+            ("minion", context.GetMinionArray()),
+            ("npc_minipet", context.GetNPCMinipetArray()),
+            ("item", context.GetItemAgentArray()),
+            ("owned_item", context.GetOwnedItemAgentArray()),
+            ("gadget", context.GetGadgetAgentArray()),
+            ("dead_ally", context.GetDeadAllyArray()),
+            ("dead_enemy", context.GetDeadEnemyArray()),
+        ):
+            with self.subTest(category=name):
+                self.assertTrue(set(category) <= set(agents))
+
+        self.assertTrue(
+            set(context.GetOwnedItemAgentArray()) <= set(context.GetItemAgentArray())
+        )
+        self.assertTrue(
+            set(context.GetDeadAllyArray()) <= set(context.GetAllyArray())
+        )
+        self.assertTrue(
+            set(context.GetDeadEnemyArray()) <= set(context.GetEnemyArray())
+        )
+
+        if agents:
+            first_id = int(agents[0])
             first_agent = context.GetAgentByID(first_id)
             self.assertIsNotNone(first_agent)
             assert first_agent is not None
             self.assertEqual(int(first_agent.agent_id), first_id)
             self.assertIs(context.GetAgentByID(first_id), first_agent)
-        self.assertLessEqual(len(context.raw_agents), self.client.agent_array.max_pointer_slots)
+
         print(
             "Live AgentArray source view: "
-            f"cache_build={cache_elapsed_ms:.3f} ms, "
-            f"all={len(context.GetAgentArray())}, "
-            f"ally={len(context.GetAllyArray())}, "
+            f"all={len(agents)}, ally={len(context.GetAllyArray())}, "
+            f"neutral={len(context.GetNeutralArray())}, "
             f"enemy={len(context.GetEnemyArray())}, "
+            f"dead_ally={len(context.GetDeadAllyArray())}, "
+            f"dead_enemy={len(context.GetDeadEnemyArray())}, "
             f"items={len(context.GetItemAgentArray())}, "
+            f"owned_items={len(context.GetOwnedItemAgentArray())}, "
             f"gadgets={len(context.GetGadgetAgentArray())}, "
             f"raw={len(context.raw_agents)}"
         )
 
     def test_reads_one_complete_live_agent(self) -> None:
-        """Materialize only one selected typed agent record."""
+        """Materialize one selected typed agent record through the source's own lookup."""
 
-        snapshot = self.client.read_agent_array()
-        if snapshot is None or not snapshot.references:
-            self.skipTest("The connected client has no current agent references.")
+        from py4gw.agent import Agent
 
-        reference = snapshot.references[0]
-        perf = PerfCounter()
-        record = self.client.read_agent(reference, perf)
+        context = self.client.agent_array.get_context()
+        if context is None:
+            self.skipTest("The connected client has no active AgentContext.")
+        agents = context.GetAgentArray()
+        if not agents:
+            self.skipTest("The connected client has no current agents.")
+
+        agent_id = int(agents[0])
+        started = time.perf_counter_ns()
+        record = Agent.GetAgentByID(agent_id)
+        elapsed_ms = (time.perf_counter_ns() - started) / 1_000_000
         if record is None:
             self.skipTest("The agent read is gated: the map is not ready.")
 
-        self.assertEqual(int(record.agent_id), reference.agent_id)
-        self.assertEqual(record.remote_address, reference.address)
-        self.assertEqual(record.position[2] >= 0, True)
+        self.assertEqual(int(record.agent_id), agent_id)
+        self.assertGreater(int(record.type), 0)
+        self.assertGreaterEqual(record.position[2], 0)
         if isinstance(record, AgentLivingStruct):
-            self.assertIsInstance(record.allegiance_enum, AgentAllegiance)
+            self.assertIsInstance(record.allegiance_enum, Allegiance)
         elif isinstance(record, AgentItemStruct):
             self.assertGreaterEqual(int(record.item_id), 0)
         elif isinstance(record, AgentGadgetStruct):
             self.assertGreaterEqual(int(record.gadget_id), 0)
         print(
             "Live Agent detail: "
-            f"id={int(record.agent_id)}, kind={reference.kind.value}, "
-            f"type=0x{int(record.type):X}, position={record.position}, "
-            f"validation={perf.calculate_report('agent_array.reference_validation').avg:.3f} ms, "
-            f"record={perf.calculate_report('agent_array.agent_record').avg:.3f} ms"
-        )
-
-    def test_refreshes_complete_living_snapshot(self) -> None:
-        """Capture complete living records for frequent local queries."""
-
-        perf = PerfCounter()
-        snapshot = self.client.refresh_living_agents(perf)
-        if snapshot is None:
-            self.skipTest("The connected client has no active AgentContext.")
-
-        self.assertGreater(snapshot.count, 0)
-        self.assertTrue(all(isinstance(record, AgentLivingStruct) for record in snapshot.records))
-        first = snapshot.records[0]
-        self.assertIs(self.client.get_living_agent(int(first.agent_id)), first)
-        self.assertGreaterEqual(int(first.effects), 0)
-        print(
-            "Live living snapshot: "
-            f"generation={snapshot.generation}, records={snapshot.count}, "
-            f"stale={snapshot.stale_count}, unreadable={snapshot.unreadable_count}, "
-            f"effects_first=0x{int(first.effects):08X}, "
-            f"refresh={perf.calculate_report('agent_array.living_refresh').avg:.3f} ms, "
-            f"age={snapshot.age_ms:.3f} ms"
+            f"id={agent_id}, type=0x{int(record.type):X}, "
+            f"position={record.position}, read={elapsed_ms:.3f} ms"
         )
 
     def test_reads_live_effect_surface(self) -> None:
         """Expose the native effects bitmap and visible-effect list."""
 
-        snapshot = self.client.living_snapshot
-        if snapshot is None:
-            snapshot = self.client.refresh_living_agents()
-        if snapshot is None or not snapshot.records:
-            self.skipTest("The connected client has no living-agent records.")
-
-        record = snapshot.records[0]
+        record = self._first_living_record()
         visible_effects = record.visible_effects
         self.assertGreaterEqual(int(record.effects), 0)
         self.assertTrue(all(int(effect.effect_id) >= 0 for effect in visible_effects))
@@ -240,13 +213,7 @@ class LiveAgentArrayTests(unittest.TestCase):
     def test_reads_live_equipment_and_tags(self) -> None:
         """Read optional equipment and tag records through target pointers."""
 
-        snapshot = self.client.living_snapshot
-        if snapshot is None:
-            snapshot = self.client.refresh_living_agents()
-        if snapshot is None or not snapshot.records:
-            self.skipTest("The connected client has no living-agent records.")
-
-        record = snapshot.records[0]
+        record = self._first_living_record()
         equipment = record.equipment
         tags = record.tags
         if equipment is not None:
@@ -259,6 +226,20 @@ class LiveAgentArrayTests(unittest.TestCase):
             f"tags={tags is not None}, "
             f"item_ids={equipment.item_ids if equipment is not None else ()}"
         )
+
+    def _first_living_record(self) -> AgentLivingStruct:
+        """Return the first living record the client's own lookup answers with."""
+
+        from py4gw.agent import Agent
+
+        context = self.client.agent_array.get_context()
+        if context is None:
+            self.skipTest("The connected client has no active AgentContext.")
+        for agent_id in context.GetAgentArray():
+            record = Agent.GetAgentByID(int(agent_id))
+            if isinstance(record, AgentLivingStruct):
+                return record
+        self.skipTest("The connected client has no living agent records.")
 
 
 if __name__ == "__main__":

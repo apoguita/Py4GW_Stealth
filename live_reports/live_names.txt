@@ -1,0 +1,65 @@
+﻿python.exe : setUpClass (tests.test_live_agent_effects.LiveAgentEffectsTests) ... ERROR
+At line:1 char:205
++ ... W_Stealth'; & python -m unittest tests.test_live_agent_effects -v 2>& ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (setUpClass (tes...ests) ... ERROR:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+======================================================================
+ERROR: setUpClass (tests.test_live_agent_effects.LiveAgentEffectsTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_live_agent_effects.py", line 83, in setUpClass
+    cls.client = py4gw.connect(clients[0])
+                 ~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\client.py", line 1443, in connect
+    _current_client = ConnectedClient(process, game_thread=game_thread)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\client.py", line 369, in __init__
+    self._install_game_thread()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\client.py", line 399, in _install_game_thread
+    bridge.install(
+    ~~~~~~~~~~~~~~^
+        hook_target,
+        ^^^^^^^^^^^^
+    ...<5 lines>...
+        observing=(observe_target, _GAME_THREAD_OBSERVE_BYTES),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\bridge.py", line 313, in install
+    observer_hooker.install(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        OBSERVER_NAME,
+        ^^^^^^^^^^^^^^
+    ...<3 lines>...
+        after=OBSERVER_AFTER,
+        ^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\hooker.py", line 659, in install
+    self._patcher.patch(
+    ~~~~~~~~~~~~~~~~~~~^
+        target,
+        ^^^^^^^
+        displaced,
+        ^^^^^^^^^^
+        build_entry_patch(target, stub_address, len(displaced)),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\patcher.py", line 128, in patch
+    self._verify(address, expected, "before the patch")
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\patcher.py", line 197, in _verify
+    raise RuntimeError(
+    ...<3 lines>...
+    )
+RuntimeError: code at 0x008440C0 before the patch is not what this installer expected in pid 46544: expected 55 8b ec 
+8b 45 08 83 f8 56, observed 55 8b ec 83 ec 2c 53 8b 5d. Nothing was written.
+
+----------------------------------------------------------------------
+Ran 0 tests in 1.009s
+
+FAILED (errors=1)

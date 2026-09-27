@@ -28,6 +28,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest import mock
 
+from py4gw import agent
 from py4gw import chat
 from py4gw import client as client_module
 from py4gw import dialog
@@ -83,7 +84,7 @@ class StartupOrderTests(unittest.TestCase):
             mock.patch("py4gw.client.WriteAccess"),
             mock.patch("py4gw.client.Bridge"),
             mock.patch("py4gw.client.EventListener", listener),
-            mock.patch.object(dialog.PyDialog, "initialize", initialize),
+            mock.patch.object(dialog.Dialog, "initialize", initialize),
         ):
             client._install_game_thread()
         return listener
@@ -114,6 +115,11 @@ class StartupOrderTests(unittest.TestCase):
         the chat module's log-line capture joins them — native registers its own chat-log callback
         in the same step (``chat.cpp:205``) — and the listener, which is what delivers what they
         registered for, starts after all of them.
+
+        The two ``STRING_DECODED`` handlers are the modules that take the client's decoded text on that
+        event: the dialog's strings and the chat log's lines. An agent's name is decoded by the client
+        as well, but it reads its **own slot's state** rather than the event (measured live: taken on
+        the event the text is empty, read by state it is the name), so it registers no handler.
         """
 
         client = self.bare_connection()
@@ -163,7 +169,7 @@ class StartupOrderTests(unittest.TestCase):
         def record_terminate() -> None:
             listener_running.append(client._listener is not None)
 
-        with mock.patch.object(dialog.PyDialog, "terminate", record_terminate):
+        with mock.patch.object(dialog.Dialog, "terminate", record_terminate):
             client.close()
 
         self.assertEqual(

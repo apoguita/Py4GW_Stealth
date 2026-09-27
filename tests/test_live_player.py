@@ -63,7 +63,7 @@ from typing import Callable
 
 import py4gw
 from py4gw import dialog
-from py4gw.context.agent_array import AgentAllegiance
+from py4gw.context.agent_array import Allegiance
 from py4gw.game_thread.shared_block import (
     CallForm,
     CommandState,
@@ -458,7 +458,7 @@ class LivePlayerActionTests(unittest.TestCase):
         behaviour that would otherwise read as a failed call.
         """
 
-        record = self.client.read_agent_by_id(agent_id)
+        record = self.client.agent_array.get_context().GetAgentByID(agent_id)
         if record is None or record.GetAsAgentLiving() is None:
             self.skipTest(
                 f"agent {agent_id} is no longer a living agent the client can find, "
@@ -495,21 +495,21 @@ class LivePlayerActionTests(unittest.TestCase):
         them apart sends the operator looking for the wrong one.
         """
 
-        snapshot = client.read_agent_array()
-        if snapshot is None:
-            return 0, float("inf")
+        from py4gw.agent_array import AgentArray
 
+        view = client.agent_array.get_context()
         count = 0
         nearest = float("inf")
-        for reference in snapshot.all:
-            if reference.allegiance is not AgentAllegiance.ENEMY:
+        # The source's own enemy list: the context buckets the array by allegiance, so the scan
+        # starts from the enemies rather than filtering every agent by hand.
+        for agent_id in AgentArray.GetEnemyArray():
+            agent_id = int(agent_id)
+            if agent_id in (0, own_agent):
                 continue
-            if reference.agent_id in (0, own_agent) or not reference.is_living:
+            record = view.GetAgentByID(agent_id)
+            if record is None or not record.is_living_type:
                 continue
             count += 1
-            record = client.read_agent_by_id(int(reference.agent_id))
-            if record is None:
-                continue
             distance = math.dist((float(record.pos.x), float(record.pos.y)), xy)
             nearest = min(nearest, distance)
         return count, nearest
@@ -526,26 +526,25 @@ class LivePlayerActionTests(unittest.TestCase):
         watching for. The walk is what ``ENEMY_OBSERVE_S`` is sized for.
         """
 
-        snapshot = client.read_agent_array()
-        if snapshot is None:
-            return 0, 0.0
+        from py4gw.agent_array import AgentArray
 
+        view = client.agent_array.get_context()
         best_id, best_distance = 0, 0.0
-        for reference in snapshot.all:
-            if reference.allegiance is not AgentAllegiance.ENEMY:
+        for agent_id in AgentArray.GetEnemyArray():
+            agent_id = int(agent_id)
+            if agent_id in (0, own_agent):
                 continue
-            if reference.agent_id in (0, own_agent) or not reference.is_living:
+            record = view.GetAgentByID(agent_id)
+            if record is None:
                 continue
-            record = client.read_agent_by_id(int(reference.agent_id))
-            if record is None or record.GetAsAgentLiving() is None:
-                continue
-            if float(record.hp) <= 0.0:
+            living = record.GetAsAgentLiving()
+            if living is None or float(living.hp) <= 0.0:
                 continue
             distance = math.dist((float(record.pos.x), float(record.pos.y)), xy)
             if distance > ENEMY_RANGE:
                 continue
             if not best_id or distance < best_distance:
-                best_id, best_distance = int(reference.agent_id), distance
+                best_id, best_distance = agent_id, distance
         return best_id, best_distance
 
     def own_health(self) -> tuple[float, int]:
@@ -562,7 +561,7 @@ class LivePlayerActionTests(unittest.TestCase):
         meaning was assumed from the field names instead of taken from the header.
         """
 
-        record = self.client.read_agent_by_id(self.agent_id)
+        record = self.client.agent_array.get_context().GetAgentByID(self.agent_id)
         if record is None:
             return 0.0, 0
         return float(record.hp), int(record.max_hp)
@@ -570,7 +569,7 @@ class LivePlayerActionTests(unittest.TestCase):
     def distance_to_agent(self, agent_id: int) -> float:
         """Return how far an agent is from the character, or a large number."""
 
-        record = self.client.read_agent_by_id(agent_id)
+        record = self.client.agent_array.get_context().GetAgentByID(agent_id)
         if record is None:
             return float("inf")
         return math.dist(
@@ -636,20 +635,21 @@ class LivePlayerActionTests(unittest.TestCase):
         which looks like a failed call unless the selection is the same test.
         """
 
-        snapshot = client.read_agent_array()
-        if snapshot is None:
-            return 0
-        for reference in snapshot.all:
-            if not reference.is_living:
+        from py4gw.agent import Agent
+        from py4gw.agent_array import AgentArray
+
+        view = client.agent_array.get_context()
+        for agent_id in AgentArray.GetAgentArray():
+            agent_id = int(agent_id)
+            if agent_id in (0, own_agent):
                 continue
-            if reference.agent_id in (0, own_agent):
+            record = view.GetAgentByID(agent_id)
+            if record is None or not record.is_living_type:
                 continue
-            if reference.allegiance in (None, AgentAllegiance.ENEMY):
+            allegiance, _ = Agent.GetAllegiance(agent_id)
+            if allegiance == int(Allegiance.Enemy):
                 continue
-            record = client.read_agent_by_id(int(reference.agent_id))
-            if record is None or record.GetAsAgentLiving() is None:
-                continue
-            return int(reference.agent_id)
+            return agent_id
         return 0
 
     @staticmethod
@@ -676,10 +676,10 @@ class LivePlayerActionTests(unittest.TestCase):
         true nearest would be thousands of remote reads.
         """
 
-        snapshot = client.read_agent_array()
-        if snapshot is None:
-            return 0, 0.0
+        from py4gw.agent import Agent
+        from py4gw.agent_array import AgentArray
 
+        view = client.agent_array.get_context()
         for wanted in (
             lambda record: record.is_living_type and not int(record.login_number),
             lambda record: record.is_gadget_type,
@@ -687,21 +687,28 @@ class LivePlayerActionTests(unittest.TestCase):
         ):
             best_id, best_distance = 0, 0.0
             read = 0
-            for reference in snapshot.all:
-                if reference.agent_id in (0, own_agent):
-                    continue
-                if reference.allegiance in (None, AgentAllegiance.ENEMY):
-                    continue
-                if not (reference.is_living or reference.is_gadget):
+            # The source's own list, with the enemies dropped: a dialog is what a non-enemy
+            # answers with.
+            for agent_id in AgentArray.GetAgentArray():
+                agent_id = int(agent_id)
+                if agent_id in (0, own_agent):
                     continue
                 if read >= CANDIDATE_READ_LIMIT:
                     break
                 read += 1
                 try:
-                    record = client.read_agent(reference)
+                    record = view.GetAgentByID(agent_id)
                 except (OSError, RuntimeError):
                     continue
-                if record is None or not wanted(record):
+                if record is None:
+                    continue
+                allegiance, _ = Agent.GetAllegiance(agent_id)
+                if allegiance == int(Allegiance.Enemy):
+                    continue
+                if not (record.is_living_type or record.is_gadget_type):
+                    continue
+                living = record.GetAsAgentLiving()
+                if living is None or not wanted(living):
                     continue
                 distance = math.dist(
                     (float(record.pos.x), float(record.pos.y)), xy
@@ -709,7 +716,7 @@ class LivePlayerActionTests(unittest.TestCase):
                 if distance > INTERACT_RANGE:
                     continue
                 if not best_id or distance < best_distance:
-                    best_id, best_distance = int(reference.agent_id), distance
+                    best_id, best_distance = agent_id, distance
             if best_id:
                 return best_id, best_distance
         return 0, 0.0
@@ -906,7 +913,7 @@ class LivePlayerActionTests(unittest.TestCase):
             )
         self.require_living_agent(self.enemy_agent)
 
-        enemy = self.client.read_agent_by_id(self.enemy_agent)
+        enemy = self.client.agent_array.get_context().GetAgentByID(self.enemy_agent)
         assert enemy is not None
         start_xy = Player.GetXY()
         enemy_health = float(enemy.hp)
@@ -972,7 +979,7 @@ class LivePlayerActionTests(unittest.TestCase):
         outcome = ""
         deadline = time.monotonic() + ENEMY_OBSERVE_S
         while time.monotonic() < deadline:
-            now = self.client.read_agent_by_id(self.enemy_agent)
+            now = self.client.agent_array.get_context().GetAgentByID(self.enemy_agent)
             if now is None or float(now.hp) <= 0.0:
                 outcome = "the enemy is at 0 health or gone from the array — it died"
                 break

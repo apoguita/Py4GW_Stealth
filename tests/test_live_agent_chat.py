@@ -40,6 +40,7 @@ from typing import Any
 import py4gw
 from py4gw import chat
 from py4gw.agent import Agent
+from py4gw.agent_array import AgentArray
 from py4gw.client import (
     _GAME_THREAD_HOOK,
     _GAME_THREAD_HOOK_BYTES,
@@ -250,8 +251,7 @@ class _LiveAgentChatTests(unittest.TestCase):
     def _agent_ids(self) -> list[int]:
         """The ids the agent array reports, capped for a bounded run."""
 
-        snapshot = self.client.read_agent_array()
-        return [int(reference.agent_id) for reference in snapshot.references][:AGENT_LIMIT]
+        return [int(agent_id) for agent_id in AgentArray.GetAgentArray()][:AGENT_LIMIT]
 
     # -- the enum-backed members on live data ------------------------------
 
@@ -270,7 +270,7 @@ class _LiveAgentChatTests(unittest.TestCase):
         rows: list[str] = []
 
         for agent_id in ids:
-            record = self.client.read_agent_by_id(agent_id)
+            record = self.client.agent_array.get_context().GetAgentByID(agent_id)
             if record is None or not hasattr(record, "allegiance"):
                 continue
             raw_allegiance = int(record.allegiance)
@@ -362,7 +362,7 @@ class _LiveAgentChatTests(unittest.TestCase):
         """The player's record is the one a caller checks by eye, so print what it answers."""
 
         player_id = self.client.read_player_agent_id().agent_id
-        record = self.client.read_agent_by_id(player_id)
+        record = self.client.agent_array.get_context().GetAgentByID(player_id)
         self.assertIsNotNone(record)
 
         names = Agent.GetProfessionNames(player_id)

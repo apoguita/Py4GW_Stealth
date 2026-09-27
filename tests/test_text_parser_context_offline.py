@@ -164,11 +164,15 @@ class _FakeClient:
 
 
 class StringTableTriggerTests(unittest.TestCase):
-    """The load the first refresh starts, which is ``TextContext.py:152-155``.
+    """What the first refresh does about the string table, which is ``TextContext.py:152-155``.
 
-    The source's ``_update_ptr`` hands the language to ``_do_load_string_table`` the first time
-    it finds a context, and never again. That is the trigger for the whole string table — the
-    decode path has no separate "load the table" step for a caller to remember.
+    The source's ``_update_ptr`` hands the language to the load the first time it finds a context, and
+    never again — in-process that call reads **every** string file of the language while the script
+    that asked goes on with its own work. Here each file is a four-call GW.dat chain through the
+    command ring, so the port starts the same load on one worker (``load_string_table`` is the
+    source's own enqueue) and **the connect does not wait for it either**. These tests pin the
+    trigger's shape: once, with the client's own language, and not at all when there is no context to
+    read it from.
     """
 
     def setUp(self) -> None:
@@ -188,22 +192,32 @@ class StringTableTriggerTests(unittest.TestCase):
         self.addCleanup(self._client_patch.stop)
 
         self._load_patch = mock.patch(
-            "py4gw.internals.string_table._do_load_string_table", self.loaded.append
+            "py4gw.internals.string_table.load_string_table", self.loaded.append
         )
         self._load_patch.start()
         self.addCleanup(self._load_patch.stop)
 
-    def test_the_first_refresh_starts_the_load_for_the_clients_language(self) -> None:
+    def test_the_first_refresh_reads_no_string_file(self) -> None:
+        """The refresh marks itself triggered and **does not** read the archive.
+
+        ``TextParser`` is refreshed (the context comes back), but the source's eager load of every
+        string file of the language is not started here: outside the client that is a ~2.1 s dat record
+        per file, and nothing in this library reads the table any more -- a name is decoded by the
+        client itself. ``load_string_table`` remains the source's entry point for a caller that wants
+        an entry rendered on the host.
+        """
+
         TextParser._update_ptr()
 
-        self.assertEqual(self.loaded, [3])
+        self.assertEqual(self.loaded, [], "the refresh reads nothing")
         self.assertIsNotNone(TextParser.get_context())
 
-    def test_the_load_is_started_once(self) -> None:
+    def test_the_refresh_is_marked_once(self) -> None:
         TextParser._update_ptr()
         TextParser._update_ptr()
 
-        self.assertEqual(self.loaded, [3], "the source triggers it once")
+        self.assertEqual(self.loaded, [], "nothing is started, on the first refresh or a later one")
+        self.assertTrue(TextParser._string_table_triggered)
 
     def test_a_refresh_with_no_client_starts_nothing(self) -> None:
         with mock.patch("py4gw.client.current_client", return_value=None):

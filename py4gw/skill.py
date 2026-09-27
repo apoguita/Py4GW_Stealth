@@ -28,8 +28,10 @@ Three groups exist, and each member says which one it is in its docstring:
     icons, string ids, every flag — plus all three of native's name tables: the 29 skill-type names
     and the 11 profession names (``skill_names.cpp:3081-3131``), which ``GetType``,
     ``GetProfession`` and the whole ``Flags`` family read, and the 3031-entry skill-name table
-    (``skill_names.cpp:16-3048``) behind ``GetName`` and ``GetID``, ported beside this file as
-    ``py4gw/skill_names.py``.
+    (``skill_names.cpp:16-3048``) behind ``GetName`` and ``GetID``. **All four lookups and both
+    switches live in the port of that file, ``py4gw/enums_src/skill_names.py``** — the names are the
+    members of native's ``SkillID`` enum — and this module imports them from there, the way native's
+    ``skill_bindings`` calls into ``GW::skillbar``.
 
 ``not built yet``
     ``GetNameFromWiki``/``GetURL``/``GetProgressionData``/``GetDescription``/``GetConciseDescription``
@@ -44,7 +46,12 @@ from __future__ import annotations
 
 from .client import require_client
 from .context.skill_context import SkillStruct
-from .skill_names import GetSkillIDByName, GetSkillNameByID
+from .enums_src.skill_names import (
+    GetProfessionNameById,
+    GetSkillIDByName,
+    GetSkillNameByID,
+    GetSkillTypeNameByID,
+)
 
 
 def _unported(member: str, requirement: str) -> NotImplementedError:
@@ -60,69 +67,6 @@ def _unported(member: str, requirement: str) -> NotImplementedError:
         "The source's member works; this port raises at the call site and names the work "
         "item instead of returning a wrong value."
     )
-
-
-#: ``GW::skillbar::GetSkillTypeNameByID`` (``skill_names.cpp:3081-3114``): the skill-type table
-#: native generates from the ``SkillType`` enum. The switch's numbers are its own.
-SKILL_TYPE_NAMES = {
-    1: "Bounty",
-    2: "Scroll",
-    3: "Stance",
-    4: "Hex",
-    5: "Spell",
-    6: "Enchantment",
-    7: "Signet",
-    8: "Condition",
-    9: "Well",
-    10: "Skill",
-    11: "Ward",
-    12: "Glyph",
-    13: "Title",
-    14: "Attack",
-    15: "Shout",
-    16: "Skill2",
-    17: "Passive",
-    18: "Environmental",
-    19: "Preparation",
-    20: "PetAttack",
-    21: "Trap",
-    22: "Ritual",
-    23: "EnvironmentalTrap",
-    24: "ItemSpell",
-    25: "WeaponSpell",
-    26: "Form",
-    27: "Chant",
-    28: "EchoRefrain",
-    29: "Disguise",
-}
-
-
-def GetSkillTypeNameByID(type_id: int) -> str:
-    """``GW::skillbar::GetSkillTypeNameByID`` (``skill_names.cpp:3081-3114``): ``""`` when unknown."""
-
-    return SKILL_TYPE_NAMES.get(int(type_id), "")
-
-
-#: ``GW::skillbar::GetProfessionNameById`` (``skill_names.cpp:3116-3131``).
-PROFESSION_NAMES = {
-    0: "None",
-    1: "Warrior",
-    2: "Ranger",
-    3: "Monk",
-    4: "Necromancer",
-    5: "Mesmer",
-    6: "Elementalist",
-    7: "Assassin",
-    8: "Ritualist",
-    9: "Paragon",
-    10: "Dervish",
-}
-
-
-def GetProfessionNameById(profession_id: int) -> str:
-    """``GW::skillbar::GetProfessionNameById`` (``skill_names.cpp:3116-3131``): ``""`` when unknown."""
-
-    return PROFESSION_NAMES.get(int(profession_id), "")
 
 
 class SkillID:
