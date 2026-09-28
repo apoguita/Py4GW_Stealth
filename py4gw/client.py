@@ -870,6 +870,33 @@ class ConnectedClient:
         )
         return self.bridge.call(slot, message_id, wparam, lparam)
 
+    def send_ui_message_raw(
+        self, message_id: int, wparam: int = 0, lparam: int = 0
+    ) -> CommandRecord:
+        """Call the client's own message sender with the caller's two words, unwrapped.
+
+        ``GW::ui::SendUIMessage(UIMessage, void* wparam, void* lparam)`` is a three-word ``__cdecl``
+        (``ui_patterns.cpp:31``, Native's ``SendUIMessageFn``), and this is that call with nothing in
+        between: the id and the two words the caller named, sent as they are.
+        :meth:`send_ui_message` is the **packed** form — it builds a zeroed sixteen-word payload from
+        its two words and passes that payload's address as ``wparam``, which is what
+        ``SendUIMessagePacked`` does (``ui_bindings.cpp:60-74``). So a caller that already holds the
+        pointer the client should receive — a struct in the block's data region, or a bare word the
+        client interprets — needs this one. That is what ``PyUIManager.UIManager.SendUIMessageRaw``
+        does with its own two words, and what ``SendUIMessage`` does with a payload of its own making.
+
+        The address is the one the connection holds, for the reason :meth:`send_ui_message` gives:
+        it is the entry this project's observer is installed at, so the call travels through the hook
+        and the trampoline reaches the client's own body. Re-resolving it is not an option — the
+        entry is patched, and a second scan answers the function *before* it.
+        """
+
+        address = self._ui_message_address or self._resolve(_GAME_THREAD_OBSERVE)
+        slot = self._descriptor_slot(
+            (address, int(CallForm.U32_U32_U32)), address, CallForm.U32_U32_U32
+        )
+        return self.bridge.call(slot, message_id, wparam, lparam)
+
     def _descriptor_slot(
         self, key: tuple[object, int], target: int, form: CallForm
     ) -> int:

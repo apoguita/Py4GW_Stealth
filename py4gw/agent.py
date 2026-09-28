@@ -803,21 +803,21 @@ class Agent:
         """Retrieve the instance timer of an agent in milliseconds (``Agent.py:280-294``).
 
         The source's body is four lines — the record, ``UIManager.GetFPSLimit()``, the ``max``
-        against 30 that keeps the division safe, and the millisecond conversion. Reforged reaches
-        the frame limit through ``UIManager.GetFPSLimit`` (``UIManager.py:283``), which is
-        ``PyUIManager.UIManager.get_frame_limit()``, which is native's ``GW::ui::GetFrameLimit``
-        (``ui_methods.cpp:1833-1858``) — and that function **is** ported
-        (:func:`py4gw.ui.preferences.get_frame_limit`). ``UIManager`` has no ported home yet, so
-        this calls the native function the wrapper ends at; the value is the same one the source
-        divides by, reached one layer lower.
+        against 30 that keeps the division safe, and the millisecond conversion. **It calls
+        ``UIManager.GetFPSLimit`` here, which is the source's own route**: that member landed with
+        the class on 2026-09-27 (``py4gw/ui_manager.py``) and returns what
+        ``PyUIManager.UIManager.get_frame_limit()`` returns, i.e. native's ``GW::ui::GetFrameLimit``
+        (``ui_methods.cpp:1833-1858``). Before the class had a home this member reached that function
+        one layer lower (``py4gw.ui.preferences.get_frame_limit``); the value is the same one the
+        source divides by, and the route is now the source's.
         """
 
-        from .ui.preferences import get_frame_limit
+        from .ui_manager import UIManager
 
         agent = Agent.GetAgentByID(agent_id)
         if agent is None:
             return 0
-        fps_limit = get_frame_limit()
+        fps_limit = UIManager.GetFPSLimit()
         fps_limit = max(fps_limit, 30)  # Prevent division by zero
         return int(agent.timer / fps_limit * 1000)
 

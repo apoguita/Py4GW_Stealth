@@ -20,6 +20,7 @@ New-Item -ItemType Directory -Force -Path $reports | Out-Null
 if (-not $Suites -or $Suites.Count -eq 0) {
     $Suites = @(
         "tests/probe_agent_effects_live.py", # read-only probe: names, effects and the timer, no connect
+        "tests/probe_ui_manager_live.py",    # read-only probe: every UIManager read, incl. the key table
         "tests.test_live_agent_effects",     # read-only: the name binding, Effects, the skill timer
         "tests.test_agent_array",            # read-only: the source-shaped AgentArray view
         "tests.test_live_skill",             # read-only: Skill, SkillBar, Utils over the live client

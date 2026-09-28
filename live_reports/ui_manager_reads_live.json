@@ -1,0 +1,113 @@
+{
+  "pid": 31024,
+  "elevated": false,
+  "connect": "not used: this probe reads directly, so no elevation is required",
+  "resolvers": {
+    "ui.world_map_state_addr": true,
+    "ui.ui_drawn_addr": true,
+    "ui.shift_screenshot_addr": true,
+    "ui.game_settings_addr": true,
+    "ui.window_positions_array": true,
+    "ui.key_mappings_table": true,
+    "ui.current_tooltip_ptr": true
+  },
+  "state": {
+    "IsWorldMapShowing": false,
+    "IsUIDrawn": true,
+    "IsShiftScreenshot": false,
+    "GetCurrentTooltipAddress": 1446765276
+  },
+  "settings_bytes": 798,
+  "preference_options": {
+    "FrameLimiter": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "AntiAliasing": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "dialog": {
+    "IsNPCDialogVisible": false,
+    "IsLockedChestWindowVisible": false
+  },
+  "windows": {
+    "0": {
+      "position": [
+        332.0,
+        76.0,
+        183.0,
+        140.0
+      ],
+      "visible": true
+    },
+    "1": {
+      "position": [
+        326.0,
+        205.0,
+        174.0,
+        305.0
+      ],
+      "visible": true
+    },
+    "12": {
+      "position": [
+        201.0,
+        237.0,
+        215.0,
+        133.0
+      ],
+      "visible": true
+    },
+    "22": {
+      "position": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "visible": true
+    },
+    "64": {
+      "position": [
+        43.0,
+        237.0,
+        586.0,
+        732.0
+      ],
+      "visible": false
+    },
+    "101": {
+      "position": [
+        715.0,
+        941.0,
+        715.0,
+        941.0
+      ],
+      "visible": false
+    }
+  },
+  "key_mappings_table": "0xe24c58",
+  "key_mappings": {
+    "words": 117,
+    "first": [
+      137,
+      148,
+      208,
+      223,
+      150,
+      5,
+      6,
+      194
+    ],
+    "nonzero": 117,
+    "max": 260
+  },
+  "note": "read-only and unelevated: direct memory reads, no connect, no hook, no patch, no call. The members that call the client are the elevated probe's business."
+}

@@ -25,7 +25,9 @@ Current status: active research. The immediate goal is to establish evidence-bac
   execution (typed calls into the client's own functions, with effects asserted from
   the client's own reports), and callbacks (a registry keyed by event kind, plus a
   listener thread that delivers events as they arrive). The call vocabulary covers
-  eight forms — no arguments, one, two, three, four and five words, a four-float pointer,
+  nine forms — no arguments, one, two, three, four and five words, a four-float pointer, the client's own
+`__thiscall` shape (its `this` in ECX, a dummy in EDX, three stack words the callee pops itself — the
+shape `ui::SendFrameUIMessage` needs, live-read as `ret 0xc`),
   and a packed UI message — a call's return register, and a writable data region in
   the block; the GW.dat read uses all three and is the widest thing it drives. **A fourth
   form now exists and is live-verified**: an observation *after* the hooked call returns,
@@ -125,6 +127,25 @@ ported as faithful as they are.**
    it is the imported module (`Dialog.py:7-9`) and in Native the embedded one
    (`dialog_bindings.cpp:94`). This project's classes are named for the class they port —
    `Player`, `Agent`, `Map`, `Dialog`.
+
+   **Where the sources bind a class under a `Py*` name, that name and structure are parity and are
+   kept (owner's resolution, 2026-09-27).** `PyInventory`, `PyItem`, `PySkill`, `PySkillbar`,
+   `PyEffects`, `PyItemType`, `PyDyeColor` and `PyDyeInfo` are Native's **bound classes** — pybind
+   classes bound under those names (`inventory_bindings.cpp`, `item_bindings.cpp`,
+   `skill_bindings.cpp`) and imported by Reforged as modules — so this port's equivalents keep the
+   name, the nesting and the member order, exactly as the rest of the class scheme is kept. An earlier
+   version of this rule called them a defect; the owner has overruled that, because parity of
+   *structure* is the point and these are the sources' own class shapes.
+
+   **So the rule is narrower, and stricter about consistency: one scheme, the sources' scheme, in every
+   module.** A name must come from the sources; a class must carry the sources' name, nesting and
+   member order; and a deviation is a finding against that class whichever direction it leans —
+   an invented name, a convenience alias, a snake_case twin of a source method, a monkey patch, or a
+   "make it work" shortcut. Where a source's name is only its *module* name on something that is not
+   that module, that is still wrong (the `PyDialog` case above). **Inconsistent schemes are the defect
+   this clause exists to catch**: two classes ported to different conventions is not parity even when
+   each works, and the audit for it is per class — name, nesting, order, and every deviation written
+   down.
 
 Two worked examples of the rule being broken here, both removed on 2026-09-26: `offsets/dialog.json`
 with a `module_relative` op added to the resolver engine to read it (the sources keep those

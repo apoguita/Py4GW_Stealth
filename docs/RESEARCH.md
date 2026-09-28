@@ -3453,3 +3453,48 @@ thread may be executing, not that this was what killed pid 16504.
   mode and pywebview requirements)
 - <https://nicegui.io/documentation/tabs> (tab and panel usage)
 - <https://nicegui.io/documentation/table> (table rows and updates)
+
+---
+
+## The 2026-09-27 17:49:25 client crash: a word dereferenced as a packet pointer — found, fixed, and verified
+
+**What happened.** The `UseItem` live run consumed a Hard Apple Cider correctly (223 → 222, confirmed in
+game). Minutes later the client died with `c0000005`, *"memory at address 00000006 could not be read"*,
+when Gw.exe had been up 6 h 24 m.
+
+**What the dump says, and why it is this project's code.** `eip=03e900b0` is **outside `Gw.exe`**
+(base `00610000`) — dynamically allocated code. `ebx=03720000` points at memory whose first four bytes
+are `4b4c4253` — **`"SBLK"`**, this project's shared block; `ebx` is the register the emitted dispatcher
+keeps the block in. The trace runs our code ← `009eca36` (inside the client), i.e. the client called a
+hooked function and our code faulted. The bytes at the fault are
+`8b 4a 00 / 89 4f 08 / 8b 4a 04 / 89 4f 0c / 8b 4a 08 …` with **`edx=00000006`**: a multi-dword copy
+**out of `[edx]`** into a slot — a small integer dereferenced as a pointer.
+
+**The cause, named by this project's own code before the crash.** The effects hook was installed with a
+packet **watch list** (`py4gw/effect.py:66`, `((level, 0) for level in range(6))`), which the emitted
+observer interprets as *"key on the first argument, then read a wide string at offset 0 of the **second**
+argument"*. But `GW::effects`' post-process function takes **two plain words** —
+`void __cdecl OnPostProcessEffect(uint32_t intensity, uint32_t tint)`, whose body stores `intensity` and
+calls the original (`effects.cpp:32-41`) — so there is no packet on that function at all. The client
+called it with `tint = 6`, the observer's null-check passed a non-null word, and the dereference faulted.
+The port's own raise text on `Effects.GetAlcoholLevel` had described exactly this missing shape: *"the
+observer reads the hooked function's second argument as a packet pointer … while native's post-process
+handler stores the two plain word arguments."*
+
+**The fix that landed (round 62).** The effects hook is no longer handed a watch list
+(`py4gw/game_thread/bridge.py`, the dump evidence written into the comment), so the observer takes its
+validate-and-return path (`payload.py:801-802`) and dereferences nothing. Suite: **1594 tests OK**,
+`pyright` 0 errors; no test depended on the removed list.
+
+**Verified live, and the verification closed a second question.** The same cider experiment re-ran
+cleanly: **222 → 221** in 0.75 s (`live_reports/use_item_live2.json`), `hooks after disconnect = []`, and
+**no drain error** — where the crashed run had reported *"observe_effects still had 1 call(s) inside its
+stub 2.0 s after its entry was restored; nothing was freed"*. The drain failure disappearing together
+with the dereference is the evidence that the two were **one event**: the call the counter was waiting on
+was the call that faulted. (Round 55's fail-closed removal behaved correctly throughout: the entry went
+back, and nothing was unmapped under a live instruction pointer.)
+
+**What is still unbuilt, and it is a shape rather than a workaround:** an observer that carries the
+call's own **two words** into the event — native's handler's own behaviour. Until it exists,
+`Effects.GetAlcoholLevel` keeps raising, now naming a missing shape instead of sitting behind a read that
+faults. Recorded also in `docs/PORTING_PROGRESS.md` (round 62) and `docs/TARGET_SIDE_WORK.md`.

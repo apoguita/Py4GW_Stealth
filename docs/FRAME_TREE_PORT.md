@@ -388,6 +388,20 @@ Python-side buffer while these three read the array.
 
 ### Next: the `UIManager` surface as a class of its own
 
+**Landed 2026-09-27 (round 63): `py4gw/ui_manager.py` holds `class UIManager`, 48 of its 55
+declarations answering.** The plan below was carried out in the order it sets out — the surface
+enumerated and pinned member by member, the class declared in the source's own order, and the bodies
+where the two meet — and [`UIMANAGER_PORT.md`](UIMANAGER_PORT.md) is now the record: the binding map,
+what answers, what raises with its reason, and the live pass still owed. **Its step 3 does not apply,
+and that is measured, not assumed (round 69):** this package's members do **not** go through that
+class. `frame.py` calls **49 distinct `PyUIManager.UIManager.<name>`** binding members and **none of
+them is a member of Reforged's `class UIManager`** — the class is the source's Python class (the
+preference surface, the built-in windows, the dialog helpers, the frame-IO events) while this package
+calls the injected *module* (`button_click`, `SendFrameUIMessage`, `get_text_label_*`,
+`get_frame_array`, the traversal family). Re-pointing this package at that class would have meant
+calling members it does not have, or adding members the sources do not declare. What the two share is
+the native function behind each binding, and both resolve it where they use it.
+
 Owner's direction (round 59): *the UI class — the one the frame click belongs to — needs porting too, and it
 should be planned rather than drifted into.* What that class **is**, in each source:
 
@@ -396,7 +410,7 @@ should be planned rather than drifted into.* What that class **is**, in each sou
 - **Native**: that singleton is the embedded binding's `UIManager` class over the `GW::ui` free functions —
   `ui_bindings.cpp` binds it and `ui_methods.cpp` carries the bodies.
 
-Where this port stands: it has **no** such class, and every member resolves the native function its binding
+Where this port stood: it had **no** such class, and every member resolves the native function its binding
 wraps, one member at a time (the rule this package is ported by — `PyUIManager` is an injected module, so
 each call is resolved to the function behind it, never guessed as a group). That is why `Frame.click` today
 spells out `ButtonClick` itself.
@@ -413,6 +427,61 @@ class here: offline tests over the ported records, then the live client for anyt
 
 **What it must not become**: a second place where a call is derived (`no new layers`), and not a reason to
 re-open members that already answer.
+
+**Owner's scope for the UI surface (2026-09-27), and it is the rule that section is judged by:**
+*"nothing from creating in-game windows, no dropdown, no create window, not even the class that handles
+them, no singletons, no handlers — only primitives."* Applied to the 303 bindings in native's
+`ui_bindings.cpp`, section by section (the source's own section headers):
+
+- **Kept** — `UI messages / input` (11: `SendUIMessage`, `SendUIMessageRaw`, `SendFrameUIMessage`,
+  `SendFrameUIMessageWString`, `button_click`, `button_double_click`, `test_mouse_action`,
+  `test_mouse_click_action`, `key_down`, `key_up`, `key_press`); `Global state / language` (6);
+  `Enc-string helpers` (3); `Preferences` (9 — the settings); `Built-in window (WindowID)
+  position/visibility` (6); the **record classes** bound at the top of the file —
+  `UIInteractionCallback` (the consumers), `FramePosition`, `FrameRelation`, **`UIFrame`** (the frame
+  handles); `Frame tree traversal / discovery` (24); `Frame metadata / geometry` (14); and the primitive
+  frame-state setters and label reads inside `Frame state setters` and `Text labels`.
+- **Dropped** — `Widget creation (native component factories)` (14), every per-widget family
+  (`Dropdown` 11, `Button` 3, `Checkbox` 4, `Slider` 2, `Editable text` 7, `Progress bar` 5, `Tabs` 13,
+  `Scrollable` 13), the item-frame tint/pop/shader family inside `Frame state setters` (native's own
+  hooks, i.e. handlers), and anything above the primitive level in the sections not yet printed
+  (overlay and draw among them).
+- **The UI class is ported, and the cut is by class — the owner's criterion, verbatim (2026-09-27):**
+  *"the class is mostly ok up until line 611 where `InventoryBagWindow` starts, those classes we don't
+  need."* On the source that is exact: Reforged's `UIManager.py` (1302 lines) is **`class UIManager`,
+  lines 29-618, 53 methods** — ported — then **14 window classes, lines 619-1302, 56 methods**
+  (`InventoryBagWindow`, `InventoryBagsWindow`, `XunlaiStorageWindow`, `SkillTrainerWindow`,
+  `TraderWindow`, `MerchantWindow`, `CollectorWindow`, `CrafterWindow`, `UpgradeWindow`,
+  `SalvageOptionsWindow`, `SalvageConfirmationPopup`, `LesserSalvageWindow`,
+  `ExpertSalvageUnidentifiedWindow`, `AnySalvageWindow`) — **not ported**. No singleton instance and no
+  handler class is added beside it, and **no per-widget class at all** (*"not even the class that handles
+  them"*). **The class's surface, pinned from the source (2026-09-27): 55 declarations, lines 43-618** — every one
+below is a `def` in `class UIManager`, in the source's own order, with the ``PyUIManager.UIManager`` member
+it wraps where the body is a one-liner over the binding:
+
+`RegisterFrameIOEventCallback` (43), `UnregisterFrameIOEventCallback` (53), `_UpdateFrameIOEvents` (66),
+`_add_event` (92, nested), `GetIOEventsForFrame` (132), `RegisterFrameIOCallbacks` (146) — **the frame-IO
+event family: not wrappers**; `GetFrameLogs`→`get_frame_logs` (161), `ClearFrameLogs` (170),
+`GetUIMessageLogs` (177), `ClearUIMessageLogs` (186), `GetTextLanguage` (194), `SendUIMessage` (199),
+`SendUIMessageRaw` (203), `DrawOnCompass` (208), `LoadSettings` (212), `GetSettings` (216),
+`GetCurrentTooltipAddress` (220), `IsWorldMapShowing` (237), `IsUIDrawn` (246), `AsyncDecodeStr` (250),
+`IsValidEncStr` (254), `IsValidEncBytes` (258), `UInt32ToEncStr` (262), `EncStrToUInt32` (266),
+`SetOpenLinks` (270), `IsShiftScreenshot` (274), `GetFPSLimit` (283), `SetFPSLimit` (292),
+`GetPreferenceOptions` (302), `GetEnumPreference` (306), `GetIntPreference` (310), `GetStringPreference`
+(314), `GetBoolPreference` (318), `SetEnumPreference` (322), `SetIntPreference` (326),
+`SetStringPreference` (330), `SetBoolPreference` (334), `GetKeyMappings` (338), `SetKeyMappings` (342),
+`Keydown` (346), `Keyup` (350), `Keypress` (354), `GetWindoPosition` (358 — the source's own spelling),
+`IsWindowVisible` (367), `SetWindowVisible` (376), `SetWindowPosition` (386) — **plain wrappers**;
+`IsLockedChestWindowVisible` (397), `IsNPCDialogVisible` (407), `FindDialogOffset` (416),
+`GetDialogButtons` (457), `_is_button` (466, nested), `ClickDialogButton` (494), `GetDialogButtonCount`
+(516), `GetDialogButtonFrames` (536), `ConfirmMaxAmountDialog` (598) — **the dialog family: frames walked
+and a button clicked, which this port already does with `Frame`/`FrameTree` and the live-verified
+`Frame.click`**.
+
+The port is written in that order, each member the source's own body: the wrapper group resolves its
+binding member to the `ui::` function behind it (`ui_bindings.cpp` → `ui_methods.cpp`), and the two
+non-wrapper families are ported as the source writes them — the frame-IO events over Reforged's own
+mechanism, the dialog members over `Frame`/`FrameTree`.
 
 ### The action members are game-thread enqueues — and that is one feature, not fourteen
 
