@@ -40,6 +40,37 @@ class MapDimensionsStruct(TargetStruct):
     unk1: int
 
 
+class Region(IntEnum):
+    Region_Kryta = 0
+    Region_Maguuma = 1
+    Region_Ascalon = 2
+    Region_NorthernShiverpeaks = 3
+    Region_HeroesAscent = 4
+    Region_CrystalDesert = 5
+    Region_FissureOfWoe = 6
+    Region_Presearing = 7
+    Region_Kaineng = 8
+    Region_Kurzick = 9
+    Region_Luxon = 10
+    Region_ShingJea = 11
+    Region_Kourna = 12
+    Region_Vaabi = 13
+    Region_Desolation = 14
+    Region_Istan = 15
+    Region_DomainOfAnguish = 16
+    Region_TarnishedCoast = 17
+    Region_DepthsOfTyria = 18
+    Region_FarShiverpeaks = 19
+    Region_CharrHomelands = 20
+    Region_BattleIslands = 21
+    Region_TheBattleOfJahai = 22
+    Region_TheFlightNorth = 23
+    Region_TheTenguAccords = 24
+    Region_TheRiseOfTheWhiteMantle = 25
+    Region_Swat = 26
+    Region_DevRegion = 27
+
+
 class AreaInfoStruct(TargetStruct):
     campaign: int
     continent: int

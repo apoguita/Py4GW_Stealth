@@ -1807,13 +1807,14 @@ def _agent_model_id(agent_id: int) -> int:
         from .agent import Agent
 
         record = Agent.GetAgentByID(int(agent_id))
+        if record is None:
+            return 0
+        living = record.GetAsAgentLiving()
+        if living is None:
+            return 0
+        return int(living.player_number)
     except (OSError, RuntimeError):
         return 0
-    if record is None:
-        return 0
-    if not record.is_living_type:
-        return 0
-    return int(record.player_number)
 
 
 def _journal_event_priority(event_type: str) -> int:

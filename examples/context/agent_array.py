@@ -19,7 +19,7 @@ the full list of access styles.
 import py4gw
 
 client = py4gw.connect(py4gw.win32.list_processes()[0])
-context = py4gw.context.agent_array.get()
+context = client.agent_array.get_context()
 
 if context is None:
     raise SystemExit("no Guild Wars client is connected")

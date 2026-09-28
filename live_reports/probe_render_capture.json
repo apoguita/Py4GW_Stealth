@@ -1,0 +1,18 @@
+{
+  "pid": 16504,
+  "observing_render": true,
+  "hooks_installed": [
+    "game_thread"
+  ],
+  "seconds_to_first_capture": 0.0,
+  "render_context": "0xa2c8698",
+  "bytes_read": 4512,
+  "viewport": {
+    "width": 1678,
+    "height": 1368
+  },
+  "device": "0xa9b7c40",
+  "plausible": true,
+  "note": "the write connection was used, so this run installed the bridge's hooks and disconnect removed them. The captured pointer is the first argument of the client's own EndScene, which is where native keeps Context::g_dx_context (render.cpp:88).",
+  "observing_render_after_disconnect": false
+}

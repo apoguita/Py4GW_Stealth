@@ -117,6 +117,17 @@ _GAME_THREAD_OBSERVE_BYTES = bytes.fromhex("55 8B EC 8B 45 08 83 F8 56")
 _EFFECTS_HOOK = "effects.post_process_effect_func"
 _EFFECTS_HOOK_BYTES = bytes.fromhex("55 8B EC 83 EC 08")
 
+#: The render entry whose first argument is the DX context: native's own ``OnEndScene`` keeps it as
+#: ``Context::g_dx_context = ctx`` (``render.cpp:75-98``), and that variable is what
+#: ``GW::render::GetViewportWidth/Height`` read (``render_methods.cpp:56-63``) — the value the frame
+#: geometry divides by. The capture itself is the bridge's (``docs/TARGET_SIDE_WORK.md``).
+_RENDER_HOOK = "render.end_scene_func"
+#: ``push ebp; mov ebp, esp; sub esp, 0x48`` — **seven whole bytes**. The instructions after them read a
+#: global and set up the stack cookie, so nothing in the displaced span is a relative branch, which is what a
+#: trampoline cannot replay. Read live on 2026-09-27 with ``tests/probe_render_entry.py``: the target resolved
+#: to ``0x8DFF10`` inside text and its head was ``55 8b ec 83 ec 48 a1 80 74 e0 00 33 c5 89 45 fc 56 8b 75 08``.
+_RENDER_HOOK_BYTES = bytes.fromhex("55 8B EC 83 EC 48")
+
 #: ``jmp rel32``, the first byte of an entry patch.
 _JMP_REL32 = 0xE9
 
@@ -406,6 +417,7 @@ class ConnectedClient:
         hook_target = self._resolve(_GAME_THREAD_HOOK)
         observe_target = self._resolve(_GAME_THREAD_OBSERVE)
         effects_target = self._resolve(_EFFECTS_HOOK)
+        render_target = self._resolve(_RENDER_HOOK)
         # Held from here on: this is the address resolved *before* the entry is patched, which is
         # what a caller of :meth:`send_ui_message` must use afterwards.
         self._ui_message_address = observe_target
@@ -417,6 +429,7 @@ class ConnectedClient:
                 (_GAME_THREAD_HOOK, hook_target, _GAME_THREAD_HOOK_BYTES),
                 (_GAME_THREAD_OBSERVE, observe_target, _GAME_THREAD_OBSERVE_BYTES),
                 (_EFFECTS_HOOK, effects_target, _EFFECTS_HOOK_BYTES),
+                (_RENDER_HOOK, render_target, _RENDER_HOOK_BYTES),
             ):
                 self._prepare_target(access, name, address, expected)
 
@@ -431,6 +444,7 @@ class ConnectedClient:
                 observing=(observe_target, _GAME_THREAD_OBSERVE_BYTES),
                 effects_observing=(effects_target, _EFFECTS_HOOK_BYTES),
                 effects_watch=effect_module._WATCHED_INTENSITIES,
+                capturing=(render_target, _RENDER_HOOK_BYTES),
             )
         except BaseException:
             access.close()

@@ -98,6 +98,7 @@ from .player_agent_id_context import (
 )
 from .instance_info_context import (
     AreaInfoStruct,
+    Region,
     InstanceInfo,
     InstanceInfoStruct,
     InstanceType,
@@ -257,6 +258,7 @@ from .item_context import (
     ItemClickParamStruct,
     ItemModifierStruct,
     MaterialCostStruct,
+    BagType,
     ItemRarity,
     ItemContext,
     ItemContextStruct,
@@ -511,6 +513,7 @@ __all__ = [
     "CompositeModelInfoStruct",
     "DyeInfoStruct",
     "ItemModifierStruct",
+    "BagType",
     "ItemRarity",
     "ItemStruct",
     "BagStruct",

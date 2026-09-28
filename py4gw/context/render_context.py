@@ -38,3 +38,33 @@ class GwDxContextStruct(TargetStruct):
 
 
 assert ctypes.sizeof(GwDxContextStruct) == 0x11A0
+
+
+def get_viewport_size() -> tuple[float, float]:
+    """``GW::render::GetViewportWidth``/``GetViewportHeight`` (``render_methods.cpp:56-63``).
+
+    Native answers both with ``Context::GetRenderContext()->viewport_width``/``viewport_height`` — the context
+    its own ``EndScene`` detour assigns (``render.cpp:88``). This port captures that same pointer on that same
+    function (`py4gw/game_thread/bridge.py`), so the read here is native's: the captured context's two words.
+    A missing capture or an unreadable context answers ``(0.0, 0.0)``, which is native's own
+    ``dx_context ? dx_context->viewport_width : 0``.
+
+    ``FramePosition``'s on-screen arithmetic divides by these two numbers (``ui.h:553-561``), which is what
+    makes them the frame geometry's remaining input.
+    """
+
+    from ..client import require_client
+
+    client = require_client()
+    bridge = getattr(client, "_bridge", None)
+    if bridge is None:
+        return (0.0, 0.0)
+    context = int(bridge.render_context_address())
+    if not context:
+        return (0.0, 0.0)
+    size = ctypes.sizeof(GwDxContextStruct)
+    raw = client.reader.read(context, size)
+    if len(raw) != size:
+        return (0.0, 0.0)
+    record = GwDxContextStruct.from_buffer_copy(raw)
+    return (float(record.viewport_width), float(record.viewport_height))

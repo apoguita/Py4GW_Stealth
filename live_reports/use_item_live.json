@@ -1,0 +1,38 @@
+{
+  "pid": 22640,
+  "controller_elevated": true,
+  "cider_model": 28435,
+  "hooks_installed": [
+    "game_thread"
+  ],
+  "before": {
+    "model_total": 223,
+    "stacks": [
+      {
+        "item_id": 237,
+        "quantity": 223,
+        "slot": 3
+      }
+    ],
+    "alcohol_level": "NotImplementedError: PyEffects.get_alcohol_level is declared, and its capture is wired, but it is not built here yet: the observer's emitted code reads the hooked function's second argument as a packet pointer and drops the event when it is null (payload.py:762-765), while native's post-process handler stores the two plain word arguments (effects.cpp:24-41). What is missing is that second event shape -- an observer that carries the call's own arguments instead of dereferencing one. The hook, the watch list (_WATCHED_INTENSITIES) and the handler (_on_post_process_effect) are all in place; the source's member works, and this port raises at the call site instead of returning a number nothing stored."
+  },
+  "expected_before": 223,
+  "used_item_id": 237,
+  "call": null,
+  "call_returned_after_s": 0.08,
+  "after": {
+    "model_total": 222,
+    "stacks": [
+      {
+        "item_id": 237,
+        "quantity": 222,
+        "slot": 3
+      }
+    ],
+    "alcohol_level": "NotImplementedError: PyEffects.get_alcohol_level is declared, and its capture is wired, but it is not built here yet: the observer's emitted code reads the hooked function's second argument as a packet pointer and drops the event when it is null (payload.py:762-765), while native's post-process handler stores the two plain word arguments (effects.cpp:24-41). What is missing is that second event shape -- an observer that carries the call's own arguments instead of dereferencing one. The hook, the watch list (_WATCHED_INTENSITIES) and the handler (_on_post_process_effect) are all in place; the source's member works, and this port raises at the call site instead of returning a number nothing stored."
+  },
+  "seconds_to_consume": 0.787,
+  "consumed": true,
+  "note": "the write connection was used: `Inventory.UseItem` ran the source's whole chain into the client. Disconnecting removed the hooks and freed what was placed.",
+  "error": "RuntimeError: pid 22640: observe_effects still had 1 call(s) inside its stub 2.0 s after its entry was restored. Nothing was freed: the generated code stays mapped, because unmapping code under a live instruction pointer is how a client is taken down."
+}

@@ -29,11 +29,13 @@ from py4gw.game_thread.payload import (
     build_decoder_stub,
     build_dispatcher,
     build_observer,
+    build_slot_capture,
     decoder_stub_size,
     dispatcher_size,
 )
 from py4gw.game_thread.shared_block import (
     COMMAND_DEPTH,
+    DATA_REGION_OFFSET,
     DECODE_CAPACITY,
     DECODE_DEPTH,
     DESCRIPTOR_DEPTH,
@@ -845,6 +847,8 @@ class ArgumentWitness:
     ARG0_OFFSET = 4
     ARGS_OFFSET = 8
     FLOATS_OFFSET = 40
+    ECX_OFFSET = 56
+    EDX_OFFSET = 60
     CANARY_OFFSET = 92
 
     def __init__(self) -> None:
@@ -852,25 +856,45 @@ class ArgumentWitness:
         self.buffer = (ctypes.c_char * self.SIZE).from_buffer(self.raw)
         self.address = ctypes.addressof(self.buffer)
 
-    def code(self, address: int, word_count: int, float_pointer: bool = False) -> bytes:
-        """Emit ``void __cdecl(...)`` recording ``word_count`` words.
+    def code(
+        self,
+        address: int,
+        word_count: int,
+        float_pointer: bool = False,
+        fastcall_words: int = 0,
+    ) -> bytes:
+        """Emit a callee that records what it was entered with.
 
-        With ``float_pointer`` the first argument is treated as a pointer and the
-        four dwords behind it are recorded too, which is what the ``FLOAT_PTR``
-        form is supposed to pass.
+        The default is ``void __cdecl(...)`` recording ``word_count`` stack words. With
+        ``float_pointer`` the first argument is treated as a pointer and the four dwords behind it are
+        recorded too, which is what the ``FLOAT_PTR`` form is supposed to pass. With ``fastcall_words``
+        the callee is the client's ``__thiscall`` shape instead: it records ``ecx`` and ``edx``, records
+        that many stack words, and **releases them itself** (``ret imm16``) — the half of that convention
+        a cdecl witness cannot show.
         """
 
         body = bytearray()
         body += bytes((0x8B, 0xC4))  # mov eax, esp
         body += bytes((0xA3,)) + struct.pack("<I", address + self.ESP_OFFSET)
 
-        for index in range(word_count):
-            displacement = 4 + index * 4
-            body += bytes((0x8B, 0x44, 0x24, displacement))
-            store = (
-                self.ARG0_OFFSET if index == 0 else self.ARGS_OFFSET + (index - 1) * 4
-            )
-            body += bytes((0xA3,)) + struct.pack("<I", address + store)
+        if fastcall_words:
+            body += bytes((0x89, 0x0D)) + struct.pack("<I", address + self.ECX_OFFSET)
+            body += bytes((0x89, 0x15)) + struct.pack("<I", address + self.EDX_OFFSET)
+            for index in range(fastcall_words):
+                displacement = 4 + index * 4
+                body += bytes((0x8B, 0x44, 0x24, displacement))
+                store = (
+                    self.ARG0_OFFSET if index == 0 else self.ARGS_OFFSET + (index - 1) * 4
+                )
+                body += bytes((0xA3,)) + struct.pack("<I", address + store)
+        else:
+            for index in range(word_count):
+                displacement = 4 + index * 4
+                body += bytes((0x8B, 0x44, 0x24, displacement))
+                store = (
+                    self.ARG0_OFFSET if index == 0 else self.ARGS_OFFSET + (index - 1) * 4
+                )
+                body += bytes((0xA3,)) + struct.pack("<I", address + store)
 
         if float_pointer:
             body += bytes((0x8B, 0x54, 0x24, 0x04))  # mov edx, [esp+4]
@@ -887,7 +911,13 @@ class ArgumentWitness:
         body += bytes((0xC7, 0x05)) + struct.pack(
             "<II", address + self.CANARY_OFFSET, self.CANARY
         )
-        body.append(0xC3)
+        if fastcall_words:
+            # ``ret imm16``: the callee releases the words the caller pushed, which is what
+            # ``__thiscall`` and ``__fastcall`` do — and the reason the caller must not.
+            body.append(0xC2)
+            body += struct.pack("<H", fastcall_words * 4)
+        else:
+            body.append(0xC3)
         return bytes(body)
 
     def clear(self) -> None:
@@ -906,6 +936,11 @@ class ArgumentWitness:
 
     def entry_esp(self) -> int:
         return self.word(self.ESP_OFFSET)
+
+    def registers(self) -> tuple[int, int]:
+        """Return the ``ecx`` and ``edx`` the callee was entered with."""
+
+        return self.word(self.ECX_OFFSET), self.word(self.EDX_OFFSET)
 
     def first_word(self) -> int:
         return self.word(self.ARG0_OFFSET)
@@ -945,6 +980,10 @@ class SourceAbiFormTests(unittest.TestCase):
         cls.three_target = EmittedCode(
             cls.three_witness.code(cls.three_witness.address, word_count=3)
         )
+        cls.four_witness = ArgumentWitness()
+        cls.four_target = EmittedCode(
+            cls.four_witness.code(cls.four_witness.address, word_count=4)
+        )
         cls.float_witness = ArgumentWitness()
         cls.float_target = EmittedCode(
             cls.float_witness.code(
@@ -955,19 +994,29 @@ class SourceAbiFormTests(unittest.TestCase):
         cls.five_target = EmittedCode(
             cls.five_witness.code(cls.five_witness.address, word_count=5)
         )
+        cls.fastcall_witness = ArgumentWitness()
+        cls.fastcall_target = EmittedCode(
+            cls.fastcall_witness.code(
+                cls.fastcall_witness.address, word_count=0, fastcall_words=3
+            )
+        )
         cls.targets = (
             cls.none_target,
             cls.one_target,
             cls.three_target,
+            cls.four_target,
             cls.float_target,
             cls.five_target,
+            cls.fastcall_target,
         )
         cls.witnesses = (
             cls.none_witness,
             cls.one_witness,
             cls.three_witness,
+            cls.four_witness,
             cls.float_witness,
             cls.five_witness,
+            cls.fastcall_witness,
         )
         cls.table = WitnessBuffer(DESCRIPTOR_DEPTH * 8)
         low = min(target.address for target in cls.targets) & ~0xFFFF
@@ -1011,6 +1060,20 @@ class SourceAbiFormTests(unittest.TestCase):
             Descriptor(
                 target=self.five_target.address,
                 form=CallForm.U32_U32_U32_U32_U32,
+            ),
+        )
+        self.table.write_descriptor(
+            5,
+            Descriptor(
+                target=self.four_target.address,
+                form=CallForm.U32_U32_U32_U32,
+            ),
+        )
+        self.table.write_descriptor(
+            6,
+            Descriptor(
+                target=self.fastcall_target.address,
+                form=CallForm.FASTCALL_U32_U32_U32,
             ),
         )
 
@@ -1076,10 +1139,13 @@ class SourceAbiFormTests(unittest.TestCase):
         self.call(2, arg1=1, arg2=2, arg3=3)
         self.call(3, arg1=1, arg2=2, arg3=3)
         self.call(4, arg1=1, arg2=2, arg3=3, arg4=4, arg5=5)
+        self.call(5, arg1=1, arg2=2, arg3=3, arg4=4)
+        self.call(6, arg1=1, arg2=2, arg3=3, arg4=4, arg5=5)
 
         empty = self.none_witness.entry_esp()
         self.assertEqual(self.one_witness.entry_esp(), empty - 4, "U32")
         self.assertEqual(self.three_witness.entry_esp(), empty - 12, "U32_U32_U32")
+        self.assertEqual(self.four_witness.entry_esp(), empty - 16, "U32_U32_U32_U32")
         self.assertEqual(
             self.float_witness.entry_esp(),
             empty - 20,
@@ -1089,6 +1155,12 @@ class SourceAbiFormTests(unittest.TestCase):
             self.five_witness.entry_esp(),
             empty - 20,
             "U32_U32_U32_U32_U32: five words pushed straight through",
+        )
+        self.assertEqual(
+            self.fastcall_witness.entry_esp(),
+            empty - 12,
+            "FASTCALL_U32_U32_U32: only the last three words are pushed — the first two travel in "
+            "ecx and edx",
         )
 
     # -- U32 ---------------------------------------------------------------
@@ -1133,6 +1205,39 @@ class SourceAbiFormTests(unittest.TestCase):
 
     def test_a_three_word_call_reports_completion(self) -> None:
         record = self.call(2, arg1=1, arg2=2, arg3=3)
+
+        self.assertEqual(record.state, CommandState.DONE)
+        self.assertEqual(record.result, 0)
+
+    # -- U32_U32_U32_U32 ---------------------------------------------------
+
+    def test_u32_u32_u32_u32_passes_the_words_in_order(self) -> None:
+        """Four words, in the source's order — ``MoveItemFn``'s own shape (``item_methods.cpp:164``)."""
+
+        self.call(5, arg1=0xAA, arg2=0xBB, arg3=0xCC, arg4=0xDD)
+
+        self.assertEqual(self.four_witness.first_word(), 0xAA)
+        self.assertEqual(self.four_witness.words(3), [0xBB, 0xCC, 0xDD])
+
+    def test_u32_u32_u32_u32_reads_four_words_and_not_the_fifth(self) -> None:
+        """A fifth command word is not an argument to a four-word callee."""
+
+        self.call(5, arg1=1, arg2=2, arg3=3, arg4=4, arg5=5)
+
+        self.assertEqual(self.four_witness.words(3), [2, 3, 4])
+        self.assertNotIn(5, self.four_witness.words(3))
+
+    def test_u32_u32_u32_u32_releases_exactly_four_words(self) -> None:
+        """The stack is left where the form found it — the release is sixteen bytes, not twenty."""
+
+        self.call(5, arg1=1, arg2=2, arg3=3, arg4=4)
+        first = self.four_witness.entry_esp()
+        self.call(5, arg1=1, arg2=2, arg3=3, arg4=4)
+
+        self.assertEqual(self.four_witness.entry_esp(), first)
+
+    def test_a_four_word_call_reports_completion(self) -> None:
+        record = self.call(5, arg1=1, arg2=2, arg3=3, arg4=4)
 
         self.assertEqual(record.state, CommandState.DONE)
         self.assertEqual(record.result, 0)
@@ -1233,6 +1338,45 @@ class SourceAbiFormTests(unittest.TestCase):
 
     # -- the refusals still hold ------------------------------------------
 
+    # -- FASTCALL_U32_U32_U32 ----------------------------------------------
+
+    def test_the_client_thiscall_form_puts_its_first_word_in_ecx(self) -> None:
+        """``SendFrameUIMessageFn``'s first parameter is the client's ``this`` (``ui_patterns.cpp:32``)."""
+
+        self.call(
+            6,
+            arg1=0x11111111,
+            arg2=0x22222222,
+            arg3=0x33333333,
+            arg4=0x44444444,
+            arg5=0x55555555,
+        )
+
+        ecx, edx = self.fastcall_witness.registers()
+        self.assertEqual(ecx, 0x11111111, "arg1 is the client's `this`")
+        self.assertEqual(edx, 0x22222222, "the dummy second parameter the source passes null for")
+
+    def test_the_client_thiscall_form_pushes_only_the_last_three_words(self) -> None:
+        self.call(6, arg1=1, arg2=2, arg3=0xAA, arg4=0xBB, arg5=0xCC)
+
+        self.assertEqual(self.fastcall_witness.first_word(), 0xAA)
+        self.assertEqual(self.fastcall_witness.words(2), [0xBB, 0xCC])
+
+    def test_the_client_thiscall_form_releases_nothing_of_its_own(self) -> None:
+        """The callee pops its three words (``ret imm16``); the caller must not pop them again."""
+
+        self.call(6, arg1=1, arg2=2, arg3=3, arg4=4, arg5=5)
+        first = self.fastcall_witness.entry_esp()
+        self.call(6, arg1=1, arg2=2, arg3=3, arg4=4, arg5=5)
+
+        self.assertEqual(self.fastcall_witness.entry_esp(), first)
+
+    def test_a_thiscall_call_reports_completion(self) -> None:
+        record = self.call(6, arg1=1, arg2=2, arg3=3, arg4=4, arg5=5)
+
+        self.assertEqual(record.state, CommandState.DONE)
+        self.assertTrue(self.fastcall_witness.called())
+
     def test_an_unknown_form_is_still_refused(self) -> None:
         self.table.write_raw_descriptor(6, self.one_target.address, 99)
 
@@ -1252,6 +1396,7 @@ class SourceAbiFormTests(unittest.TestCase):
             (2, CallForm.U32_U32_U32),
             (3, CallForm.FLOAT_PTR),
             (4, CallForm.U32_U32_U32_U32_U32),
+            (6, CallForm.FASTCALL_U32_U32_U32),
         ):
             with self.subTest(form=form.name):
                 self.table.write_descriptor(slot, Descriptor(target=outside, form=form))
@@ -1579,6 +1724,83 @@ class ObserverTests(unittest.TestCase):
         call(self.block.address, self.MESSAGE, self.packet.address)
 
         self.assertEqual(self.events(), [])
+
+
+class SlotCaptureTests(unittest.TestCase):
+    """The capture stub: one argument of a per-frame client function, kept in a block slot.
+
+    Native's render capture is a variable rather than a queue — ``Context::g_dx_context = ctx`` on every
+    ``OnEndScene``/``OnReset`` (``render.cpp:88``, ``:103``) — so the stub is the observer's shape with the
+    event region removed: same header validation, same calling convention ``(block, arg0, arg1)``, and what it
+    leaves behind is a word the host reads on demand. The point of it, and the first thing asserted here, is
+    that **no event is appended**: a per-frame call must not fill the ring.
+    """
+
+    def setUp(self) -> None:
+        self.block = FakeBlock()
+
+    def capture(self, context: int, unk: int = 0, slot_offset: int = DATA_REGION_OFFSET,
+                argument: int = 1) -> None:
+        code = EmittedCode(build_slot_capture(slot_offset, argument))
+        self.addCleanup(code.close)
+        call = ctypes.WINFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32)(code.address)
+        call(self.block.address, context, unk)
+
+    def slot(self, offset: int = DATA_REGION_OFFSET) -> int:
+        image = self.block.read()
+        return struct.unpack_from("<I", image, offset)[0]
+
+    def test_the_code_is_the_same_every_time_it_is_built(self) -> None:
+        self.assertEqual(build_slot_capture(), build_slot_capture())
+        self.assertNotEqual(build_slot_capture(), build_slot_capture(DATA_REGION_OFFSET + 4))
+
+    def test_the_first_argument_lands_in_the_slot(self) -> None:
+        """`OnEndScene(GwDxContext* ctx, void* unk)` — the context is the first argument (`render.cpp:88`)."""
+
+        self.capture(0x1234ABCD)
+        self.assertEqual(self.slot(), 0x1234ABCD)
+
+    def test_a_later_call_replaces_an_earlier_one(self) -> None:
+        """A variable, not a queue: the host always reads the latest context."""
+
+        self.capture(0x1111)
+        self.capture(0x2222)
+        self.assertEqual(self.slot(), 0x2222)
+
+    def test_the_second_argument_can_be_selected_instead(self) -> None:
+        self.capture(0x1111, 0x9999, argument=2)
+        self.assertEqual(self.slot(), 0x9999)
+
+    def test_a_custom_slot_lands_where_it_was_asked_for(self) -> None:
+        """Two captures share the data region by using different slots."""
+
+        self.capture(0x55, slot_offset=DATA_REGION_OFFSET + 8)
+        self.assertEqual(self.slot(DATA_REGION_OFFSET + 8), 0x55)
+        self.assertEqual(self.slot(), 0, "the default slot is untouched")
+
+    def test_it_does_not_append_an_event(self) -> None:
+        """The whole reason this is not the observer: a per-frame call must not fill the ring."""
+
+        for context in range(8):
+            self.capture(context)
+        image = self.block.read()
+        self.assertEqual(struct.unpack_from("<I", image, HEADER_OFFSET["event_written"])[0], 0)
+
+    def test_a_null_block_is_ignored(self) -> None:
+        code = EmittedCode(build_slot_capture())
+        self.addCleanup(code.close)
+        call = ctypes.WINFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32)(code.address)
+        call(None, 0xDEADBEEF, 0)
+        self.assertEqual(self.slot(), 0)
+
+    def test_a_block_that_fails_a_header_check_is_left_alone(self) -> None:
+        image = bytearray(self.block.read())
+        image[HEADER_OFFSET["magic"] : HEADER_OFFSET["magic"] + 4] = b"XXXX"
+        self.block.write(image)
+
+        self.capture(0xCAFEBABE)
+
+        self.assertEqual(self.slot(), 0)
 
 
 class DecoderStubTests(unittest.TestCase):

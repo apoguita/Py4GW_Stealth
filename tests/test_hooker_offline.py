@@ -38,6 +38,7 @@ from py4gw.game_thread.hooker import (
     POST_SLOTS_OFFSET,
     STATE_ENABLED_OFFSET,
     STATE_HITS_OFFSET,
+    STATE_INFLIGHT_OFFSET,
     STATE_SIZE,
     Hooker,
     build_entry_patch,
@@ -553,6 +554,81 @@ class PostCallStubTests(unittest.TestCase):
             build_stub(1, 2, 3, 4, 5, -1, True)
 
 
+class InFlightTests(unittest.TestCase):
+    """The in-flight count: what makes freeing generated code safe, proved by running the code.
+
+    A byte-level check would be satisfied by a stub that incremented and decremented the wrong register or the
+    wrong offset, and the client would crash the first time it was removed. So the count is driven here: the
+    stub is executed in real executable memory by `_PostCallRig`, and the payload reads the count **while it
+    is inside** it. Native keeps the same number, for the same reason, across its own render hook
+    (`++g_active_render_hooks` on entry, `--` on exit, `render.cpp:75-111`), and waits for it at shutdown
+    (`:61-73`).
+    """
+
+    def test_the_count_is_one_while_the_stub_holds_a_call(self) -> None:
+        rig = _PostCallRig()
+        self.addCleanup(rig.close)
+        seen: list[int] = []
+
+        def payload(*arguments: object) -> None:
+            seen.append(rig.in_flight())
+
+        rig.set_payload(payload)
+        self.assertEqual(rig.in_flight(), 0, "nothing is inside before the call")
+
+        result = rig.call(1, 2)
+
+        self.assertEqual(result, _PostCallRig.RESULT, "the client's own return value is untouched")
+        self.assertEqual(rig.marker_value(), _PostCallRig.MARKER, "and its body still ran")
+        self.assertEqual(seen, [1], "the payload runs with its own call counted")
+        self.assertEqual(rig.in_flight(), 0, "and an outer thread sees an empty stub again")
+
+    def test_a_disabled_hook_is_never_counted(self) -> None:
+        """The count starts after the enabled check, so a pass-through cannot make a removal wait."""
+
+        rig = _PostCallRig()
+        self.addCleanup(rig.close)
+        rig.set_payload(None)          # a payload address of zero: calling it would crash the test
+        rig.set_enabled(0)
+
+        result = rig.call(1, 2)
+
+        self.assertEqual(result, _PostCallRig.RESULT)
+        self.assertEqual(rig.in_flight(), 0)
+
+    def test_the_count_is_reported_and_nothing_is_freed_when_it_does_not_drain(self) -> None:
+        """A call still inside is **reported**, not slept off: freeing under it is how a client dies."""
+
+        from unittest import mock
+
+        target = FakeTarget()
+        hooker = new_hooker(target)
+        hooker.install("entry", TARGET, ORIGINAL)
+        state = sorted(target.allocated)[0]
+        target.write(state + STATE_INFLIGHT_OFFSET, struct.pack("<I", 3))
+
+        with mock.patch("py4gw.game_thread.hooker.FREE_WAIT_SECONDS", 0.02):
+            with self.assertRaises(RuntimeError) as caught:
+                hooker.remove("entry", free_code=True)
+
+        self.assertIn("inside its stub", str(caught.exception))
+        self.assertIn("Nothing was freed", str(caught.exception))
+        self.assertEqual(target.freed, [], "no allocation is freed while a call is inside")
+        self.assertEqual(target.entry(), ORIGINAL, "but the entry itself is restored")
+
+    def test_an_empty_stub_frees_its_code_and_keeps_the_trampoline(self) -> None:
+        """The trampoline is the one piece the count cannot cover, so it is never freed."""
+
+        target = FakeTarget()
+        hooker = new_hooker(target)
+        hooker.install("entry", TARGET, ORIGINAL)
+        self.assertEqual(len(target.allocated), 3, "state, trampoline and stub")
+
+        hooker.remove("entry", free_code=True)
+
+        self.assertEqual(len(target.freed), 2, "the stub and the state; the trampoline stays mapped")
+
+
 class _PostCallRig:
     """A synthetic hooked function this process can really call, with the post-call stub on it.
 
@@ -658,6 +734,13 @@ class _PostCallRig:
 
     def depth(self) -> int:
         return int(ctypes.c_uint32.from_address(self.state + POST_DEPTH_OFFSET).value)
+
+    def in_flight(self) -> int:
+        """Return the stub's own in-flight count, read from the state the stub writes."""
+
+        return int(
+            ctypes.c_uint32.from_address(self.state + STATE_INFLIGHT_OFFSET).value
+        )
 
     def set_depth(self, value: int) -> None:
         ctypes.c_uint32.from_address(self.state + POST_DEPTH_OFFSET).value = value

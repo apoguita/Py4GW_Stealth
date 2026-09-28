@@ -3350,6 +3350,84 @@ splits into exactly two open questions, both of which a live run answers: the **
 command** (is the ~130 ms the client's loop rate or the work?) and whether the **client's own decoder**
 can carry names at all (one command per name, no GW.dat, no record left open — the route Native uses).
 
+## The 2026-09-27 11:19:13 client crash: an input assertion, and why it is not attributed here
+
+**What the client reported.** `Assertion: m_buttonState & (1 << evt.button)`,
+`P:\Code\Engine\Frame\FrMouse.cpp(529)`, `Gw.exe` build 38888, `BaseAddr 00610000`, at 11:19:13. The failing
+PC is `00697bdb`, inside a function that starts at `00697BBB` and whose prologue is
+`cc cc cc cc cc 55 8b ec 83 ec 20 a1 80 74 e0 00 33 c5` — an ordinary stack-cookie function, not a hook
+target. The module list carries `RTSSHooks.dll` (RivaTuner) and `steam_api.dll` with the Steam overlay.
+
+**What this project's own record says about that moment.** The only live run of the session finished at
+**11:02:48** (`live_reports/probe_render_capture.json`) — sixteen and a half minutes before the crash — and a
+process listing afterwards found no controller process at all. That run's report ends with
+`observing_render_after_disconnect: false`, and the probe writes that field **after** its
+`with py4gw.connect(process)` block has exited: it is evidence that `disconnect()` had already removed the
+capture's hook and put the entry bytes back. So at 11:19:13 there was no controller connected and no
+port-placed patch on that client.
+
+**Why it is not attributed to this project.** The four functions this port hooks are
+`game_thread.leave_game_thread_func`, `ui.send_ui_message_func`, `effects.post_process_effect_func` and
+`render.end_scene_func` (resolved live to `0x8DFF10` in round 35, entry pinned and restored). None is
+`0x697BDB`, and none sits on the client's mouse path. The port has also **never sent input**: `Frame.click`,
+`Frame.mouse_action`, `Frame.mouse_click_action` and the setters raise rather than dispatch
+([`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md)), and it posts no window messages. What the assertion describes
+is a button event whose state bit was never set — the shape a synthetic or doubled mouse event produces — and
+both RTSS and the Steam overlay deliver input into this client.
+
+**Follow-up, same day: the owner's account changes the attribution, and the mechanism is in this port.**
+The crash happened when the owner *selected the client and moved the character* — it is an **input-path**
+crash, and the crashed process is the one the 11:02:48 run touched (pid 16504, the pid that run reported).
+The prime suspect is therefore this port's **observer hook on `ui.send_ui_message_func`**, because input in
+this client travels as UI messages (`kMouseDown`/`kMouseUp` with a `packet::MouseAction`) — a click is what
+reaches it, and 16 idle minutes would not.
+
+**What the code does, and where it diverges from native.** `Hooker.remove(name, free_code=True)`
+(`py4gw/game_thread/hooker.py:734-757`) disables the hook, restores the target's own bytes, then
+**sleeps a fixed `FREE_WAIT_SECONDS = 0.25`** before freeing the stub, the trampoline and the state block —
+a wait its own docstring calls "in place of proof". A thread that entered the stub *before* the restore is
+still inside it, and for the **post-call** form the observer uses, "inside" spans the whole original
+`send_ui_message_func` call. 250 ms is usually longer than that call, so it usually works; if a thread is
+descheduled across the window, the free lands underneath it, and because the client's allocator reuses those
+pages the damage surfaces later rather than at once. Native does not rely on a sleep: its render hook
+increments `g_active_render_hooks` on entry and decrements it on exit, and shutdown polls
+`WaitForRenderHooksToDrain()` — 125 × 16 ms for that count to reach zero (`render.cpp:61-73`) — for exactly
+this reason.
+
+**The fix has native's shape, and the room for it is already in the state block.** `STATE_SIZE = 16` holds
+`enabled`, `hits` and **two reserved words** (`hooker.py:76-78`); an in-flight count belongs in one of them.
+The stub would increment it on entry and decrement it on exit (covering the after-form's longer span),
+`disable` would keep setting `enabled = 0` so later arrivals return immediately, and `remove` would poll the
+count to zero — bounded, like native's own wait — **before** restoring the entry, and would *leave the code
+mapped* rather than free it if the count does not drain, which is the safe default this hooker already
+documents.
+
+**The replay, and the fix (same day).** `tests/probe_crash_repro.py` replayed the whole sequence against the
+running client at 11:32:11–11:32:15 — the same four hooks, the same capture read, the same
+`disconnect(free_allocations=True)` — and the owner then selected the client and moved the character:
+**no crash.** A race of this shape does not reproduce on demand, so that neither confirms nor clears the
+mechanism; what it does show is a client coming through a full install-and-remove cycle intact, and its
+pre-flight half confirmed the four targets were unpatched before the install and resolved to `0x845880`,
+`0x8441a0`, `0xa20f00` and `0x8dff10`, each matching this port's pinned entry bytes.
+
+**The defect was fixed anyway, because correctness does not depend on attribution.** The stub now counts the
+calls it holds in the state block's reserved word — `STATE_INFLIGHT_OFFSET = 8`, incremented on entry and
+decremented as late as the stub can manage before control leaves — `Hooker.in_flight` reads it, and
+`remove(free_code=True)` waits for it to reach **zero** before freeing anything: bounded at 2 s (the order of
+native's own 125 × 16 ms), and **reported rather than slept off** if it does not drain, with nothing freed.
+The trampoline is never freed at all: it is the one piece the count cannot cover, because the plain form
+reaches it by jumping *after* it has already decremented, and a dozen bytes left mapped is survivable where
+freed code under a live instruction pointer is not. The entry patch is still restored first, so no new call
+can enter the stub while the count is being drained.
+
+**Verified offline, by running the code rather than reading it.** `tests/test_hooker_offline.py`'s
+`InFlightTests` execute the stub in this process through `_PostCallRig`: the payload observes a count of **1**
+while it is inside; a **disabled** hook is never counted (so a pass-through cannot make a removal wait); a
+count that does not drain raises with `target.freed == []` and the entry restored; and an empty stub frees
+the stub and the state while **the trampoline stays mapped**. The suite is 1454 tests, and the crash itself
+remains recorded above as **unattributed**: what is proven is that the port no longer frees code a client
+thread may be executing, not that this was what killed pid 16504.
+
 ## Sources Consulted
 
 - `C:\Users\Apo\Py4GW_Reforged\README.md`

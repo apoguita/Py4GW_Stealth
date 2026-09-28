@@ -86,6 +86,59 @@ class FramePositionStruct(TargetStruct):
         ("screen_top", c_float),
     ]
 
+    def viewport_scale(
+        self, root: "FrameStruct | None", render: tuple[float, float]
+    ) -> tuple[float, float]:
+        """``FramePosition::GetViewportScale`` (``include/GW/ui/ui.h:553-561``).
+
+        Native reads ``GW::render::GetViewportWidth()``/``Height()`` itself, from the global its own render
+        detour fills; this port has those two captured instead (``docs/TARGET_SIDE_WORK.md``), so they arrive
+        as ``render``.  Everything else is native's arithmetic — including the divisor, which is the **root's**
+        viewport size when a root is given and this record's own when it is not.  Native divides floats, so a
+        zero divisor is an infinity there rather than an exception; that is what it is here too.
+        """
+
+        screen_width, screen_height = render
+        width = float(root.position.viewport_width if root is not None else self.viewport_width)
+        height = float(root.position.viewport_height if root is not None else self.viewport_height)
+        return (
+            screen_width / width if width else float("inf"),
+            screen_height / height if height else float("inf"),
+        )
+
+    def top_left_on_screen(
+        self, root: "FrameStruct | None", render: tuple[float, float]
+    ) -> tuple[float, float]:
+        """``FramePosition::GetTopLeftOnScreen`` (``include/GW/ui/ui.h:504-512``).
+
+        ``{screen_left * scale.x, (height - screen_top) * scale.y}``, where ``height`` is the **root's**
+        ``viewport_height`` — that argument *is* the root — and the scale is :meth:`viewport_scale`.
+        """
+
+        scale_x, scale_y = self.viewport_scale(root, render)
+        height = root.position.viewport_height if root is not None else self.viewport_height
+        return (self.screen_left * scale_x, (height - self.screen_top) * scale_y)
+
+    def bottom_right_on_screen(
+        self, root: "FrameStruct | None", render: tuple[float, float]
+    ) -> tuple[float, float]:
+        """``FramePosition::GetBottomRightOnScreen`` (``include/GW/ui/ui.h:514-522``)."""
+
+        scale_x, scale_y = self.viewport_scale(root, render)
+        height = root.position.viewport_height if root is not None else self.viewport_height
+        return (self.screen_right * scale_x, (height - self.screen_bottom) * scale_y)
+
+    def size_on_screen(
+        self, root: "FrameStruct | None", render: tuple[float, float]
+    ) -> tuple[float, float]:
+        """``FramePosition::GetSizeOnScreen`` (``include/GW/ui/ui.h:544-551``)."""
+
+        scale_x, scale_y = self.viewport_scale(root, render)
+        return (
+            (self.screen_right - self.screen_left) * scale_x,
+            (self.screen_top - self.screen_bottom) * scale_y,
+        )
+
 
 class FrameRelationStruct(TargetStruct):
     """The native ``GW::ui::FrameRelation`` record."""

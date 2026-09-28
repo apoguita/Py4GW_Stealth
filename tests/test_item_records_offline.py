@@ -8,6 +8,7 @@ from typing import cast
 
 from py4gw import (
     BagStruct,
+    BagType,
     DyeInfoStruct,
     GWArray,
     InventoryStruct,
@@ -17,6 +18,7 @@ from py4gw import (
     ItemStruct,
     TradeContext,
 )
+from py4gw.enums_src.item_enums import Bags
 
 
 class _Memory:
@@ -282,7 +284,6 @@ class ItemRecordOfflineTests(unittest.TestCase):
         memory.add(0x00400000, bytes(first) + bytes(second))
         bag.bind_reader(memory, 0x00200000)
 
-        self.assertTrue(bag.is_inventory_bag)
         self.assertTrue(bag.IsInventoryBag())
         self.assertEqual(bag.bag_id(), 1)
         self.assertEqual(bag.find1(0), 0)
@@ -323,6 +324,66 @@ class ItemRecordOfflineTests(unittest.TestCase):
         mismatched_dye = DyeInfoStruct()
         mismatched_dye.dye_tint = 4
         self.assertEqual(bag.find_dye(146, mismatched_dye), BagStruct.npos)
+
+    def test_the_bag_predicates_are_bag_type_comparisons(self) -> None:
+        """`item.h:62-64`: `bag_type` is a `BagType`, and each predicate is its own comparison."""
+
+        for bag_type, answers in {
+            BagType.None_: (False, False, False),
+            BagType.Inventory: (True, False, False),
+            BagType.Equipped: (False, False, False),
+            BagType.NotCollected: (False, False, False),
+            BagType.Storage: (False, True, False),
+            BagType.MaterialStorage: (False, False, True),
+        }.items():
+            with self.subTest(bag_type=bag_type):
+                bag = BagStruct()
+                bag.bag_type = int(bag_type)
+                self.assertEqual(
+                    (bag.IsInventoryBag(), bag.IsStorageBag(), bag.IsMaterialStorage()),
+                    answers,
+                )
+
+    def test_a_bag_id_is_not_a_bag_type(self) -> None:
+        """`Bags` is the id enum: material storage is 6 by id and 5 by type, storage 8 and 4."""
+
+        bag = BagStruct()
+        bag.bag_type = int(Bags.MaterialStorage)
+        self.assertFalse(bag.IsMaterialStorage())
+        bag.bag_type = int(Bags.Storage1)
+        self.assertFalse(bag.IsStorageBag())
+        self.assertFalse(bag.IsMaterialStorage())
+
+    def test_the_item_predicates_follow_their_own_bag_rules(self) -> None:
+        """`item.h:139-140`: inventory or equipped; storage or material storage — a different rule."""
+
+        for bag_type, answers in {
+            BagType.None_: (False, False),
+            BagType.Inventory: (True, False),
+            BagType.Equipped: (True, False),
+            BagType.NotCollected: (False, False),
+            BagType.Storage: (False, True),
+            BagType.MaterialStorage: (False, True),
+        }.items():
+            with self.subTest(bag_type=bag_type):
+                memory = _Memory()
+                bag = BagStruct()
+                bag.bag_type = int(bag_type)
+                memory.add(0x00200000, bytes(bag))
+                item = ItemStruct()
+                item.bag = 0x00200000
+                item.bind_reader(memory, 0x00100000)
+                self.assertEqual((item.IsInventoryItem(), item.IsStorageItem()), answers)
+
+    def test_an_item_without_a_bag_answers_false(self) -> None:
+        """`item.h:139-140`: both predicates short-circuit on the null bag pointer."""
+
+        memory = _Memory()
+        memory.add(0x00200000, bytes(BagStruct()))
+        item = ItemStruct()
+        item.bind_reader(memory, 0x00100000)
+        self.assertFalse(item.IsInventoryItem())
+        self.assertFalse(item.IsStorageItem())
 
 
 if __name__ == "__main__":

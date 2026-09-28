@@ -1,0 +1,96 @@
+{
+  "pid": 22640,
+  "image": "F:\\GW\\GW1\\Gw.exe",
+  "controller_elevated": true,
+  "game_thread": false,
+  "resolves": true,
+  "address": "0x85cd80",
+  "first_bytes": "55 8b ec 56 8b 75 08 57 8b f9 83 fe 09 75 0c 68",
+  "ret_sites": [
+    {
+      "offset": "0x69",
+      "kind": "ret imm16",
+      "immediate": "0xc",
+      "words_if_stdcall": 3
+    },
+    {
+      "offset": "0xe3",
+      "kind": "ret imm16",
+      "immediate": "0xe8c1",
+      "words_if_stdcall": 14896
+    },
+    {
+      "offset": "0xe8",
+      "kind": "ret imm16",
+      "immediate": "0x4589",
+      "words_if_stdcall": 4450
+    },
+    {
+      "offset": "0xfc",
+      "kind": "ret imm16",
+      "immediate": "0x10",
+      "words_if_stdcall": 4
+    },
+    {
+      "offset": "0x129",
+      "kind": "ret"
+    },
+    {
+      "offset": "0x17b",
+      "kind": "ret"
+    }
+  ],
+  "frames": {
+    "array_size": 734,
+    "valid_slots": 619,
+    "sampled": 6,
+    "with_callbacks": [
+      {
+        "frame_id": 2,
+        "pointer": "0xaaa0260",
+        "frame_hash": "0x0",
+        "callbacks_size": 2,
+        "callbacks_buffer": "0x24d1fa60",
+        "first_word": "0xaaa0308",
+        "address_matches_field": true
+      },
+      {
+        "frame_id": 3,
+        "pointer": "0xaaa0430",
+        "frame_hash": "0x0",
+        "callbacks_size": 1,
+        "callbacks_buffer": "0xa935b20",
+        "first_word": "0xaaa04d8",
+        "address_matches_field": true
+      },
+      {
+        "frame_id": 4,
+        "pointer": "0xaaa0600",
+        "frame_hash": "0xd7a44c9d",
+        "callbacks_size": 2,
+        "callbacks_buffer": "0x25135d08",
+        "first_word": "0xaaa06a8",
+        "address_matches_field": true
+      },
+      {
+        "frame_id": 5,
+        "pointer": "0x249e3358",
+        "frame_hash": "0xded705bd",
+        "callbacks_size": 4,
+        "callbacks_buffer": "0xa1d2828",
+        "first_word": "0x249e3400",
+        "address_matches_field": true
+      },
+      {
+        "frame_id": 6,
+        "pointer": "0x249e3f18",
+        "frame_hash": "0xdc24a3f0",
+        "callbacks_size": 4,
+        "callbacks_buffer": "0xa1d2860",
+        "first_word": "0x249e3fc0",
+        "address_matches_field": true
+      }
+    ]
+  },
+  "note": "read-only: game_thread=False installed no hook, no patch and made no call. The write probe is the run that makes the call itself."
+}

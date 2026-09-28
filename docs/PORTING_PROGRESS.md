@@ -6,9 +6,56 @@ something stopped — not something to wait on.
 
 | | |
 | --- | --- |
-| **Goal** | `goal-f79c6454-c4a7-4aac-9e29-0e9d416aac38` — finish `Agent` + `AgentArray` faithfully |
-| **Round** | 14 (`Effects`' alcohol capture: native's own hook is in the client, and the live run showed exactly which one piece is left) |
-| **Round (prev)** | 13 (`Camera` ported whole: 46 members, none raising, and the payload gained the write operation it needed) |
+| **Goal** | `goal-5bdc438e-712d-4582-bc5a-947069da6a92` — port `Inventory` + `Item` + `ItemArray` faithfully |
+| **Round** | 62 (**the client crashed inside this project's injected code — recorded, and write tests are on hold until the effects observer is fixed.** Dump: `c0000005` reading address `00000006`, `eip=03e900b0` — an address **outside `Gw.exe`** (base `00610000`), i.e. dynamically allocated code — with `ebx=03720000` pointing at memory whose first bytes are `4b4c4253` (**"SBLK"**, this project's shared block) and a trace of our code ← `009eca36` (in the client). The faulting bytes at `03e900b0` are `8b 4a 00 / 89 4f 08 / 8b 4a 04 / 89 4f 0c …` — a multi-dword copy **from `[edx]` into `[edi+8…]`** with **`edx=00000006`**: a small integer dereferenced as a pointer. That is the shape the port's own raise text on `Effects.GetAlcoholLevel` already describes as unbuilt — *the observer reads the hooked function's second argument as a packet pointer, while native's post-process handler stores the two plain word arguments* (`payload.py:762-765` vs `effects.cpp:24-41`) — so the leading candidate is **the effects observer dereferencing a word argument (6) as a packet**. The run immediately before was the `UseItem` probe, whose **disconnect then failed to drain** (`observe_effects still had 1 call(s) inside its stub 2.0 s after its entry was restored; nothing was freed`), which is a second candidate: a hook left installed while the host is gone. **Nothing of this project's is in the client now** — the owner restarted it at 17:49:51 (pid 31024) — but **no write connection should be made until the observer's argument shape is fixed**, because connecting is what installs it. **Fixed the wrong read in the same round**: the effects hook is no longer handed a packet watch list (`py4gw/game_thread/bridge.py`, the dump evidence written into the code comment), so the emitted observer validates and returns instead of dereferencing a word — the crash is no longer reachable from a connect; suite **1594 tests OK**, `pyright` 0 errors. **What remains is the shape, not a workaround**: an observer that carries the call's own two words into the event, which is native's own handler (`OnPostProcessEffect(uint32_t intensity, uint32_t tint)` stores `intensity` and calls the original, `effects.cpp:32-41`); until it is built `Effects.GetAlcoholLevel` keeps raising — and now names a *missing shape* rather than sitting behind a read that faults. **And the live re-run closes the analysis (round 62)**: the cider experiment repeated cleanly — **222 → 221** in 0.75 s (`live_reports/use_item_live2.json`), `hooks after disconnect = []`, **no drain error at all**, and the client alive afterwards (pid 31024). That the drain failure vanished together with the dereference is the evidence the two were **one event**: the observer call that faulted was the call the drain was waiting on, so the counted path is not separately wrong — and the earlier "still to check" is answered. `Effects.GetAlcoholLevel` still raises, now naming the unbuilt words-carrying shape rather than sitting behind a read that faults) |
+| **Round (prev)** | 61 (**`UseItem` is live-verified: 223 → 222.** The owner's experiment, and it proves the whole chain in one number — a **Hard Apple Cider** stack (`ModelID.Hard_Apple_Cider` = 28435, item **237**, slot 3, found with `ItemArray.GetItemArray` over `GetAllBags()`) read **223** before and **222** after `Inventory.UseItem(237)`, 0.79 s later, through `Inventory.GetModelCount` **and** `Item.Properties.GetQuantity`. That is the Reforged member → `inventory_instance()` → the binding's `UseItem` → `GW::item::UseItem` → **round 57's interact guard and `item.use_item_func(item->item_id)`**, on a real item. `IdentifyItem`/`Salvage`/`EquipItem` stay offline-verified by the owner's call (no disposable items). **Two findings from the same run:** (a) the disconnect refused to free — `observe_effects still had 1 call(s) inside its stub 2.0 s after its entry was restored`, so the round-55 fix did what it is for: the entry went back, nothing was unmapped under a live instruction pointer, and the probe reported it instead of dying; (b) `Effects.GetAlcoholLevel` raises — the effects observer's **second event shape** (the call's own words, rather than a dereferenced packet) is still unbuilt, which is that module's recorded divergence, not the trio's) |
+| **Round (prev)** | 60 (**the item trio's reads are live-verified, and the owner's call settles the actions** — `tests/probe_items_live.py` (read-only: `game_thread=False`, no hook, no patch, no call) walked the client's own bags: **20 bags**, **342 item ids**, cross-checked against `Inventory` (`[39, 60]` space with **21** free — 39 + 21 = 60), twelve items described with coherent client data (a `[29, 'Kit']` of model 5899, `[11, 'Materials_Zcoins']` stacks of 44 and 59, a Gold `[30, 'Trophy']`), and the source's own finders answering real ids (ID kit 12374, unidentified item 20112, salvage kit 18957). Two corrections were the probe's, neither a port defect: `Bag` members need `.value`, and **`CreateBagList()` with no ids is `[]` in the source itself** (`ItemArray.py:9-26`, no default), so the walk passes `GetAllBags()`. **The four action members stay offline-verified only** — the owner has no disposable items to spend on them and ruled them assumed-working-but-untested; the ids that would prove them are recorded in `ITEM_PORT.md` §4. **A naming finding is open and measured**: the library carries **8 `Py*` classes** (`PyEffects`, `PyItemType`, `PyDyeColor`, `PyDyeInfo`, `PyItem`, `PyInventory`, `PySkill`, `PySkillbar`), which the cornerstone forbids (a source's injected-module name on one of this project's classes — the `PyDialog` precedent); six have an unambiguous target, while `PyItem`/`PyInventory` need the owner's naming call, because native's *class* names are literally those and `Item`/`Inventory` are already the Reforged classes here) |
+| **Round (prev)** | 59 (**live: the frame-message call is the client's `__thiscall` shape, `Frame.click` works, and the client acts on it.** The read-only probe resolved `ui.send_frame_ui_message_func` on the 2026-09-27 client at `0x85cd80`, read its prologue (`mov esi,[ebp+8]`, `mov edi,ecx`) and its `ret 0xc`, and confirmed the first word's arithmetic against five live frames — native declares that target `void(__fastcall*)(callbacks, void* edx, message_id, wparam, lparam)` (`ui_patterns.cpp:32`), so round 58's five-pushed-word cdecl call was **wrong** and is now `CallForm.FASTCALL_U32_U32_U32` (arg1→ECX, arg2→EDX, three stack words, and the callee pops them), covered offline by a witness that releases its own words. **`Frame.click`** (native `ui::ButtonClick`, `ui_methods.cpp:1249-1274`) is built on it: the parent is reached by relation pointer, both `IsCreated` checks are made, and `MouseAction{child_offset_id, child_offset_id, MouseUp, &ButtonParam{0, field105_0x1c4, 0}, 0}` is placed in the block's data region and sent as `kMouseClick2` to the **parent's** callbacks. **Two defects the live runs found and fixed**: the dialog handler read `player_number` off the *base* agent record — native takes the living view (`GetAgentModelIdSafe`, `dialog.cpp:201-218`) — which killed the listener the moment a dialog opened; and the probe's tree diff was keyed by frame *hash*, which collapses every unnamed frame (most carry hash `0`), so it could not see a new window at all. **The live click, driven exactly as directed**: 597 created frames → interact with agent 17 → 609 in 0.52 s (name tag + two `template 1` dialog buttons) → click on button frame 599 → the client **advanced the dialog** (609 → 625 frames, the window's children 3 → 2), then a clean disconnect with no hooks left. Suite **1594 tests OK**, `pyright` 0 errors) |
+| **Round (prev)** | 58 (**the whole-project `pyright` gate is clean, and `Frame.send_message` answers** — the seven errors that were outstanding were all in this project's own example/probe/test files: `examples/context/agent_array.py` called `py4gw.context.agent_array.get()`, which does not exist (the accessor is `client.agent_array.get_context()`, as `examples/all_contexts.py:43` already uses); `tests/probe_alcohol_live.py` read `client._bridge`'s members through an `Optional`; and `tests/test_mods_types_offline.py` iterated a value typed as `type`. All three corrected, so **`pyright` over the whole project reports 0 errors**. Then the first member of the frame-action group: **`Frame.send_message`** calls the client's own callbacks-based sender (`ui.send_frame_ui_message_func`, native's `g_send_frame_ui_message_original`) with native's own **five** words — `&frame->frame_callbacks` (the frame record's address plus the field's `0xA8`), a null second word, the message id and the caller's two words — behind native's own guard (`frame && frame->frame_callbacks.size()`), and answers the binding's `true` (`ui_bindings.cpp:1066-1072` → `ui_methods.cpp:1332-1345`). **`Frame` is 94 of 115**; the remaining frame actions are `click`/`double_click`/`mouse_action`/`mouse_click_action`/`send_message_text`/`set_text` plus the five setters. Suite **1585 tests OK**) |
+| **Round (prev)** | 57 (**the interact guard is ported, and the four members it held act** — `CanAccessXunlaiChest`, `IsStorageBag`, `IsStorageItem` and `CanInteractWithItem` are in `py4gw/py_inventory.py` in native's own order (`item_methods.cpp:52-74`), over native's `Context::Region` (`context/map.h:56-85`, 28 members, now ported with its stub). **`UseItem`, `EquipItem`, `IdentifyItem` and `Salvage` answer** — one catalog call each, plus the `kPreStartSalvage` packet and the salvage session for `Salvage` — and so does the module function `salvage`, which native gives the same body. **`PyInventory` is 15 of 17 members + 3 of 4 module functions**; the two that raise are the StoC emulation and the frame click. **One divergence is recorded on `_can_access_xunlai_chest`**: native reads `Context::GetAreaInfoArray()[GetMapID()]`, this port reads the instance-info record's own pointer — the same `AreaInfo` for the current map; the global array is what `Map.GetUnloadedMapInfo` still raises for. Suite **1581 tests OK**, scoped `pyright` **0 errors**) |
+| **Round (prev)** | 56 (**the bag predicates were answering the wrong question, and it is fixed** — native's `bag_type` *is* `Constants::BagType` (`context/item.h:54`) and every predicate over it compares `BagType` members (`:62-64`, `:139-140`), but this port compared it against `Bags` **ids**: `8` is `Storage1`, `6` is `MaterialStorage`, `22` is `EquippedItems`, where native compares `Storage` `4`, `MaterialStorage` `5`, `Equipped` `2`. So `is_storage_bag`/`is_material_storage` answered **False for every real storage and material-storage bag** and `is_inventory_item` missed equipped items — a wrong value returned to callers, not a gap. `BagType` is now ported (`py4gw/context/item_context.py`, zero member spelled `None_` as the sources spell it), `BagStruct`'s and `ItemStruct`'s predicates carry native's own bodies, the invented snake_case duplicates that held the wrong constants are gone from both context structs (those names belong to the binding, which this port already carries on `item.py`), and the fixtures that encoded `bag_type=8` now use `BagType.Storage`. Suite **1566 tests OK**, `pyright` **0 errors**) |
+| **Round (prev)** | 55 (**the crash's fix, not the porting** — hook stubs now count the calls they hold and `remove` waits for that count to reach zero before freeing any generated code, native's own answer; the trampoline is never freed. Verified by running the stub offline: the payload sees the count at 1, a disabled hook is never counted, a stuck count raises with nothing freed. The replay did **not** reproduce the crash, and it stays recorded as unattributed) |
+| **Round (prev)** | 54 (**the salvage dialog closes: `Inventory` is 53 of 57** — the option assembly, the click strategy and the formatter are ported, and the four that raise are all documented divergences (Reforged's coroutine protocol, the injected console). The class is COMPLETE for this port's purposes) |
+| **Round (prev)** | 53 (**the geometry answers** — `rect`, `size`, `coords`, `viewport_scale` and `content_coords` are native's own `FramePosition` methods over the root frame and the captured render viewport, so **`Frame` is 93 of 115** and the feature list is down to three. The arithmetic is ported where native puts it, and the render accessors as `get_viewport_size()`) |
+| **Round (prev)** | 52 (**`FrameTree.root()` answers** — the catalog's `ui.get_root_frame_func` called on the client's own thread, native's `GetRootFrame`, with the id read at `+0xBC` and the source's cache kept; `viewport_height` reads through it, so the tree is 33 of 41. A wrong claim of mine is corrected in the same round: the geometry needs the root *and* the capture, not the capture alone) |
+| **Round (prev)** | 51 (**the DX-context capture is live-verified** — the read-only probe pinned EndScene's prologue, then the write connection captured the client's own context: viewport **1678×1368**, device `0xA9B7C40`, 4512 bytes read there, and the hook came back out on disconnect. The geometry's last input is in hand; its consumers are next) |
+| **Round (prev)** | 50 (the DX-context capture is **wired into the bridge** — a third hook, entered rather than observed-after, keeping the argument in a data-region slot with `observing_render`/`render_context_address()` and the removal ordered first; offline-verified in `CaptureTests`. One live-derived value is left: EndScene's five-plus whole-instruction prologue, which the other three hooks pin as constants read from the client) |
+| **Round (prev)** | 49 (the DX-context capture starts: native's capture is a **variable, not a queue** — `g_dx_context = ctx` on every `OnEndScene`/`OnReset`, `render.cpp:88`/`:103` — so a **slot-capture stub** is added to the payload and offline-verified (it keeps one argument of a per-frame function in a block slot and appends no event); wiring it into the bridge and the live run are next) |
+| **Round (prev)** | 48 (the geometry's open question is closed by reading the code to its last hop: the on-screen arithmetic is pure, and it needs exactly two client-side inputs — the root frame and the DX context; `Map.MissionMap.GetScale` needs only the second, so the detour capture unblocks it first) |
+| **Round (prev)** | 47 (**`Inventory` jumps from 36 to 50 of its 57 methods** — the `FrameTree` package paid off: 14 salvage-dialog members ported, including the frame lookups, the children map, the option text and the entry helpers; the 7 that remain are measured and named) |
+| **Round (prev)** | 46 (**the `FrameTree` package is complete** — its seventh module, the source's own `__init__` re-export list, is ported and compared name for name against the source's `__all__`; all seven modules are now in place, and both classes carry their verdict rows in the class map) |
+| **Round (prev)** | 45 (**`_FrameTree` is declared in full too** — 41 of 41, in source order, 32 answering — so both classes' surfaces are complete; the round's finds: `hierarchy`'s docstring disagrees with the native function it binds, `GetOverlayFrames` and `GetPopupFrames` are byte-identical, and `coords_for_hash` is a hash scan plus two truncated corners) |
+| **Round (prev)** | 44 (`_FrameTree` reaches **32 of 41** — the eight members that waited on `Frame` existing are in — and **both classes' members are now in the source's own order**, verified against both ASTs; the last geometry members are pinned to exactly two client-side inputs: the root frame and the render viewport) |
+| **Round (prev)** | 43 (`Frame` is declared **in full** — all 115 members, in the source's own order, verified against the source's AST — with **89 answering**; `layer`, `opacity`, `clip_rect` and `hover` land, and the 26 that cannot answer are grouped into four features) |
+| **Round (prev)** | 42 (**all 115 of `Frame`'s members are declared**, 100 built — the native walkers land: parent pointers, child-by-hash, the four relation branches and the ancestor chain, every one a read once two pointer rules from native are applied; five bindings turn out to be one native walker) |
+| **Round (prev)** | 41 (`Frame` reaches its navigation (**79 of 115**) — and a defect from round 40 is found and corrected: the source's `position` is a *binding-side wrapper*, so `rect`/`size`/`viewport_scale` now name the root-frame computation they need, and the geometry tests are rebuilt on the **real** ctypes records so that class of error cannot hide again) |
+| **Round (prev)** | 40 (`Frame` reaches its geometry — `text`, `encoded`, `rect`, `size`, `coords`, the two viewport reads; **70 of 115** — and every action/setter binding is found to be a **game-thread enqueue** in native, so those members are declared and name the one call each needs) |
+| **Round (prev)** | 39 (`Frame` reaches its inspection members — siblings, `fields`, parameters, the record reads; **56 of 115** — and the three injected calls behind `state_bit`/`user_param`/`context` are each resolved to one record field, so they answer) |
+| **Round (prev)** | 38 (`Frame`'s read surface lands — identity, path, the registry/alias inversions, the state and record reads; **`Frame` is 47 of 115** — and the label/title pair is found to be one client call: the title-table binary search) |
+| **Round (prev)** | 37 (the two injected frame lookups resolved: `GetFrameIDByHash` is a read and `anchor_ids`/`by_hash` answer with it, `GetHashByLabel` is the client hashing a wide string and the three members that need it say so; `Frame._resolve` and `Frame.exists` land) |
+| **Round (prev)** | 36 (`Frame`'s twelve indexed accessors land — 22 of its 116 declarations in; and the funnel is found: `_resolve` needs `anchor_ids`, so the injected `UIManager` layer is the next feature) |
+| **Round (prev)** | 35 (`Frame` starts — the constructor and every handle builder, `:678-793`, with 14 tests; the class is grown in source order) |
+| **Round (prev)** | 34 (`Frame` mapped before it is written: 74 of its 115 members call nothing injected, 39 properties wrap one `UIManager` member each; and 11 of `_FrameTree`'s remaining 24 call the client directly, so they do not wait on `Frame`) |
+| **Round (prev)** | 33 (`_FrameTree` stops at 24 members — every remaining one needs `Frame`, so the order flips) |
+| **Round (prev)** | 32 (the per-frame state cache: `state`, `_prune`, `invalidate`, with the memo dropped and the buffer kept) |
+| **Round (prev)** | 31 (`_FrameTree`'s structure queries: `all_ids`, `children_map`, `live` and eight more answer) |
+| **Round (prev)** | 30 (the state cache is tick-keyed in two more places — decided, so the queries can follow) |
+| **Round (prev)** | 29 (`_FrameTree`'s lifecycle and snapshot are in — `rebuild` over the port's frame-array read) |
+| **Round (prev)** | 28 (`_FrameTree`'s snapshot is tick-keyed — the decision that governs all 41 members is recorded) |
+| **Round (prev)** | 27 (`_FrameTree` mapped member by member: 28 of its 41 need nothing injected, 13 name their call) |
+| **Round (prev)** | 26 (`frame.py`'s first section ported: `FrameState`, `resolve_key` and the two reverse lookups) |
+| **Round (prev)** | 25 (`FrameTree`'s five table modules ported — 5,010 lines, parity-checked; the logic is next) |
+| **Round (prev)** | 24 (the dialog's cascade measured: `Inventory` is 36 of 57, and the 21 that raise split 17 / 3 / 1) |
+| **Round (prev)** | 23 (the two storage walkers: both in, and only the salvage-choice dialog left) |
+| **Round (prev)** | 22 (the four-word call form: the capability layer gains it, verified by its own witness, and `MoveItem` answers) |
+| **Round (prev)** | 21 (`Inventory`'s storage, action, gold and find bodies: 33 of 57 methods now answer, 24 named) |
+| **Round (prev)** | 20 (`Inventory` starts: 66 declarations, 18 of its 57 methods built, 39 named) |
+| **Round (prev)** | 19 (`ItemArray` is FULL — 14 declarations, and both of its source quirks pinned by tests) |
+| **Round (prev)** | 18 (the bag surface: `py_inventory.py`, and **`Item` is FULL** — no raising member left) |
+| **Round (prev)** | 17 (`Item` ported: 125 declarations, and the binding it reads through carried with it) |
+| **Round (prev)** | 16 (`mods_types`, `mods_upgrades` and `mods_core` — the item vocabulary and the decoder, ported ahead of the class that needs them) |
+| **Round (prev)** | 15 (the item port: the three classes' surfaces pinned, the cascade and the order of work written down) |
+| **Round (prev)** | 14 (`Effects`' alcohol capture: native's own hook is in the client, and the live run showed exactly which one piece is left) |
 | **Round (prev)** | 12 (a name is decoded by the client: 15x faster than the dat route, and no dat record at all) |
 | **Round (prev)** | 11 (the dat handling moved off the call path: pre-cached at connect, on a worker) |
 | **Round (prev)** | 10 (the owner's second catch: the agent viewer's own scheme, and one name end to end) |
@@ -17,9 +64,700 @@ something stopped — not something to wait on.
 | **Phase (prev)** | live: the viewer's scheme read member by member; **one name tested alone** (agent 15, gadget, `\x0C6E` -> "Random Arenas"), six agents put through the port's decoder and the client's; the slot mapping verified live for the first time; the ring cost measured (~1.0 s per string file) |
 | **Phase (prev 2)** | live: names walked on all four branches with 0 byte mismatches; two client crashes traced to a killed run's orphaned patch |
 | **Phase** | **`Camera` is FULL**: 46/46 members answer, live-verified (reads median 5 us, a write read back from the client's own struct, the camera-unlock patch proven byte-for-byte); the payload gained `WRITE_MEMORY` so a member can change client state on the game's own thread, and the class now caches a patch's address *and* bytes the way `MemoryPatcher` does |
-| **Verdicts** | **`Agent`: COMPLETE for this port's purposes** (148 declared, 145 answer; the 3 that raise are two frame-loop halves and the injected-runtime artifact), **`AgentArray`: FULL**, **`Camera`: FULL (2026-09-27)** -- all from the modules' own AST |
+| **Verdicts** | **`Agent`: COMPLETE for this port's purposes** (148 declared, 145 answer; the 3 that raise are two frame-loop halves and the injected-runtime artifact), **`AgentArray`: FULL**, **`Camera`: FULL (2026-09-27)**, **`Inventory`: COMPLETE for this port's purposes (53 of 57 methods; the 4 that raise are Reforged's three coroutine generators and the injected console's log)**, **`Item`: FULL**, **`ItemArray`: FULL**, **`FrameTree` package: all seven modules in, neither class FULL** (`_FrameTree` 33 of 41 answering, `Frame` 93 of 115) -- all counted from the modules' own ASTs |
+| **Package status** | **`FrameTree`: the package is complete** — all seven of its modules are in place (the five tables verbatim, `frame.py` with both classes declared in full in the source's own order, and the source's own `__init__` re-export list). `_FrameTree` 41/41 declared (**32 answering**), `Frame` 115/115 (**89 answering**); both counts measured from the module's AST, order compared against the source's. **Neither class is FULL** — what is left is named, not unknown: the game-thread frame actions, the root-frame geometry, the client's title table + ImGui + the overlay, and the client-call lookups ([`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md)). Next: the salvage dialog's 17 `Inventory` members, which is why the package was ported. |
 | **Verdicts (prev)** | **`Agent`: COMPLETE for this port's purposes** (148 declared, 145 answer; the 3 that raise are two frame-loop halves and the injected-runtime artifact) and **`AgentArray`: FULL** (no raising member) -- both from the modules' own AST, 2026-09-27 |
-| **Updated** | 2026-09-27 ~09:00 (round 14) |
+| **Updated** | 2026-09-27 (round 55 — the teardown fix: 1454 offline tests OK, pyright clean; a replay of the crash sequence did not reproduce it, and the client has been untouched since) |
+
+## Now (round 33 - the next seven queries all need `Frame`, so the order of work flips)
+
+**What this round established.** Round 31 named eighteen "clean" queries and ported eleven of them. Reading
+the other seven (`frame.py:517-636`) showed that **every one goes through the `Frame` class**, which is not
+ported:
+
+- `all_frames` (`:517-518`) is `[Frame.from_id(f) for f in self.all_ids()]`;
+- `_as_id` (`:528-533`) is an `isinstance(..., Frame)` test plus `frame_or_id._target_id()`;
+- `descendants` (`:535-537`) wraps `Frame.from_id` around each id, and `descendants_of` (`:539-552`) starts
+  with `self._as_id(frame_id)`;
+- `root` (`:554-560`) needs `PyUIManager.UIManager.get_root_frame_id()` **and** `Frame.from_id`;
+- `viewport_height` (`:562-567`) is `self.root().viewport_dimensions()`;
+- `frames_at_path` (`:598-606`) needs `self.anchor_ids(anchor)` — an injected member — and returns `Frame`s;
+  `frames_under` (`:608-614`) and `_frames_at` (`:616-632`) are the same shape;
+- `sort_by_vertical` (`:634-636`) sorts by each `Frame`'s `rect`.
+
+**So `_FrameTree` is as far as it can go**: 17 of its 41 members are ported (the lifecycle, the snapshot, the
+eleven structure queries and the state cache) and **all 24 that remain need `Frame`** — thirteen of them
+directly, eleven through the injected `UIManager` calls `Frame` will hold. The order of work for the rest of
+the package is therefore settled: **`Frame` (`:679-1620`, 115 members) first**, then those thirteen, then the
+source's own `__init__`.
+
+**Why that is worth a round rather than a guess.** Writing `all_frames` "for now" without `Frame.from_id`
+would mean inventing a stand-in for a source class — the exact failure `docs/PORTING_RULES.md` records from
+`Context.py`/`_area` — and porting the queries in a different order would have produced members that cannot
+run. The boundary is now measured and recorded in [`FRAME_TREE_PORT.md`](FRAME_TREE_PORT.md) §2, with each of
+the seven and the `Frame` member it needs.
+
+**No code changed this round.** Suite unchanged at **1319 tests OK**, `pyright` clean. Next: `Frame` — its
+`from_id`/`from_hash`/`from_label` constructors, `_target_id`, `rect`, `viewport_dimensions` and the rest of
+its 115 members, resolving the remaining `PyUIManager.UIManager` call sites one at a time.
+
+## Now (round 32 - the per-frame state cache is in, written to the decision rather than around it)
+
+**What moved.** `state`, `_prune` and `invalidate` (`frame.py:378-423`) — the tree's per-frame live copies,
+which every geometry read behind it goes through. The port follows the round-30 decision exactly:
+
+- **the per-tick memo is gone** (`:387-389`): with nothing advancing `tick`, that test would hand back the
+  *first* copy of a frame for the life of the process, so the member reads when it is called, as `ensure`
+  does. The docstring marks the dropped test and why, so the divergence is on the member and not only in a
+  doc;
+- **the buffer rule is kept exactly** (`:392-401`): a blank read inherits the last good copy while
+  `previous.served < BUFFER_TICKS`, bumping `served` and stamping `previous.tick`. What it counts is polls,
+  which the source's own comment states ("Counted in polls, not time"), and polls still exist here;
+- **the age-based prune is ported as written** (`cutoff = self.tick - 240`) with the limitation recorded on
+  the member: without a ticker the cutoff never advances, so it cannot fire. It is the one piece of the cache
+  that genuinely depends on the frame loop, and it is not given an invented clock.
+
+**Verification.** `tests/test_frame_tree_frame_offline.py` grew to **41 tests**, six of them new: a landed
+read being stored; **a second call reading again** — which is the adaptation made observable, since the
+source's memo would have answered the first copy forever; the buffer driven **to its bound and past it**
+(the good copy stands in for exactly `BUFFER_TICKS` polls, then the blank read is stored and the truth is
+told); a frame that was never good getting the blank read rather than a stand-in; `invalidate` dropping one
+copy, then all of them, and tolerating an id with nothing cached; and `_prune`'s cutoff rule exercised on
+both sides of `self.tick - 240` — which is the only way that rule can be shown to be the source's, since
+nothing in the port will ever call it.
+
+**Suite: 1319 tests OK** (was 1313); `pyright` 0 errors on `frame.py`. Next: the remaining queries
+(`descendants`, `descendants_of`, `viewport_height`, `frames_at_path`, `frames_under`, `_frames_at`,
+`sort_by_vertical`, `color_frames`), then the twelve injected members and `Frame.from_id` — which `all_frames`
+and `_as_id` are waiting on.
+
+## Now (round 31 - `_FrameTree`'s structure queries are in: eleven members answer, including the two the dialog walks)
+
+**What moved.** The clean section I named last round — the queries that read the snapshot and touch neither
+the tick nor the injected runtime — is ported (`frame.py:462-526`): **`child_of`, `children_at`,
+`children_of`, `child_codes_of`, `parent_of`, `hash_of`, `code_of`, `known`, `live`, `all_ids` and
+`children_map`**. Eleven members, and two of them — `all_ids` and `children_map` — are calls the
+salvage-choice dialog makes; the third it makes, `all_frames`, cannot be written yet because its body is
+`[Frame.from_id(f) for f in self.all_ids()]` and **`Frame` is the 115-member class still to come**. The same
+is true of `_as_id`, whose body type-tests a `Frame`.
+
+**`live` is the section's one resolved call, and the source's own comment says how.** It asks the engine
+whether a frame is real, and insists on a **raw** read — "never the retained copy, or existence would feed on
+the very cache it is meant to validate and a removed frame would never die" (`:503-505`). The port's raw read
+is the one `rebuild` already uses: `client.frame_array.get(int(frame_id))`, which re-reads the array slot and
+consults nothing this class kept. That is exactly the distinction the source draws, so the substitution is
+not a softening — it is the same read the injected `PyUIManager.UIFrame(fid)` wraps.
+
+**Verification.** `tests/test_frame_tree_frame_offline.py` grew to **35 tests** (41 with the tables file),
+seven of them new, over a four-frame fixture with a **code collision** (`1` has children `2` and `3`, both
+code `6`) so the collision note in `rebuild` is exercised rather than described: `child_of` taking the first
+of the pair and answering `None` for a code with no child; `children_at` keeping both siblings; `children_of`
+flattened and sorted across codes; `child_codes_of`; the three single-value lookups with their zero defaults
+and `known`; `all_ids` in array order; `children_map` grouped by parent; and `live` proving the raw-read
+behaviour — an id the snapshot **never saw** answers `true` while one the engine does not have answers
+`false`. The boundary test was updated to name members that are genuinely still absent (`state`, `_prune`,
+`invalidate`, `descendants`, `frames_under`, `root`, `by_label`).
+
+**Suite: 1313 tests OK** (was 1306); `pyright` 0 errors on `frame.py`. Next: the per-frame state cache
+(`state`, `_prune`, `invalidate`) against the round-30 decision, then the remaining queries, then `Frame`.
+
+## Now (round 30 - the per-frame state cache is tick-keyed in two more places, and both are decided)
+
+**Reading `state`, `_prune` and `invalidate` (`frame.py:378-423`) found the same adaptation as `ensure`, in
+two more places — so it is settled here rather than discovered halfway through writing them.**
+
+1. **The per-tick memo** — ``if previous is not None and previous.tick == self.tick: return previous``
+   (`:387-389`) pins the first copy of every frame for the life of the process when nothing advances `tick`.
+   The port drops that test, for exactly the reason it drops `ensure`'s: **the member reads when it is
+   called**.
+2. **The buffer's bound is *not* dropped** — a blank read inherits the last good copy while
+   ``previous.served < self.BUFFER_TICKS``, bumping `served` and stamping `previous.tick` (`:392-401`). The
+   source's own comment says what it counts: "Counted in polls, not time". Polls still exist here, so that
+   logic keeps its meaning untouched.
+3. **The age-based prune genuinely cannot work** — ``cutoff = self.tick - 240`` (`:410`) never advances
+   without a ticker, so `_prune` cannot fire and the `len(self._state) > 4096` guard at `:404-405` would
+   call it in vain. This one is recorded as a limitation, and the member is ported as written rather than
+   handed an invented clock.
+
+**And the section that *is* clean is now named.** `child_of`, `children_at`, `children_of`,
+`child_codes_of`, `parent_of`, `hash_of`, `code_of`, `known`, `all_ids`, `all_frames`, `children_map`,
+`descendants`, `descendants_of`, `viewport_height`, `frames_at_path`, `frames_under`, `_frames_at` and
+`sort_by_vertical` (`:462-570`, `:598-636`) read the snapshot dicts `rebuild` fills, and touch **neither the
+tick nor the injected runtime** — so they are the next section, and three of them (`all_frames`,
+`children_map`, `frames_under`) are calls the salvage-choice dialog makes.
+
+**No code changed this round**; the deliverable is the decision and the boundary, in
+[`FRAME_TREE_PORT.md`](FRAME_TREE_PORT.md) §2. Suite unchanged at **1306 tests OK**, `pyright` clean.
+
+## Now (round 29 - `_FrameTree` lives: its lifecycle and snapshot are ported, and `rebuild` reads this port's frame array)
+
+**What moved.** `frame.py` is now ported to **line 375 of 1620**: after `FrameState` and the reverse lookups,
+`_FrameTree`'s own spine — `__init__` (`:288-303`), `enable` (`:306-314`), `disable` (`:316-322`), `_on_tick`
+(`:324-326`), `rebuild` (`:329-370`) and `ensure` (`:372-375`) — and the `FrameTree = _FrameTree()`
+singleton (`:675`). The class's two constants are the source's own: `_CALLBACK = "FrameTree.Tick"` and
+`BUFFER_TICKS = 5` (`:282-286`). I had invented a value for the first before reading the class head and
+corrected it — the source's spelling is `Tick`, not `tick`.
+
+**The one call in the section is resolved, not guessed.** The source walks
+`PyUIManager.UIManager.get_frame_array()` and constructs a `PyUIManager.UIFrame` per id to read `parent_id`,
+`child_offset_id` and `frame_hash` (`:337-346`). The port walks the same array through
+`client.frame_array.iter_frames()`, which yields a frame id **with** its record — one pass, the record's own
+fields, nothing constructed — so `rebuild` is the source's body with that single read answered.
+
+**The two adaptations recorded last round are now in the code, and both are narrow.** `enable` and `disable`
+— whose whole job is to make and drop the `PyCallback` registration that *is* the tick — raise and name it,
+the same class of thing as `Agent.enable`. `ensure` rebuilds on the call, since with no ticker the source's
+`_built_tick != self.tick` test would be false after the first rebuild and the tree would be pinned for the
+life of the process. **`rebuild`'s own staleness rule is untouched** (`:356-369`): an empty array keeps the
+last good tree and sets `stale`, because an array the engine cannot see is not an empty UI — and the test
+drives exactly that, plus the collide-on-code case the source comments on (`:350-352`).
+
+**Verification.** `tests/test_frame_tree_frame_offline.py` grew to **28 tests**, eight of them new: the
+initial fields and the two class constants; a three-frame snapshot (order, parents, codes, hashes, the
+sibling collision, `by_hash`, version bump); an empty array keeping the last good tree without bumping the
+version; an empty *first* rebuild being taken rather than stale; `ensure` rebuilding twice in a row (which is
+the adaptation made observable); `enable`/`disable` naming `PyCallback`; `_on_tick` bumping only the counter;
+and the singleton's type. The section-boundary tests in both frame-tree files were updated rather than
+"fixed" — they asserted `_FrameTree` was absent, which was true one round ago.
+
+**Suite: 1306 tests OK** (was 1297); `pyright` 0 errors. Next: `_FrameTree`'s 35 remaining members — the
+queries (`state`, `_prune`, `invalidate`, `child_of`, `children_at`, `children_of`, `children_map`,
+`all_ids`, `all_frames`, `descendants`, `frames_at_path`, `frames_under`, `_frames_at`, `sort_by_vertical`,
+`color_frames`, …) and the twelve other injected ones, one call site at a time — then `Frame`.
+
+## Now (round 28 - `_FrameTree` is tick-keyed, and the port's answer is recorded before the members are written)
+
+**Reading `rebuild` and `ensure` settled the thing that governs all 41 members of `_FrameTree`, so it is
+written down first.** The source's tree is a **tick-keyed snapshot**: `__init__` holds `version`, `tick`,
+`_built_tick`, the six structure dicts and `_state` (`frame.py:288-303`); `_on_tick` bumps `tick` and does
+nothing else (`:324-326`); `rebuild` snapshots the whole frame array and stamps `self._built_tick =
+self.tick` (`:362`); and `ensure` is `self.enable(); if self._built_tick != self.tick: self.rebuild()`
+(`:372-375`) — rebuild once per tick, serve the snapshot in between. The tick comes from `enable`, which
+registers `self._on_tick` with the injected `PyCallback` at `Phase.PreUpdate, priority=6` (`:306-322`).
+
+**This port has no tick, so `ensure` as written would pin the tree for the life of the process**: with
+nothing bumping `tick`, `_built_tick != self.tick` is false after the first rebuild, and every later call
+would answer that first snapshot — a dereferenced-pointer cache that never clears, which `AGENTS.md` §
+Caching forbids. The resolution is the one already settled for `@frame_cache`: **the member reads when it is
+called** (so the port's `ensure` rebuilds on the call), `enable`/`disable` raise naming the missing
+registration — they are the frame-loop halves, the same class as `Agent.enable` and
+`Agent._invalidate_property_cache` — and `_on_tick` is ported as written even though nothing calls it.
+
+**`rebuild`'s own staleness rule is *not* touched by that adaptation, and this is the part worth being
+careful about.** Lines `356-369` say an empty frame array is "we cannot see the UI this tick", not "the UI is
+gone": the last good tree is kept and `stale` is set, which is why overlays do not flicker. That is the
+source's own check on its own terms, and it stays exactly as written.
+
+**The section's one call is resolved, not guessed.** `rebuild` needs
+`PyUIManager.UIManager.get_frame_array()` plus `PyUIManager.UIFrame(fid)` per id for `parent_id`,
+`child_offset_id` and `frame_hash` (`:337-346`). Both are reads this port already has: `client.frame_array`
+walks the same array and its `iter_frames()` yields a frame id together with its record, so the port's loop
+reads the record's own fields in one pass and adds nothing.
+
+**No code changed this round** — the deliverable is the decision and its bounds, in
+[`FRAME_TREE_PORT.md`](FRAME_TREE_PORT.md) §2. Suite unchanged at **1297 tests OK**, `pyright` clean. Next:
+`__init__`, `rebuild`, `ensure`, `invalidate` and `_prune` written against that decision, then the twenty-eight
+bookkeeping members behind them.
+
+## Now (round 27 - `_FrameTree` mapped: 28 of the 41 members need nothing injected)
+
+**This round measured the next section instead of starting it blind, and the measurement changes its shape.**
+`_FrameTree` (273-672) has **41 members**, and an AST pass that records which injected calls each body
+contains says: **28 have none at all** — `__init__`, `enable`, `disable`, `_on_tick`, `ensure`, `state`,
+`_prune`, `invalidate`, `child_of`, `children_at`, `children_of`, `child_codes_of`, `parent_of`, `hash_of`,
+`code_of`, `known`, `all_ids`, `all_frames`, `children_map`, `_as_id`, `descendants`, `descendants_of`,
+`viewport_height`, `frames_at_path`, `frames_under`, `_frames_at`, `sort_by_vertical`, `color_frames` — and
+**13 reach the injected runtime**: `rebuild` (which fills the tree from `UIManager`/`UIFrame`),
+`anchor_ids`, `live`, `root`, `hierarchy`, `overlay_frames`, `popup_frames`, `by_hash`, `by_label`,
+`hash_for_label`, `coords_for_hash`, `child_by_parent_hash` (all `UIManager`) and the `overlay` property
+(`PyOverlay.Overlay`).
+
+**Why that matters for the order of work.** The twenty-eight are pure bookkeeping over the structures
+`rebuild` fills, so they cannot be *driven* before `rebuild` exists — but they also need no new capability,
+while the thirteen are the call sites that decide how much of this class is portable at all. The full table
+(with line ranges and per-member injected calls) is in [`FRAME_TREE_PORT.md`](FRAME_TREE_PORT.md) §2, so the
+next round starts from the map rather than re-reading 400 lines to rebuild it.
+
+**No code changed this round**; the deliverable is the member map and the order of work it implies — first
+`rebuild` and the twelve other injected members (each resolved as a native `ui::*` call, one at a time), with
+the twenty-eight following. Suite unchanged at **1297 tests OK**, `pyright` clean.
+
+## Now (round 26 - `frame.py` starts: its first section is in, down to `FrameState`)
+
+**What moved.** The `FrameTree` package's logic module is 1620 lines, shaped as: three exception classes,
+`resolve_key`, the two reverse-identity lookups, `_position_unusable`, `FrameState` (202-269), `_FrameTree`
+(**41 members**, 273-672), the `FrameTree` singleton, and `Frame` (**115 members**, 679-1620). This round
+ported the section up to `FrameState` — **lines 44-269** — verbatim: the constants
+(`_MOUSE_HOVER_STATE`, the four `RELATION_*` values), `FrameError`/`FrameKeyError`/`FrameNotFound`,
+`resolve_key` (the registry walk, both of its `FrameKeyError` paths), `_path_of`/`alias_by_path`/
+`key_by_path` (the two inversions, built once and kept) and `_position_unusable`, plus `FrameState` with its
+`landed`, `blank` and `position` members — including the inheritance rule that hands back the last good
+geometry instead of zeros.
+
+**The section is dependency-free except for one read, and the source's own docstring points at it.**
+`FrameState.__init__` is, in the source's words, "the *only* place a ``PyUIManager.UIFrame`` comes into
+existence" (`frame.py:205-207`). The port answers that with the read the binding wraps — native's frame
+record by id — which here is ``client.frame_array.get(frame_id)``, whose own docstring in
+``py4gw/ui/frame.py`` already says it matches the native ``GetFrameById``. The source's try/except around
+it, and the defaults it leaves behind, are kept as written.
+
+**What is left, and it is the two sections built on the injected runtime:** ``PyUIManager.UIManager`` is
+reached **52 times** across `_FrameTree` and `Frame`, ``PyUIManager.UIFrame`` five times and
+``PyOverlay.Vec2f`` eight. Each of those 52 call sites is a native ``ui::*`` function, so each gets resolved
+member by member the way ``PySkill`` was in ``model_enums`` — established when the member is ported, never
+guessed as a group. That is recorded in [`FRAME_TREE_PORT.md`](FRAME_TREE_PORT.md) §2, which now carries the
+module's section map with what is ported and what is not.
+
+**Verification.** `tests/test_frame_tree_frame_offline.py` (19 tests): the exception hierarchy, the four
+relation constants against their native values, `resolve_key` over the **ported** registry (an unknown
+top-level key, a string entry, a nested key's child codes in order, and a missing child segment — the
+second `FrameKeyError`), both inversions checked structurally (every alias path names a real alias, every
+registry path resolves to a real key, and every path's first field is a hash `NAME_TO_HASH` knows), and
+`FrameState` over a fixture frame: no read at all, a landed read, a zeroed position, the inheritance from a
+previous good read, and that a landed read is *not* replaced. Three more tests state what is absent —
+`_FrameTree`, `Frame`, and the injected imports — so the gap cannot be mistaken for done, and one asserts
+`__all__` names only what this file defines so a star import cannot fail. One failure on the first run was
+mine: a bogus patcher that tried to replace the module's `__dict__`.
+
+**Suite: 1297 tests OK** (was 1278); `pyright` 0 errors. One test in the tables file needed updating rather
+than fixing: it asserted that importing `py4gw.frame_tree.frame` **failed**, which was true last round and
+is not now — it asserts the section boundary instead.
+
+## Now (round 25 - the `FrameTree` cascade starts: its five table modules are ported, 5,010 lines)
+
+**What moved.** The next feature is Reforged's `FrameTree` package — the dependency of the item port's last
+17 members — and this round ported the half of it that is data. `py4gw/frame_tree/` now holds
+`frame_window_keys` (20 lines), `frame_names` (538), `frame_aliases` (1216), `frame_registry` (1588) and
+`frame_ids` (1648): **5,010 lines**, all verbatim transcriptions, because none of the five imports anything,
+calls anything or computes anything beyond the two derived tables the source itself builds
+(`NAME_TO_HASH` from `FRAME_NAMES`, and `FrameId`'s nested hierarchy). The port keeps the source's own
+module file names, since inside a module every name is the source's and the package's modules are reached by
+those names.
+
+**What is *not* ported, and is not stubbed:** `frame.py` (1620 lines — the logic: `Frame`, `FrameTree`,
+`FrameState`, `resolve_key`, the alias lookups) and the source's `__init__` (70 lines, which re-exports what
+`frame.py` provides, so it follows it). The package's own `__init__` here says exactly that, and the test
+asserts that importing `py4gw.frame_tree.frame` still fails, so the gap cannot be mistaken for done.
+
+**A naming collision worth knowing about, since it exists either way.** The source keeps this package at its
+library root (`Py4GWCoreLib/FrameTree/`), so the port mirrors it at `py4gw/frame_tree/`. The port *also* has
+`py4gw/ui/frame_tree.py`, which is a different thing with a confusingly similar name: a **read-only
+traversal** module (its docstring: nothing in it "creates, destroys, relabels, or dispatches a frame"), not
+this action surface. Both are the sources' own; neither is renamed here.
+
+**Verification.** `tests/test_frame_tree_tables_offline.py` (6 tests): the public names of all five modules
+against the sources, every table entry for entry, dict key order included, `FrameId` **member for member and
+recursively** — its nested classes are compared by shape, because the source's class and this port's are two
+different objects — and a measured size floor per table (the source's `REGISTRY` holds 195 entries and
+`FrameId` ~195 nested members, whatever their line counts suggest; my first floors were guesses and the test
+caught them). Three failures on the first run were all mine: class identity across two modules, and those
+guessed floors.
+
+**Suite: 1278 tests OK** (was 1272); docs: new [`FRAME_TREE_PORT.md`](FRAME_TREE_PORT.md) with the module
+table, the order of work and the open question about the native UI functions behind `Frame.click`. Next:
+`frame.py` — its logic, its two injected imports (`PyOverlay`/`PyUIManager`, the same class of problem as
+`PySkill` in `model_enums`), and then the 17 dialog members it unblocks.
+
+## Now (round 24 - the dialog's cascade, measured: 17 are real work, 3 are the frame loop, 1 is the console)
+
+**This round measured what the last 21 members of `Inventory` actually need, instead of assuming.** The
+answer changes the plan for the item port, so it is worth stating exactly.
+
+**A count of mine, corrected again, and this one is now measured rather than reasoned.** The class has 57
+methods: **36 answer and 21 raise** (round 23 said 35/22 — the member I had missed is `_collect_frame_text`,
+which the source itself answers `""` (`Inventory.py:503-513`) and which was ported as written). The tooling
+for this is a script over `inspect.getsource`: built versus raising, by name.
+
+**The 21 split three ways.**
+
+1. **17 are gated on Reforged's `FrameTree` package, which is 5,444 lines** — `frame.py` 1620,
+   `frame_ids.py` 1648, `frame_registry.py` 1588, `frame_aliases.py` 1216, `frame_names.py` 538,
+   `__init__.py` 70. Note what my first look got wrong: `FrameTree` is a **package**, not a module (my glob
+   for `FrameTree.py` reported "missing" and I nearly wrote that down as a source defect). The dialog uses
+   `Frame.from_label`/`Frame.from_id`/`Frame(FrameId.X)`, `.exists`, `.is_created`, `.is_visible`,
+   `.is_usable`, `.rect`, `.size`, `.click`, `.mouse_action`, `.mouse_click_action`, and `FrameTree`'s
+   `all_frames()`, `children_map()`, `frames_under()`. **That package is the next feature**, and this port's
+   frame layer is a reader (`py4gw/ui/frame.py`, `py4gw/ui/frame_tree.py`), not that action surface.
+2. **3 are generators over Reforged's coroutine driver, and that is not work this port can do.** They are
+   `HandleSalvageChoiceDialog`, `HandleSalvageChoiceMaterialConfirmDialog` and
+   `_wait_for_salvage_choice_dialog_close`, and they `yield from` `Routines.Yield`, whose implementation
+   (`Routines.py` → `routines_src/{Yield,Sequential,BehaviourTrees,…}` plus `GLOBAL_CACHE`) is that
+   library's per-frame task framework — the driver *is* Reforged's update loop. This is the same class of
+   thing as `@frame_cache` and `GLOBAL_CACHE`: a feature of the source's execution model, which this port
+   deliberately does not have. It is a **documented divergence**, like `Agent.enable` and
+   `Agent._invalidate_property_cache` (the two frame-loop halves), not pending work.
+3. **1 needs the injected console.** `_salvage_choice_debug_log` logs through `ConsoleLog`/`Console`, and
+   Reforged's `py4gwcorelib_src/Console.py` is 38 lines that *are* the in-client console — `Console =
+   PySystem.Console`, with `PySystem.Console.get_gw_window_handle()` and `MessageType` coming from the
+   injected runtime. There is nothing to port it *to* from outside the client, which is the same finding
+   the rest of this port already carries: a library with no console reports through its return values and
+   its exceptions.
+
+**So the item port's portable work is now one package away from done.** `Item` is FULL, `ItemArray` is FULL,
+`Inventory` is 36 of 57 with 17 of the remainder gated on `FrameTree`, `PyInventory` is 11 of 17 with its
+remaining six gated on the same UI surface (the frame-click path), the map record's `region` field (the
+interact guard) and a StoC path. **Next: port the `FrameTree` package**, starting with its table modules
+(`frame_ids`, `frame_aliases`, `frame_names`, `frame_registry` — transcription with parity tests, as
+`mods_upgrades` and `model_enums` were done), then `frame.py`'s logic and its actions, which is where the
+native UI functions behind them get resolved.
+
+**Suite: 1272 tests OK**; `pyright` clean. No code changed this round — the deliverable is the corrected
+count and the measured cascade, in `CLASS_PORT_MAP.md` and here.
+
+## Now (round 23 - both storage walkers are in: `Inventory` is 35 of 57, and only the dialog is left)
+
+**What moved.** `DepositItemToStorage` and `WithdrawItemFromStorage` (`Inventory.py:1325-1471`) — the two
+members round 21 left raising on the four-word call form, which round 22 built. They are the source's own
+bodies: the item's stackability and quantity, the same two passes over the target bags (partial stacks of
+the same model first when the item stacks, then empty slots), the same early `True` when what was asked for
+has moved, and the same `moved_any` fall-through.
+
+**Two details the port keeps, because the source has them.** `DepositItemToStorage` derives its bag list
+from **capacity**, not from a fixed range — the storage bags' combined `GetSize()` divided by 25 is how many
+exist — and reaches each one **by name**, ``getattr(Bags, f"Storage{i}")`` (`:1352-1354`). That is a dynamic
+reach in the source, so it is a dynamic reach here: the rule against `getattr` dispatch is about this port
+inventing one, and this one is the specification. Both members also open with ``from .enums import Bags``
+(`:1335`, `:1420`), settled the same way as the rest of this file — the name comes from the module that
+declares it — and in `WithdrawItemFromStorage` the source never uses the imported name, which is kept too.
+
+**`Inventory` now stands at 35 of its 57 methods, and the 22 that raise are exactly the salvage-choice
+dialog** — the ten helpers, the four frame lookups, the three coroutine handlers and the two visibility
+members, each naming the same two missing pieces: Reforged's `FrameTree` action surface and, for the
+generators, its `ActionQueueManager`/`Routines.Yield` driver.
+
+**A count of mine, corrected.** Round 22 changed `py_inventory.MoveItem` (a binding member), not an
+`Inventory` member — `Inventory.MoveItem` was already built in round 21 as the source's own delegation — so
+the class went 33 → 35 across these two rounds, not 34 → 35. `CLASS_PORT_MAP.md` now says 35 with 22 raising.
+
+**Verification.** `tests/test_inventory_offline.py` grew to **38 tests**, five of them for the walkers over a
+fixture built to make the source's capacity rule fire (a 25-slot storage bag, so `total_capacity // 25` is 1
+and `getattr(Bags, "Storage1")` names the bag the fixture has): the empty-slot deposit with its exact
+four-word move call, the stackable path filling a partial stack first, the withdraw with its
+`min(asked, held)` clamp, and both "nothing to move" guards answering `False` with no call made. The test
+fake grew the call path (`resolves`, `call_function`, `calls`) because these members move items through
+`py_inventory.MoveItem`, which is where the four-word form is used.
+
+**Suite: 1272 tests OK** (was 1267); `pyright` clean. Next: the salvage-choice dialog — the last 22 members
+of the class, and the two pieces they need are the largest remaining work in the item port.
+
+## Now (round 22 - the four-word call form exists, and the member that needed it answers)
+
+**What moved: the capability layer gained a call form, which is porting work and not a workaround.**
+Native's `MoveItemFn` is `void __cdecl(uint32_t, uint32_t, uint32_t, uint32_t)`, and the item methods
+layer calls it with exactly four words — ``g_move_item_func(from->item_id, quantity, bag->index, slot)``
+(``item_methods.cpp:164``). This port had no four-word form, and the five-word one cannot stand in for it:
+a fifth pushed word is an argument the callee does not take, and the release would then be a word too
+long. So:
+
+- ``CallForm.U32_U32_U32_U32 = 8`` (``shared_block.py``), documented with the declaration it answers and
+  the reason the five-word form is not it;
+- the dispatcher emits it (``payload.py``): the four words pushed right to left, the call, ``add esp, 16``,
+  the completion state — the same shape as the three- and five-word blocks beside it, and it appears in the
+  dispatch chain before the unknown-form fallthrough, so an unrecognised form is still refused rather than
+  guessed at;
+- **``py_inventory.MoveItem`` is built** — the binding's item lookup, the methods layer's bag lookup, its
+  `bag->items.size() < slot` refusal, its quantity clamp (``<= 0`` means all of it, and more than it holds
+  means all of it), then the four-word call. ``Inventory.MoveItem`` (the source's own one-line delegation)
+  reaches it and answers too, so the raise it used to pass through is gone. ``py_inventory`` is down from
+  7 raising members to **6** (the interact guard's four, the StoC path, the frame-click path).
+
+**Verification, and it is the kind emitted code needs.** The payload suite already executes the dispatcher
+against **witness targets** that record the stack pointer and the words they were entered with, and the new
+form is covered the same way: it gets its own four-word witness and descriptor, a test that the words
+arrive in the source's order, a test that a fifth command word is **not** an argument, a test that the stack
+is left exactly where the form found it (sixteen bytes released, not twenty), a completion test, and its own
+line in the measurement that distinguishes "pushed the right number" from "pushed the right values"
+(``entry_esp() == empty - 16``). ``MoveItem`` itself is tested over the fixture: the resolver name, the
+four-word form and every argument, both clamp paths, the slot bound, and the missing-item and missing-bag
+refusals.
+
+**Suite: 1267 tests OK** (was 1259); `pyright` 0 errors on the payload, the block, `py_inventory` and
+`inventory`. ``AGENTS.md`` had said the vocabulary covers *seven* forms; it says **eight** now, which is
+what the code has.
+
+Next: `DepositItemToStorage` and `WithdrawItemFromStorage` (`Inventory.py:1325-1471`), which name the
+four-word form today and no longer need to.
+
+## Now (round 21 - `Inventory`'s action half is in: 33 of 57 methods answer)
+
+**What moved.** The fourteen bodies round 20's raises named (`Inventory.py:1162-1323`) are read and
+written, and one more went with them: **15 members** now answer, taking `Inventory` from 18 to **33 of its
+57 methods**:
+
+- the **storage window** — `OpenXunlaiWindow` (which builds *two* binding instances, the source's own
+  body: one to open, one to read whether it opened) and `IsStorageOpen`;
+- the **six item actions** — `PickUpItem`, `DropItem` (the one action that returns its call),
+  `EquipItem`, `UseItem`, `DestroyItem`, `GetHoveredItemID`;
+- the **five gold members** — `GetGoldOnCharacter` (which delegates to `GetGoldAmount`, as the source's
+  body does), `GetGoldInStorage`, `DepositGold`, `WithdrawGold`, `DropGold`;
+- **`MoveItem`** and **`FindItemBagAndSlot`** (the second re-queries each bag on its own and answers
+  `(bag_id, Item.GetSlot(item))`, or `(None, None)`).
+
+**Three of those are delegations whose raise belongs to the callee, not a refusal here.** `EquipItem`,
+`UseItem` and `MoveItem` are the source's own one-line bodies pointing at binding members the bag surface
+still owes (the interact guard, the four-word call form); the members themselves are ported, and the
+raise comes from where the source's own call graph puts it. The two storage walkers
+(`DepositItemToStorage`, `WithdrawItemFromStorage`) still raise and name the four-word call form, which
+is what actually blocks them.
+
+**Twenty-four methods raise, and every one names its work item**: the 22 salvage-choice dialog members
+(Reforged's `FrameTree` action surface, plus the coroutine driver for the three generators) and those two
+storage walkers.
+
+**Verification.** `tests/test_inventory_offline.py` grew to **33 tests**: the fifteen new members are
+driven over the same real-record fixture — the storage flag and the two gold reads answer the record's
+fields, the delegating members are checked by patching the binding's methods and asserting the arguments
+that arrive (`PickUpItem`'s `call_target`, `DropItem`'s return, the three gold calls) — and the three
+that pass a raise through are asserted to name the *callee's* requirement, so a pass-through cannot be
+mistaken for a refusal. The 24 raising members keep their one-call-per-member check.
+
+**Suite: 1259 tests OK** (was 1250); `pyright` 0 errors on `inventory.py` and its test. Next: the two
+storage walkers (`Inventory.py:1325-1471`) once the four-word call form exists, then the salvage-choice
+dialog, which needs the frame-action and coroutine pieces before porting it is worth anything.
+
+## Now (round 20 - `Inventory` starts, and its whole surface is declared)
+
+**What moved.** `py4gw/inventory.py` — Reforged's `Inventory.py` (1477 lines, **66 declarations**),
+written in the source's own order and grouping: the three `TypedDict`s (`VisibleFrameEntry` 10 fields,
+`SalvageChoiceEntry` 7 optional, `SalvageChoiceOptionSource` 5), the **9 class attributes** (the salvage
+dialog's four labels and five fallback offsets), and all **57 static methods declared**.
+
+**Eighteen of those 57 answer**, and they are the read/count half: `inventory_instance`, the nine
+space-and-count members (`GetInventorySpace`, `GetStorageSpace`, `GetZeroFilledStorageArray`,
+`GetFreeSlotCount`, `GetItemCount`, `GetModelCount`, `GetModelCountInStorage`,
+`GetModelCountInMaterialStorage`, `GetModelCountInEquipped`), the four "first" finders (`GetFirstIDKit`,
+`GetFirstUnidentifiedItem`, `GetFirstSalvageKit`, `GetFirstSalvageableItem`) and identify/salvage
+(`IdentifyItem`, `IdentifyFirst`, `SalvageItem`, `SalvageFirst`). They are the source's own bodies over
+the ported `ItemArray`, `Item` and bag surface, so the item ids, the selections and the per-item answers
+all come through the same path a live client would take.
+
+**The other 39 raise, and each names its work item — not a vague one.** Twenty-two are the
+salvage-choice dialog (`Inventory.py:392-1160`): they need **Reforged's `FrameTree` action surface**
+(`Frame.from_label`, `FrameId.*`, `Frame.exists`, `Frame.click`, `Frame.mouse_action`), which this port's
+frame layer does not carry — it reads frames (`py4gw/ui/frame.py`, `py4gw/ui/frame_tree.py`) and has no
+click path — and the three generator members (`HandleSalvageChoiceMaterialConfirmDialog`,
+`_wait_for_salvage_choice_dialog_close`, `HandleSalvageChoiceDialog`) additionally need Reforged's
+coroutine driver (`ActionQueueManager`, `Routines.Yield`), which this port's execution model has no
+dispatcher for. `MoveItem`, `DepositItemToStorage` and `WithdrawItemFromStorage` name the **four-word call
+form** `item.move_item_func` needs. The remaining fourteen name their own bodies and the exact line range
+this port has not read and written yet.
+
+**Three source facts, recorded rather than smoothed over.**
+
+1. **`.enums` is a shim, and a half-unportable one.** `Inventory.py:76` and `:110` do
+   `from .enums import Bags`; the source's `enums.py` is a 289-line re-export over `enums_src` **and** over
+   `Texture_enums`/`Calendar_enums`, neither of which this port has. So `Bags` is taken from the module
+   that declares it (`enums_src/item_enums.py:43`) — the same class, from the same file — and the shim is
+   not ported until its other half exists.
+2. **`SalvageFirst` answers `False` on the path where it acted** (`Inventory.py:386-388`): it starts the
+   salvage, logs it, then falls through to `return False`, and its two guard paths also answer `False`.
+   Kept as written.
+3. **`_collect_frame_text` does nothing** (`Inventory.py:503-513`): its body discards its parameters and
+   returns `""`, by the source's own design (its docstring says decoding a non-text-label frame can
+   dereference an invalid native type). Ported as written — it answers `""` — rather than raised, because
+   the source itself does nothing.
+
+**Verification.** `tests/test_inventory_offline.py`, 24 tests: the AST surface comparison (**66 members on
+both sides**, the 57 methods all `@staticmethod` as in the source, and the port's module-level additions
+named one by one), the three `TypedDict`s' fields, the nine attribute values, the behaviour of all
+eighteen built members over a real-record bag fixture, `_collect_frame_text`'s empty answer, and — for
+**every one of the 39 raising members** — a call that must raise and a distinctive phrase from its
+requirement, so a raise can never quietly become a wrong answer.
+
+**Suite: 1250 tests OK** (was 1226); `pyright` 0 errors on `inventory.py` and its test. Next: read and
+write the fourteen bodies the raises name (`Inventory.py:1162-1471`), then the salvage-choice dialog,
+which needs the frame-action and coroutine pieces to be worth porting at all.
+
+## Now (round 19 - `ItemArray` is FULL, and both of its quirks are pinned instead of tidied)
+
+**What moved.** `py4gw/item_array.py` — Reforged's `ItemArray.py` (212 lines, 14 declarations):
+`CreateBagList` (ints to `Bag` members), `GetItemArray` (the ids across those bags), `GetAllBags` (the
+bags that hold anything) and `GetBag`, plus the three nested namespaces `Filter` (2), `Manipulation` (3)
+and `Sort` (2). It reads through the bag surface round 18 supplied, so `GetItemArray` answers the ids of
+`PyItem` objects. **Every one of the 14 members answers: `ItemArray` is FULL**, joining `Item`,
+`AgentArray` and `Camera`.
+
+**Two adaptations, both recorded in the module and asserted by tests.**
+
+- **`@frame_cache` is dropped on exactly the three members that carry it** — no frame loop means no frame
+  boundary to key a memo to, so each reads when it is called (and the test proves a second call reaches
+  the client again, which is the observable difference).
+- **The two `PySystem.Console.Log` calls have nowhere to go.** The source logs an invalid bag id and
+  drops it, and logs a bag whose read raised and skips it. The port keeps the **control flow exactly** and
+  replaces the log with nothing: *a library with no console reports through its return values and its
+  exceptions* (`dialog.py`'s own wording for the same situation). An invented logger would be a member the
+  sources do not have.
+
+**Two source quirks, found while writing the tests and pinned rather than tidied.**
+
+1. **`GetBag` cannot answer a bag at all.** An `int` (which its annotation names) makes the first line —
+   `GetItemArray([bag])` — come back empty, because that member reads `bag_enum.value` off its argument and
+   an `int` has none; a `Bag` member (which its docstring names) passes that line but makes
+   `PyInventory.Bag(bag, str(bag))` raise, because `Bag` is a plain `Enum` and the binding's `int`
+   conversion refuses it. Both land in the source's own `except Exception: return None`.
+2. **The dotted attribute names the source's own docstrings use are not attributes.** `Filter.ByAttribute`
+   and `Sort.SortByAttribute` do `hasattr(Item, attribute)` with names like `'Properties.GetValue'`, and
+   `getattr` does not walk the dot — so the filter excludes every item and the sort raises the source's own
+   `ValueError: Invalid attribute: Properties.GetValue`. A test asserts both, and the mechanism tests use a
+   flat member name (`GetModelID`), which is what actually works.
+
+**One defect of mine, caught before it shipped:** the first draft added a `_Condition` type alias and
+parameter annotations the source does not have. That is exactly the kind of addition the porting rules
+forbid, the surface test caught it as an extra name, and it is gone — the signatures are the source's own,
+unannotated ones.
+
+**Verification.** `tests/test_item_array_offline.py`, 25 tests: the AST surface comparison (classes,
+nesting, member names, and the decorator difference asserted to be *only* the three `frame_cache` drops),
+the bag-id list, the skip and drop paths, `GetAllBags`, both `GetBag` quirk paths, `Filter`/`Sort` by name
+with the dotted-name quirk pinned, `Manipulation`'s three set operations, and the no-memo behaviour.
+
+**Suite: 1226 tests OK** (was 1201); `pyright` 0 errors on `item_array.py` and its test. Next:
+`inventory.py` (66 members) — the last of the three classes, and where the salvage-choice dialog question
+and `py_inventory`'s seven raising members land.
+
+## Now (round 18 - the bag surface is ported, and `Item` has no member left that raises)
+
+**What moved.** `py4gw/py_inventory.py` — Native's `PyInventory` module (`inventory_bindings.cpp`, 216
+lines) — which is where all three item classes get their bags from. It is a module of its own because in
+both sources it *is* one (`inventory_bindings.cpp:157` embeds it; Reforged's Python imports it), and
+because `Inventory.py` imports `ItemArray`, so hosting the binding in either of them would make the
+import a cycle.
+
+- **`Bag` is complete**: the seven fields, `GetContext`, `GetSize`, `GetItemCount` (the copied field, not
+  a fresh read) and `GetItems`.
+- **The shape decision, and it comes from Reforged**: native's `GetItems` builds `dict`s, while
+  Reforged's Python reads **attributes** off each element (`item.item_id` at `ItemArray.py:49` and
+  `Item.py:245,265`; `item.slot` at `Inventory.py:1396`) and its stub declares `List[PyItem]`. So this
+  port's `GetItems` answers `PyItem` objects — every field native's dict carries, and the rest of the
+  record. Native's dict shape is kept where the source keeps it: the module's `get_bag` snapshot.
+- **`PyInventory`**: 10 of 17 members answer — the three reads, `GetHoveredItemID` (the port of
+  `GW::item::GetHoveredItem`, whose payload is a `uint32_t*`, so `payload[1]`/`payload[2]` are *words*:
+  `{item_id, 0xff}` or `{item_id, item_id, 0xff}`), `PickUpItem` (the `kSendInteractItem` message with
+  the `kInteractAgent` packet), `DropItem`, `DestroyItem`, and the gold three with the methods layer's own
+  limits, clamps and `ChangeGold` verification.
+- **`Item` is FULL.** Its last two members, `GetItemIdFromModelID` and `GetItemByAgentID`, walk four bags
+  through this module and answer, so the class has **no raising member left** and joins `AgentArray` and
+  `Camera` in the FULL column.
+
+**The seven members that raise name four pieces, and two of them are this port's own work items**: a
+**four-word call form** for `item.move_item_func` (native passes item id, quantity, bag index and slot;
+the call vocabulary stops at three words, while `call_function` already accepts five — so what is missing
+is the dispatcher form), the **current map record's `region` field** (the interact guard
+`CanInteractWithItem` → `CanAccessXunlaiChest`, `item_methods.cpp:57-62`, which gates `UseItem`,
+`EquipItem`, `IdentifyItem`, `Salvage` and the module's `salvage`), a **StoC path** (`OpenXunlaiWindow`
+emulates a `DataWindow` packet) and a **frame-click path** (`AcceptSalvageWindow`).
+
+**Verification.** `tests/test_py_inventory_offline.py` (32 tests) drives `Bag` over **real** ported
+records — `BagStruct` and two `ItemStruct`s built from bytes behind a reader, the same construction the
+item-record tests use — and records the actions through a fake client: the resolver name, the call form
+and every argument, plus `PickUpItem`'s message, the gold limits on both sides of each boundary, the
+tooltip payload cases, `get_bag`'s dict shape, and each raising member's own named requirement. Four
+failures along the way were mine: two missing `require_client` patches (each module reaches the client
+through its own import), a `cast` import, and one test whose calls sat outside the `with` block that
+closed the map gate.
+
+**A real defect, caught by the type check and not by the tests.** ``ItemContext`` (the client's reader)
+owns ``storage_open_address``/``is_storage_open``/``get_composite_model_ids``/``read`` — while
+``GetItemById`` and ``read_inventory`` belong to the **record** that ``read()`` hands out
+(``ItemContextStruct``). Three files called them flat (``item.py`` twice, ``py_inventory.py``, and the
+generated ``mods_core.py``), which no live run had reached yet and which **every fake client in the
+tests agreed with**, because the fakes had the same flat shape — so the tests passed while production
+code would have raised ``AttributeError`` on the first real read. ``pyright`` on the whole item port
+found it (2 errors in ``item.py``), and the fix was three call sites plus **four test fakes reshaped to
+mirror the real reader**. ``mods_core.py`` is generated, so its generator (``live_reports/port_mods_core.py``)
+was corrected and the file regenerated rather than hand-patched. The item port is now ``pyright`` clean:
+**0 errors** on `item.py`, `py_inventory.py`, `mods_core.py`, `mods_types.py`, `mods_upgrades.py`,
+`enums_src/item_enums.py` and `enums_src/model_enums.py`.
+
+**Suite: 1201 tests OK** (was 1169). Next: `item_array.py` (14 members — it needs exactly this bag
+surface), then `inventory.py` (66), which is also where the salvage-choice dialog question lands.
+
+## Now (round 17 - `Item` is ported, and so is the binding it reads through)
+
+**What moved.** `py4gw/item.py` — Reforged's `Item.py` (827 lines, 125 declarations): the `Bag` enum
+(24), the `Item` class (23 direct: 17 static methods and the six nested namespaces — `Mods` 22,
+`Rarity` 6, `Properties` 21, `Type` 8, `Usage` 10, `Dye` 4), the three constants and the four module
+functions. Behind it, the three steps it needed first are already in: `mods_types.py` (80 identifiers,
+283 upgrades), `mods_upgrades.py` (704 catalog entries) and `mods_core.py` (the decoder), plus
+`enums_src/item_enums.py` and `enums_src/model_enums.py`.
+
+**The binding is part of the port.** Every `Item` member reads through `PyItem.PyItem(item_id)` —
+Native's binding class (`item_bindings.cpp:210-380`, bound at `:427-486`) — so this module carries it as
+`PyItem`: 48 fields, `GetContext` copying them from the ported item record with the record's own methods
+deciding the 30 derived flags, the four encoded-string accessors, `IsItemValid`,
+`GetCompositeModelIDs` and the name trio. Native's map gate (`GetIsMapLoaded() && !GetIsObserving() &&
+instance != Loading`) is the ported `Map.IsMapReady()`, which is how `dialog.py` and `skillbar.py`
+already express that same condition. The item name is the one mechanism that differs and it is written
+down on the member: native spawns a thread that enqueues `AsyncGetItemName` and polls it for a second;
+this port drives the same client decoder directly (`py4gw/ui/async_decode.py`, the route
+`Agent.GetNameByID` uses) and keeps native's three outcomes — not ready, the name, `"No Item"` — with
+native's own one-second `"Timeout"` kept as a wall-clock check.
+
+**Verification.** `tests/test_item_offline.py` (29 tests) does two things: it compares the module
+against the **source's own AST** — every class, member, nesting and decorator, nothing missing, and the
+port's only additions are the seven names of the binding, asserted name by name — and it drives the
+reads over a fixture built from the **real** ported item record (`ItemStruct` from bytes, with a real
+modifier array behind it, bound to the same trade stand-in the item-record tests use), so the field
+copies, all 30 derived flags, the modifier readers, the requirement/damage readers, the dye namespace
+and `GetDyeColor` are exercised against real record logic.
+
+**Two members raise, and both name the next step.** `GetItemIdFromModelID` and `GetItemByAgentID` walk
+four bags through native's `PyInventory.Bag.GetItems()`; the two sources disagree about what that
+returns (native's binding: `dict`s; Reforged's `Item` and its stub: item objects), so which shape this
+port reproduces is the Inventory step's decision. `Item` therefore stands at **INCOMPLETE, 2 members**,
+which is what `CLASS_PORT_MAP.md` now says.
+
+**Two findings, recorded where they were found.** The test caught a count I had written into the docs —
+`Item` has 17 static methods and six nested namespaces, not 18 and five — and it pinned a source quirk:
+`Item.Mods.ModifierExists`/`GetModifierValues` compare the binding's `GetIdentifier()` (`mod >> 16`) with
+the caller's identifier while the decoder reads `(mod >> 16) >> 4`, so those two members match only the
+binding's spelling (`0x27A0`), never `ModId.Damage` (`0x27A`). Both are the source's own behaviour, kept
+as it is.
+
+**Suite: 1169 tests OK** (was 1140), including the 29 new ones. Next: `ItemArray` (14 members), then
+`Inventory` (66), which is also where the two raising members and the salvage-dialog question land.
+
+## Now (round 15 - the item port starts: three classes, 202 members, and the order they have to be built in)
+
+**The next port is `Inventory` + `Item` + `ItemArray`, and this round pinned it exactly.** Every member
+of all three source files was read and counted, member by member, in file order, with its line range
+and every external name its body calls: `Item.py` (827 lines) is **122 members**, `ItemArray.py`
+(212 lines) is **14**, `Inventory.py` (1477 lines) is **66** — **202 in total**, and the whole surface
+with its grouping is in [`ITEM_PORT.md`](ITEM_PORT.md).
+
+**What the reconnaissance settled, and it is the part that usually goes wrong:**
+
+- **The cascade is four files, not three classes.** `Item.py` needs `enums_src/Item_enums.py`
+  (`ItemType`, `DAMAGE_RANGES`, `Bags` — 449 lines), `mods_types.py` (`ModifierIdentifier`, 1230
+  lines) and `mods_core.py` (494 lines: the 13 functions `Item.Mods`' 21 members and four
+  `Item.Properties` readers are built on). None of the three classes can be ported without them, so
+  they come first, in that order.
+- **The native bindings are work, not a stand-in.** `PyItem.PyItem` and `PyInventory.PyInventory` /
+  `PyInventory.Bag` are what the three classes call, and native's inventory methods are the ones that
+  **act** (identify, salvage, move, equip, use, destroy, gold, storage); they are ported the way
+  `PyEffects` was — the class in the ported module, over `item_methods.cpp` and the item context this
+  port already reads.
+- **The one open question, named before the code rather than after it**: 22 of `Inventory`'s members
+  (392-1160) are the salvage-choice dialog, and three of them
+  (`HandleSalvageChoiceMaterialConfirmDialog`, `_wait_for_salvage_choice_dialog_close`,
+  `HandleSalvageChoiceDialog`) are **generators over Reforged's `Routines.Yield` coroutine protocol**
+  with `ActionQueueManager` queues. This port has neither, and the answer is not to invent a
+  scheduler. That is written down in `ITEM_PORT.md` §3 as the port's one design question, to be
+  answered with the source in hand when those members are written.
+- **Two source facts recorded, not smoothed over**: `Item.py` imports `Rarity` (line 9) and no member
+  uses it (the five rarity readers resolve the nested `Item.Rarity`), and the three `ItemArray`
+  members that carry Reforged's `@frame_cache` (`GetItemArray`, `GetAllBags`, `GetBag`) drop it and
+  read when called — the port's settled rule for a decorator whose only invalidator is a frame loop
+  this port does not have.
+- **What is already here**: `py4gw/context/item_context.py` reads the client's item context (the
+  `Item` 0x54, `Bag` 0x28, `Inventory` 0x98, `ItemModifier` 0x04 and `ItemContext` 0x10C records,
+  the bag/item walks, the modifier array, native's `item::GetItemById`), and `py4gw/ui/frame_tree.py`
+  + `py4gw/ui/frame.py` are ported — so the dialog's frame lookups have a home.
+
+**No port code is written yet, and the doc says so in its first line.** The order is: `item_enums` →
+`mods_types` → `mods_core` → `item.py` → `item_array.py` → `inventory.py`, each step finished with
+its own offline tests, then the live probe (`tests/probe_items_live.py`) over the character's real
+bags. 1099 offline tests still OK; nothing in this round touched the existing code.
 
 ## Now (round 14 - `Effects`' alcohol hook: it is in the client, and one event shape is left)
 

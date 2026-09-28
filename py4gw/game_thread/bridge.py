@@ -31,7 +31,7 @@ from collections.abc import Mapping, Sequence
 
 from .hooker import Hooker, WritableTarget
 from .patcher import PAGE_EXECUTE_READ
-from .payload import build_decoder_stub, build_dispatcher, build_observer
+from .payload import build_decoder_stub, build_dispatcher, build_observer, build_slot_capture
 from .shared_block import (
     BLOCK_SIZE,
     COMMAND_DEPTH,
@@ -81,6 +81,21 @@ OBSERVER_NAME = "observe"
 # client reads the watch list its own function forwards, and a name per function is what
 # lets one come out without the other.
 EFFECTS_OBSERVER_NAME = "observe_effects"
+
+#: What it calls the render capture, when the caller asks for one. Native's capture is a **variable**:
+#: ``Context::g_dx_context = ctx`` runs on every ``OnEndScene`` and ``OnReset`` (``render.cpp:88``, ``:103``),
+#: because those two run every frame and the host only ever wants the latest value — so this hook's payload
+#: keeps the argument in a slot rather than appending an event per frame.
+RENDER_CAPTURE_NAME = "capture_render"
+
+#: Which of the hooked function's arguments the capture keeps. ``OnEndScene(GwDxContext* ctx, void* unk)``
+#: receives the context first (``render.cpp:75``), so it is argument one.
+RENDER_CAPTURE_ARGUMENT = 1
+
+#: Where the capture keeps it: the first word of the block's data region, which nothing else claims. It is
+#: given to the payload as an **absolute** block offset (``data_offset``), because emitted code adds it to the
+#: block's own address, and read back by ``read_data``, which takes a **region-relative** one.
+RENDER_CAPTURE_SLOT = 0
 
 #: The observer's stub forwards the hooked function's first two arguments, which
 #: are the message id and its packet. Its payload pops the block and those two,
@@ -135,6 +150,8 @@ class Bridge:
         self._block_address = 0
         self._call_table_address = 0
         self._watch_address = 0
+        self._capture_address = 0
+        self._capture_hooker: Hooker | None = None
         self._dispatcher_address = 0
         self._observer_address = 0
         self._effects_watch_address = 0
@@ -261,6 +278,7 @@ class Bridge:
         observing: tuple[int, bytes] | None = None,
         effects_observing: tuple[int, bytes] | None = None,
         effects_watch: Sequence[tuple[int, int]] = (),
+        capturing: tuple[int, bytes] | None = None,
     ) -> None:
         """Place the block, the call table, the dispatcher and the hook.
 
@@ -279,6 +297,12 @@ class Bridge:
         function to watch them on as ``(target, displaced)``. With those, that function gets a
         second hook whose payload records a watched call as an event, **and copies the string the
         message names** — read there because that is the only moment it is the client's own.
+
+        ``capturing`` is a third function as ``(target, displaced)`` — the one whose *first argument* the host
+        wants to keep, which for the render context is the client's ``EndScene``. Its payload writes that
+        argument to a slot in the block's data region on every call and appends no event, because a per-frame
+        function would otherwise fill the event ring: native keeps the same value in a variable
+        (``render.cpp:88``), and :meth:`render_context_address` is the read.
         """
 
         if self._hooker is not None:
@@ -296,6 +320,8 @@ class Bridge:
         hooker: Hooker | None = None
         observer_hooker: Hooker | None = None
         effects_hooker: Hooker | None = None
+        capture_hooker: Hooker | None = None
+        capture_address = 0
         try:
             self._place_block(block_address, session)
             table_address = self._place_call_table(calls or {})
@@ -359,7 +385,20 @@ class Bridge:
             # events it reports. The handler decides which of them means what.
             effects_hooker: Hooker | None = None
             if effects_observing is not None:
-                effects_watch_address = self._place_watch_list(effects_watch)
+                # **No packet watch list for this hook, and that is the fix for the crash of
+                # 2026-09-27 17:49:25.** The post-process effect function takes two *plain words* —
+                # ``OnPostProcessEffect(uint32_t intensity, uint32_t tint)``, whose body stores
+                # ``intensity`` and calls the original (``effects.cpp:32-41``) — so there is no packet
+                # for this hook to read. The list that used to be built here keyed on a level and read a
+                # wide string at offset 0 of the **second** word, which dereferences a word as a pointer:
+                # the client called the function with a tint of 6, the emitted observer ran
+                # ``mov ecx, [edx]`` with ``edx=00000006``, and the process died inside generated code
+                # (``eip=03e900b0``, ``ebx`` on this block — see ``docs/PORTING_PROGRESS.md``, round 62).
+                # With no list the observer validates and returns (``payload.py:801-802``), so nothing is
+                # dereferenced. **What belongs here instead** is the second event shape — an observer
+                # that carries the call's own two words into the event, which is exactly what native's
+                # handler does; until it is built, ``Effects.GetAlcoholLevel`` keeps raising and names it.
+                effects_watch_address = 0
                 effects_observer = build_observer(
                     effects_watch_address, WATCH_DEPTH, EventKind.EFFECT_INTENSITY
                 )
@@ -386,6 +425,37 @@ class Bridge:
                     forwarded_arguments=OBSERVER_ARGUMENTS,
                     after=OBSERVER_AFTER,
                 )
+
+            # The render capture, in native's own shape: one hook on the client's ``EndScene`` whose
+            # payload keeps the argument the render context arrives in, and appends nothing — the
+            # function runs every frame, so an event per call would fill the ring and tell the host
+            # nothing it did not already have. It is entered, not observed after: the pointer is the
+            # argument the client's own function is called with (``render.cpp:88``).
+            capture_hooker: Hooker | None = None
+            if capturing is not None:
+                capture = build_slot_capture(
+                    data_offset(RENDER_CAPTURE_SLOT), RENDER_CAPTURE_ARGUMENT
+                )
+                capture_address = self._access.allocate(len(capture))
+                self._access.write(capture_address, capture)
+                self._access.protect(
+                    capture_address, len(capture), PAGE_EXECUTE_READ
+                )
+                self._access.flush_instruction_cache(capture_address, len(capture))
+                capture_hooker = Hooker(
+                    self._access,
+                    self._pid,
+                    block_address,
+                    capture_address,
+                    self._timeout_ms,
+                )
+                capture_target, capture_displaced = capturing
+                capture_hooker.install(
+                    RENDER_CAPTURE_NAME,
+                    capture_target,
+                    capture_displaced,
+                    forwarded_arguments=OBSERVER_ARGUMENTS,
+                )
         except BaseException:
             # **The patches come out first, and that is not a detail.** The entry patch is one of the
             # last steps but it *is* a step: if a later one fails -- the observer is the one that can,
@@ -396,6 +466,7 @@ class Bridge:
             # functions get their own bytes back) before anything is freed.
             rollback_error: BaseException | None = None
             for a_hooker, hook_name in (
+                (capture_hooker, RENDER_CAPTURE_NAME),
                 (effects_hooker, EFFECTS_OBSERVER_NAME),
                 (observer_hooker, OBSERVER_NAME),
                 (hooker, HOOK_NAME),
@@ -408,6 +479,7 @@ class Bridge:
                     rollback_error = rollback_error or error
 
             for address in (
+                capture_address,
                 effects_observer_address,
                 effects_watch_address,
                 observer_address,
@@ -439,6 +511,33 @@ class Bridge:
         self._hooker = hooker
         self._observer_hooker = observer_hooker
         self._effects_hooker = effects_hooker
+        self._capture_address = capture_address
+        self._capture_hooker = capture_hooker
+
+    @property
+    def observing_render(self) -> bool:
+        """Whether this bridge carries the render capture."""
+
+        return (
+            self._capture_hooker is not None
+            and RENDER_CAPTURE_NAME in self._capture_hooker.installed
+        )
+
+    def render_context_address(self) -> int:
+        """Return the render context pointer the capture last saw, or zero.
+
+        Native reads it from ``Context::g_dx_context`` — the variable its own ``EndScene``/``Reset`` detours
+        assign (``context_methods.cpp:315-316``). Here it is the word the capture stub wrote into the block's
+        data region: the latest ``EndScene``'s first argument, so it is zero until the client has rendered a
+        frame since the hook went in.
+        """
+
+        if not self._capture_address:
+            return 0
+        image = self.read_data(RENDER_CAPTURE_SLOT, 4)
+        if len(image) != 4:
+            return 0
+        return struct.unpack("<I", image)[0]
 
     def remove(self, free_allocations: bool = False) -> None:
         """Disable dispatch and restore both hooked functions' own bytes.
@@ -459,6 +558,8 @@ class Bridge:
         (``ConnectedClient.close`` does, through the dialog module's own shutdown).
         """
 
+        if self.observing_render and self._capture_hooker is not None:
+            self._capture_hooker.remove(RENDER_CAPTURE_NAME, free_code=free_allocations)
         if self._effects_hooker is not None and self.observing_effects:
             self._effects_hooker.remove(
                 EFFECTS_OBSERVER_NAME, free_code=free_allocations
@@ -476,6 +577,7 @@ class Bridge:
                     "Drain them before removing the bridge."
                 )
             for address in (
+                self._capture_address,
                 self._effects_observer_address,
                 self._effects_watch_address,
                 self._observer_address,
@@ -487,6 +589,8 @@ class Bridge:
             ):
                 if address:
                     self._access.free(address)
+            self._capture_address = 0
+            self._capture_hooker = None
             self._effects_observer_address = 0
             self._effects_watch_address = 0
             self._observer_address = 0

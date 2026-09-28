@@ -378,6 +378,75 @@ class InstallTests(BridgeTestCase):
         self.assertIn(ALLOC_BASE + 0x1000, target.freed, "the dispatcher is released")
 
 
+class CaptureTests(unittest.TestCase):
+    """The render capture: a hook whose payload keeps one argument in a block slot.
+
+    Native's own capture is ``Context::g_dx_context = ctx`` on every ``OnEndScene``/``OnReset``
+    (``render.cpp:88``, ``:103``) — a variable, written every frame. What is checked here is the wiring: the
+    stub is placed and its entry patched, the slot it writes is readable through the bridge, a target whose
+    bytes do not match is refused with nothing left behind, and taking the hook out puts the function's own
+    bytes back. That the stub *does* keep the argument is `test_payload_offline.py`'s `SlotCaptureTests`,
+    which executes the emitted bytes; here the target is a fake and nothing is executed.
+    """
+
+    DISPLACED = bytes.fromhex("55 8B EC 83 EC 08")
+
+    def _target_with_capture(self, target_address: int):
+        target = FakeTarget()
+        target.write(target_address, self.DISPLACED)
+        return target
+
+    def test_the_capture_is_placed_and_its_slot_reads_back(self) -> None:
+        from py4gw.game_thread.bridge import RENDER_CAPTURE_SLOT
+
+        capture_target = TARGET + 0x80
+        target = self._target_with_capture(capture_target)
+        bridge = Bridge(target, PID)
+        bridge.install(TARGET, ORIGINAL, capturing=(capture_target, self.DISPLACED))
+        self.addCleanup(bridge.remove)
+
+        self.assertTrue(bridge.observing_render)
+        patched = target.at(capture_target, len(self.DISPLACED))
+        self.assertEqual(patched[0], 0xE9, "the capture's entry jumps to its stub")
+        self.assertNotEqual(patched, self.DISPLACED)
+
+        self.assertEqual(bridge.render_context_address(), 0, "nothing has been captured yet")
+        bridge.write_data(RENDER_CAPTURE_SLOT, struct.pack("<I", 0x1234ABCD))
+        self.assertEqual(bridge.render_context_address(), 0x1234ABCD)
+
+    def test_a_bridge_without_a_capture_answers_zero(self) -> None:
+        target = FakeTarget()
+        bridge = Bridge(target, PID)
+        bridge.install(TARGET, ORIGINAL)
+        self.addCleanup(bridge.remove)
+
+        self.assertFalse(bridge.observing_render)
+        self.assertEqual(bridge.render_context_address(), 0)
+
+    def test_a_capture_target_that_does_not_match_is_refused(self) -> None:
+        """And the game thread's own bytes are back, which is the order that matters."""
+
+        target = FakeTarget()
+        bridge = Bridge(target, PID)
+        with self.assertRaises(RuntimeError):
+            bridge.install(TARGET, ORIGINAL, capturing=(TARGET + 0x80, self.DISPLACED))
+
+        self.assertEqual(target.entry(), ORIGINAL, "the game thread's own bytes are back")
+        self.assertFalse(bridge.installed)
+        self.assertFalse(bridge.observing_render)
+
+    def test_taking_the_capture_out_restores_the_functions_bytes(self) -> None:
+        capture_target = TARGET + 0x80
+        target = self._target_with_capture(capture_target)
+        bridge = Bridge(target, PID)
+        bridge.install(TARGET, ORIGINAL, capturing=(capture_target, self.DISPLACED))
+
+        bridge.remove()
+
+        self.assertFalse(bridge.observing_render)
+        self.assertEqual(target.at(capture_target, len(self.DISPLACED)), self.DISPLACED)
+
+
 class QueueTests(BridgeTestCase):
     """Publishing, waiting, and reading the events back."""
 

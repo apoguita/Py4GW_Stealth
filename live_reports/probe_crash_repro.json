@@ -1,0 +1,55 @@
+{
+  "started_at": "2026-09-27T11:32:11",
+  "pid": 22640,
+  "before_install": [
+    {
+      "name": "game_thread.leave_game_thread_func",
+      "address": "0x845880",
+      "head": "55 8b ec 81 ec 20 02 00",
+      "patched": false,
+      "looks_like_a_prologue": true
+    },
+    {
+      "name": "ui.send_ui_message_func",
+      "address": "0x8441a0",
+      "head": "55 8b ec 8b 45 08 83 f8",
+      "patched": false,
+      "looks_like_a_prologue": true
+    },
+    {
+      "name": "effects.post_process_effect_func",
+      "address": "0xa20f00",
+      "head": "55 8b ec 83 ec 08 8b 45",
+      "patched": false,
+      "looks_like_a_prologue": true
+    },
+    {
+      "name": "render.end_scene_func",
+      "address": "0x8dff10",
+      "head": "55 8b ec 83 ec 48 a1 80",
+      "patched": false,
+      "looks_like_a_prologue": true
+    }
+  ],
+  "any_patched_before": false,
+  "installed_hooks": [
+    "game_thread"
+  ],
+  "observing": true,
+  "observing_effects": true,
+  "observing_render": true,
+  "render_context": "0xa18f8f0",
+  "hits": {
+    "game_thread": 9
+  },
+  "context_before_disconnect": true,
+  "disconnected_at": "2026-09-27T11:32:15",
+  "after_disconnect": {
+    "installed_hooks": [],
+    "observing": false,
+    "observing_effects": false,
+    "observing_render": false
+  },
+  "finished_at": "2026-09-27T11:32:15",
+  "next": "NOW: click into the client and move the character. Nothing else is running and the four hooks are out, so whatever happens next is attributable. Report what the client does."
+}

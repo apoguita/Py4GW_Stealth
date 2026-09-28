@@ -25,7 +25,7 @@ Current status: active research. The immediate goal is to establish evidence-bac
   execution (typed calls into the client's own functions, with effects asserted from
   the client's own reports), and callbacks (a registry keyed by event kind, plus a
   listener thread that delivers events as they arrive). The call vocabulary covers
-  seven forms — no arguments, one, two, three and five words, a four-float pointer,
+  eight forms — no arguments, one, two, three, four and five words, a four-float pointer,
   and a packed UI message — a call's return register, and a writable data region in
   the block; the GW.dat read uses all three and is the widest thing it drives. **A fourth
   form now exists and is live-verified**: an observation *after* the hooked call returns,

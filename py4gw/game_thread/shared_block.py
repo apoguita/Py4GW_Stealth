@@ -332,6 +332,24 @@ class CallForm(IntEnum):
     #: pointer of the call after it is an address inside the block's data region.
     U32_U32_U32_U32_U32 = 7
 
+    #: ``void __cdecl(uint32_t, uint32_t, uint32_t, uint32_t)``: four words in the source's order.
+    #: ``MoveItemFn`` is this shape, and the item methods layer calls it with exactly four —
+    #: ``g_move_item_func(from->item_id, quantity, bag->index, slot)`` (``item_methods.cpp:164``).
+    #: The five-word form cannot stand in for it: a fifth pushed word is an argument the callee does
+    #: not take, and the release would then be a word too long.
+    U32_U32_U32_U32 = 8
+
+    #: The client's own ``__thiscall`` shape, which Native declares as a ``__fastcall`` pointer because its
+    #: detour ABI requires that: ``SendFrameUIMessageFn = void(__fastcall*)(
+    #: GW::GWArray<UIInteractionCallback>* callbacks, void* edx, UIMessage message_id, void* wparam,
+    #: void* lparam)`` (``ui_patterns.cpp:32``). So ``arg1`` is the client's ``this`` and travels in
+    #: **ECX**, ``arg2`` travels in **EDX** (the dummy the source passes nullptr for), and ``arg3``-``arg5``
+    #: are pushed right to left. **The callee releases its own stack words** — ``__thiscall`` and
+    #: ``__fastcall`` both do, and the function this port resolves ends ``ret 0xc`` — so nothing is released
+    #: here. A cdecl form cannot stand in: five pushed words would put the ``this`` pointer on the stack and
+    #: leave the stack twelve bytes short of where the callee left it.
+    FASTCALL_U32_U32_U32 = 9
+
 
 def float_bits(value: float) -> int:
     """Return one ``float`` as the ``uint32`` a command word carries.

@@ -547,10 +547,14 @@ def _emit_call(
     code.jcc(_JE, "u32")
     code.emit(_cmp_r32_imm8(_EDX, CallForm.U32_U32_U32))
     code.jcc(_JE, "u32_u32_u32")
+    code.emit(_cmp_r32_imm8(_EDX, CallForm.U32_U32_U32_U32))
+    code.jcc(_JE, "u32_u32_u32_u32")
     code.emit(_cmp_r32_imm8(_EDX, CallForm.FLOAT_PTR))
     code.jcc(_JE, "float_ptr")
     code.emit(_cmp_r32_imm8(_EDX, CallForm.U32_U32_U32_U32_U32))
     code.jcc(_JE, "u32_u32_u32_u32_u32")
+    code.emit(_cmp_r32_imm8(_EDX, CallForm.FASTCALL_U32_U32_U32))
+    code.jcc(_JE, "fastcall_u32_u32_u32")
     code.jump("unknown_form")
 
     # ``void __cdecl(void)``: nothing is pushed, so nothing is released.
@@ -584,6 +588,26 @@ def _emit_call(
     code.emit(_call_r32(_EBP))
     _capture_return(code)
     code.emit(_add_esp_imm8(12))
+    code.emit(_xor_r32_r32(_EDX, _EDX))
+    code.emit(_mov_r32_imm32(_ECX, CommandState.DONE))
+    code.jump("store")
+
+    # ``void __cdecl(uint32_t, uint32_t, uint32_t, uint32_t)``: four words, pushed right
+    # to left so the command's first word is the callee's first parameter. This is the
+    # shape ``MoveItemFn`` declares and the item methods layer calls
+    # (``item_methods.cpp:164``).
+    code.label("u32_u32_u32_u32")
+    code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg4"]))
+    code.emit(_push_r32(_EAX))
+    code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg3"]))
+    code.emit(_push_r32(_EAX))
+    code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg2"]))
+    code.emit(_push_r32(_EAX))
+    code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg1"]))
+    code.emit(_push_r32(_EAX))
+    code.emit(_call_r32(_EBP))
+    _capture_return(code)
+    code.emit(_add_esp_imm8(16))
     code.emit(_xor_r32_r32(_EDX, _EDX))
     code.emit(_mov_r32_imm32(_ECX, CommandState.DONE))
     code.jump("store")
@@ -640,6 +664,25 @@ def _emit_call(
     code.emit(_call_r32(_EBP))
     _capture_return(code)
     code.emit(_add_esp_imm8(20))
+    code.emit(_xor_r32_r32(_EDX, _EDX))
+    code.emit(_mov_r32_imm32(_ECX, CommandState.DONE))
+    code.jump("store")
+
+    # The client's own ``__thiscall`` shape: ``arg1`` is its ``this`` in ``ecx``, ``arg2`` is the dummy
+    # ``edx`` the source passes null for, and the last three words are pushed right to left. The callee
+    # releases its own stack words (``__thiscall`` and ``__fastcall`` both do — the function ends
+    # ``ret 0xc``), so nothing is released here: an ``add esp`` would take the host's own frame apart.
+    code.label("fastcall_u32_u32_u32")
+    code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg5"]))
+    code.emit(_push_r32(_EAX))
+    code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg4"]))
+    code.emit(_push_r32(_EAX))
+    code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg3"]))
+    code.emit(_push_r32(_EAX))
+    code.emit(_mov_r32_mem(_ECX, _ESI, COMMAND_OFFSET["arg1"]))
+    code.emit(_mov_r32_mem(_EDX, _ESI, COMMAND_OFFSET["arg2"]))
+    code.emit(_call_r32(_EBP))
+    _capture_return(code)
     code.emit(_xor_r32_r32(_EDX, _EDX))
     code.emit(_mov_r32_imm32(_ECX, CommandState.DONE))
     code.jump("store")
@@ -842,6 +885,49 @@ def build_observer(
         code.emit(_mov_mem_r32(_EBX, HEADER_OFFSET["event_written"], _EAX))
 
     code.label("observer_return")
+    code.emit(_POPAD)
+    code.emit(_OBSERVER_EPILOGUE)
+
+    return code.assemble()
+
+
+def build_slot_capture(
+    slot_offset: int = DATA_REGION_OFFSET,
+    argument: int = 1,
+) -> bytes:
+    """Return the capture stub: keep one argument of the hooked function in a block slot.
+
+    **Native's render capture is a variable, not a queue.** ``Context::g_dx_context = ctx`` runs on every
+    ``OnEndScene`` and every ``OnReset`` (``render.cpp:88``, ``:103``), because those two are called every
+    frame and the host only ever wants the latest value. The observer appends an event per call, which is the
+    right shape for a message that arrives occasionally and the wrong one for a per-frame call, so this stub
+    writes the argument to a fixed slot in the block's data region and the host reads it when it asks.
+
+    Its arguments are the observer's — ``(block, <the hooked function's own arguments...>)``, pushed by the
+    stub from the hooked function's frame — and ``argument`` selects which to keep: ``1`` is the hooked
+    function's first argument, which is where ``OnEndScene(GwDxContext* ctx, void* unk)`` receives the render
+    context. ``slot_offset`` is where in the block it lands, so several captures can share the region.
+
+    It validates the block's header before writing anything, exactly as the observer does, so a block that is
+    not this bridge's is left alone.
+    """
+
+    code = _Code()
+
+    code.emit(_PUSHAD)
+    # The payload's own arguments: the block first, then the hooked function's, past our own frame.
+    code.emit(_mov_r32_mem(_EBX, _ESP, _OBSERVER_BLOCK_OFFSET))
+    code.emit(_TEST_EBX_EBX)
+    code.jcc(_JE, "capture_return")
+
+    for field, expected in _HEADER_CHECKS:
+        code.emit(_cmp_mem_imm32(_EBX, HEADER_OFFSET[field], expected))
+        code.jcc(_JNE, "capture_return")
+
+    code.emit(_mov_r32_mem(_EAX, _ESP, _OBSERVER_BLOCK_OFFSET + 4 * argument))
+    code.emit(_mov_mem_r32(_EBX, slot_offset, _EAX))
+
+    code.label("capture_return")
     code.emit(_POPAD)
     code.emit(_OBSERVER_EPILOGUE)
 

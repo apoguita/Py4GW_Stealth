@@ -71,7 +71,7 @@ def main() -> int:
 
     client = py4gw.connect(clients[0])
     try:
-        bridge = client._bridge
+        bridge: Any = client._bridge
         emit(
             "connected",
             pid=client.pid,

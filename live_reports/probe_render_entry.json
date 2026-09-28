@@ -1,0 +1,91 @@
+{
+  "pid": 16504,
+  "text": {
+    "start": "0x611000",
+    "end": "0xb49600"
+  },
+  "targets": [
+    {
+      "name": "render.end_scene_func",
+      "ok": true,
+      "value": "0x8dff10",
+      "in_text": true,
+      "trace": [
+        {
+          "step": "scan_target",
+          "op": "scan",
+          "in": "0x0",
+          "out": "0x8dff2e",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": "to_function_start",
+          "op": "to_function_start",
+          "in": "0x8dff2e",
+          "out": "0x8dff10",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "head": "55 8b ec 83 ec 48 a1 80 74 e0 00 33 c5 89 45 fc 56 8b 75 08 89 75 d0 83 be b8 01 00 00 00 75 28",
+      "looks_like_a_function": true,
+      "starts_with_jmp": false
+    },
+    {
+      "name": "render.reset_func",
+      "ok": true,
+      "value": "0x8e1310",
+      "in_text": true,
+      "trace": [
+        {
+          "step": "scan_target",
+          "op": "scan",
+          "in": "0x0",
+          "out": "0x8e13a5",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": "to_function_start",
+          "op": "to_function_start",
+          "in": "0x8e13a5",
+          "out": "0x8e1310",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "head": "55 8b ec 81 ec 9c 00 00 00 a1 80 74 e0 00 33 c5 89 45 fc 53 56 8b 75 08 57 6a 00 56 e8 ef de ff",
+      "looks_like_a_function": true,
+      "starts_with_jmp": false
+    },
+    {
+      "name": "render.screen_capture_func",
+      "ok": true,
+      "value": "0x8e0260",
+      "in_text": true,
+      "trace": [
+        {
+          "step": "scan_target",
+          "op": "scan",
+          "in": "0x0",
+          "out": "0x8e063e",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": "to_function_start",
+          "op": "to_function_start",
+          "in": "0x8e063e",
+          "out": "0x8e0260",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "head": "55 8b ec 83 ec 1c 56 8b 75 08 83 be b8 01 00 00 00 75 1e 68 3e 07 00 00 ba b4 70 c7 00 b9 a8 71",
+      "looks_like_a_function": true,
+      "starts_with_jmp": false
+    }
+  ],
+  "note": "read-only: no client function was called and nothing was written. The bytes at render.end_scene_func are what its hook must displace — at least five of them, ending on an instruction boundary — and they are pinned as a constant the way the other three hooks' are."
+}

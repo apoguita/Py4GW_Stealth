@@ -82,6 +82,27 @@ def _format_encoded_text(value: str) -> str:
     return "".join(output)
 
 
+class BagType(IntEnum):
+    """``GW::Constants::BagType`` (``constants/item.h:7-14``), in the source's own order.
+
+    This is the enum the native ``Bag`` record's ``bag_type`` field holds (``item.h:54``), and the
+    enum native's own predicates compare it against (``item.h:62-64``). It is not the same enum as
+    ``GW::Constants::Bag``: a bag *type* is 0-5, while a bag *id* runs to 23 (``Bags.Storage_1`` is
+    ``8``, ``Material_Storage`` is ``6``, ``Equipped_Items`` is ``22``).
+
+    Native spells the zero member ``None`` (``constants/item.h:8``). Python cannot use that name, and
+    ``None_`` is the sources' own Python spelling for such a member (``enums_src/Item_enums.py:25``,
+    ``:34``, ``:155``).
+    """
+
+    None_ = 0
+    Inventory = 1
+    Equipped = 2
+    NotCollected = 3
+    Storage = 4
+    MaterialStorage = 5
+
+
 class ItemRarity(IntEnum):
     """The native/Reforged item-rarity values."""
 
@@ -707,22 +728,6 @@ class ItemStruct(TargetStruct):
             self._remote_reader, self.bag_address
         )
 
-    @property
-    def is_inventory_item(self) -> bool:
-        """Return whether the owning bag is inventory or equipped items."""
-
-        bag = self._read_owner_bag()
-        return bag is not None and (
-            bag.is_inventory_bag or int(bag.bag_type) == 22
-        )
-
-    @property
-    def is_storage_item(self) -> bool:
-        """Return whether the owning bag is storage or material storage."""
-
-        bag = self._read_owner_bag()
-        return bag is not None and (bag.is_storage_bag or bag.is_material_storage)
-
     # Keep the native method names callable. The snake_case properties above
     # are convenience spellings; these methods preserve the C++ call surface.
     def GetIsStackable(self) -> bool:
@@ -806,14 +811,22 @@ class ItemStruct(TargetStruct):
         return self.is_gold
 
     def IsInventoryItem(self) -> bool:
-        """Return whether the owning bag is an inventory/equipped bag."""
+        """``Item::IsInventoryItem`` (``item.h:139``): an inventory bag, or the equipped bag."""
 
-        return self.is_inventory_item
+        bag = self._read_owner_bag()
+        return bag is not None and (
+            bag.IsInventoryBag() or int(bag.bag_type) == int(BagType.Equipped)
+        )
 
     def IsStorageItem(self) -> bool:
-        """Return whether the owning bag is a storage bag."""
+        """``Item::IsStorageItem`` (``item.h:140``): a storage bag or the material storage.
 
-        return self.is_storage_item
+        This is the struct's own rule. ``GW::item::IsStorageItem`` (``item_methods.cpp:68-70``) is a
+        separate function — storage only — and is the one ``CanInteractWithItem`` asks.
+        """
+
+        bag = self._read_owner_bag()
+        return bag is not None and (bag.IsStorageBag() or bag.IsMaterialStorage())
 
     def GetUses(self) -> int:
         """Return the native uses modifier value or stack quantity."""
@@ -952,24 +965,6 @@ class BagStruct(TargetStruct):
 
         return self.bag_id()
 
-    @property
-    def is_inventory_bag(self) -> bool:
-        """Return whether this is a normal inventory bag."""
-
-        return int(self.bag_type) == 1
-
-    @property
-    def is_storage_bag(self) -> bool:
-        """Return whether this is a storage bag."""
-
-        return int(self.bag_type) == 8
-
-    @property
-    def is_material_storage(self) -> bool:
-        """Return whether this is the material-storage bag."""
-
-        return int(self.bag_type) == 6
-
     def _item_pointer(self, index: int) -> int | None:
         """Read one item pointer while preserving null slots."""
 
@@ -1084,19 +1079,19 @@ class BagStruct(TargetStruct):
         return self.find1(int(item.model_id), pos)
 
     def IsInventoryBag(self) -> bool:
-        """Return whether the native bag type is inventory."""
+        """``Bag::IsInventoryBag`` (``item.h:62``): ``bag_type`` is ``BagType::Inventory``."""
 
-        return self.is_inventory_bag
+        return int(self.bag_type) == int(BagType.Inventory)
 
     def IsStorageBag(self) -> bool:
-        """Return whether the native bag type is storage."""
+        """``Bag::IsStorageBag`` (``item.h:63``): ``bag_type`` is ``BagType::Storage``."""
 
-        return self.is_storage_bag
+        return int(self.bag_type) == int(BagType.Storage)
 
     def IsMaterialStorage(self) -> bool:
-        """Return whether the native bag type is material storage."""
+        """``Bag::IsMaterialStorage`` (``item.h:64``): ``bag_type`` is ``BagType::MaterialStorage``."""
 
-        return self.is_material_storage
+        return int(self.bag_type) == int(BagType.MaterialStorage)
 
 
 class WeaponSetStruct(TargetStruct):

@@ -71,12 +71,25 @@ _PUSH_EAX = 0x50
 _MOV_EAX_IMM32 = 0xB8
 _CALL_EAX = bytes((0xFF, 0xD0))
 _INC_EAX_4 = bytes((0xFF, 0x40, 0x04))
+#: The in-flight count's own forms: ``inc``/``dec dword [eax+8]`` and ``… [edx+8]``. The plain stub
+#: keeps the state address in ``eax`` and the post-call form in ``edx``, so both spellings are needed.
+_INC_EAX_8 = bytes((0xFF, 0x40, 0x08))
+_DEC_EAX_8 = bytes((0xFF, 0x48, 0x08))
+_INC_EDX_8 = bytes((0xFF, 0x42, 0x08))
+_DEC_EDX_8 = bytes((0xFF, 0x4A, 0x08))
 _CMP_EAX_0 = bytes((0x83, 0x38, 0x00))
 
-#: The state block: ``enabled``, ``hits``, then two reserved words.
+#: The state block: ``enabled``, ``hits``, the **in-flight count**, then one reserved word.
+#:
+#: The in-flight count is what makes freeing generated code safe: the stub increments it on the way in and
+#: decrements it on the way out, so :meth:`Hooker.remove` can wait for the code to be empty of client
+#: threads instead of sleeping a fixed time and hoping. Native keeps the same number for the same reason —
+#: ``++g_active_render_hooks`` on entry and ``--`` on exit, with a shutdown that polls it to zero
+#: (``render.cpp:75-111``, ``:61-73``).
 STATE_SIZE = 16
 STATE_ENABLED_OFFSET = 0
 STATE_HITS_OFFSET = 4
+STATE_INFLIGHT_OFFSET = 8
 
 #: The post-call form's own state, after those four words: the nesting depth, a scratch cell
 #: the return address is handed through, and one frame per level. A frame holds the return
@@ -111,7 +124,9 @@ HIT_POLL_SECONDS = 0.005
 #: when the caller asks for it to be released. A thread that took the entry jump
 #: just before the restore is still inside the stub for an instant; this is a
 #: courtesy wait, not proof, which is why releasing is opt-in.
-FREE_WAIT_SECONDS = 0.25
+#: How long a removal waits for the stub's in-flight count to drain before it reports instead of freeing
+#: anything. Native's own bound is the same order: 125 passes of 16 ms (``render.cpp:63-69``).
+FREE_WAIT_SECONDS = 2.0
 
 _UINT32_MAX = 0xFFFFFFFF
 
@@ -339,6 +354,13 @@ def build_stub(
     body.append(_JE_REL8)
     body.append(0)  # patched below, once the skip target is known
 
+    # Entered: this call is inside the stub from here on, and `remove` waits on this count before it
+    # frees any of the code. The skip branch above never reaches this, so a disabled hook is not counted
+    # and cannot make a removal wait for a pass-through.
+    body.append(_MOV_EAX_IMM32)
+    body += struct.pack("<I", state_address)
+    body += _INC_EAX_8
+
     # Each push moves the stack by the same four bytes the next argument sits
     # further along, so every one of them is read at the same offset: past the
     # return address, the pushed flags and registers, and the arguments still to
@@ -353,6 +375,12 @@ def build_stub(
     body.append(_MOV_EAX_IMM32)
     body += struct.pack("<I", dispatcher_address)
     body += _CALL_EAX
+
+    # The payload has returned, so this call is no longer inside the stub. ``eax`` holds the payload's
+    # value and is put back by the ``popad`` below, so reloading the state address here costs nothing.
+    body.append(_MOV_EAX_IMM32)
+    body += struct.pack("<I", state_address)
+    body += _DEC_EAX_8
 
     skip_target = len(body)
     body.append(_POPAD)
@@ -445,6 +473,11 @@ def _build_post_call_stub(
     body += _mov_edx_plus_eax(POST_DEPTH_OFFSET)
     body += _imul_ecx_ecx_imm32(frame)
 
+    # Intercepting: counted from here until the payload has run. Every pass-through branch above jumps to
+    # the end without reaching this, so only a call this stub actually holds is counted — a disabled hook,
+    # or one whose frame stack is full, never makes a removal wait.
+    body += _INC_EDX_8
+
     body += _mov_eax_esp_plus(36)
     body += _mov_edx_ecx_plus_eax(POST_SLOTS_OFFSET + POST_FRAME_RETURN_OFFSET)
     for index in range(forwarded_arguments):
@@ -502,6 +535,10 @@ def _build_post_call_stub(
     body += _imul_ecx_ecx_imm32(frame)
     body += _mov_eax_edx_ecx_plus(POST_SLOTS_OFFSET + POST_FRAME_RETURN_OFFSET)
     body += _mov_edx_plus_eax(POST_SCRATCH_OFFSET)
+    # The count ends here, and it ends as late as it can: the two instructions after this hand control to
+    # the client's caller, so this is the last point at which the stub still owns the call. ``edx`` holds
+    # the state address and ``eax`` the return address that was just stored, so neither is disturbed.
+    body += _DEC_EDX_8
     body.append(_POPAD)
     body.append(_POPFD)
     body += _push_mem(state_address + POST_SCRATCH_OFFSET)
@@ -731,30 +768,68 @@ class Hooker:
                 )
             time.sleep(HIT_POLL_SECONDS)
 
-    def remove(self, name: str, free_code: bool = False) -> None:
-        """Restore the target's original bytes.
+    def in_flight(self, name: str) -> int:
+        """Return how many client calls are inside this hook's code right now.
 
-        The generated code is left mapped unless ``free_code`` is set: a thread may
-        be inside the stub right now, and unmapping code an instruction pointer is
-        heading into crashes the client. A caller that installs and removes hooks
-        as a routine — a connection that sets this up on connect and tears it down
-        on disconnect — asks for the release so its allocations do not accumulate
-        in the client, and accepts the bounded wait below in place of proof.
+        This is the number :meth:`remove` waits on before it frees anything, and it is the same count native
+        keeps in ``g_active_render_hooks`` for the same purpose (``render.cpp:75-111``): incremented when the
+        stub takes a call and decremented as late as the stub can manage before control leaves it.
+        """
+
+        hook = self._require(name)
+        raw = self._access.read(hook.state_address + STATE_INFLIGHT_OFFSET, 4)
+        return int(struct.unpack("<I", raw)[0])
+
+    def remove(self, name: str, free_code: bool = False) -> None:
+        """Restore the target's own bytes, and free generated code only when nothing is inside it.
+
+        The code is left mapped unless ``free_code`` is set: a thread may be **inside the stub right now**,
+        and unmapping code an instruction pointer is heading into crashes the client. A caller that installs
+        and removes hooks as a routine — a connection that sets this up on connect and tears it down on
+        disconnect — asks for the release so its allocations do not accumulate in a client that outlives the
+        controller.
+
+        **What makes that release safe is the in-flight count, and the count is the source's own answer.**
+        The stub increments it on entry and decrements it as late as it can, so the wait below is for the
+        count to reach zero rather than a fixed sleep taken on faith. Native does exactly this: its render
+        hook counts ``g_active_render_hooks`` across the call and its shutdown polls that count to zero, 125
+        times at 16 ms (``WaitForRenderHooksToDrain``, ``render.cpp:61-73``), because a patch removed
+        underneath a running call is the hazard — and a sleep cannot tell you the difference.
+
+        **The trampoline is never freed, even here.** It is the displaced bytes plus the jump back, about a
+        dozen bytes, and it is the one piece whose execution the count cannot cover: the plain form reaches
+        it by jumping *after* it has already decremented. A dozen bytes left mapped is survivable; freed code
+        under a live instruction pointer is not.
+
+        A count that does not drain is **reported rather than slept off**, and nothing is freed.
         """
 
         hook = self._require(name)
         self.disable(name)
+        # Restoring the entry is what makes the count finite: after this, no new call can enter the stub.
         self._patcher.restore(hook.target)
-        del self._hooks[name]
 
         if free_code:
-            time.sleep(FREE_WAIT_SECONDS)
+            deadline = time.monotonic() + FREE_WAIT_SECONDS
+            while True:
+                inside = self.in_flight(name)
+                if not inside:
+                    break
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        f"pid {self._pid}: {name} still had {inside} call(s) inside its stub "
+                        f"{FREE_WAIT_SECONDS} s after its entry was restored. Nothing was freed: the "
+                        "generated code stays mapped, because unmapping code under a live instruction "
+                        "pointer is how a client is taken down."
+                    )
+                time.sleep(HIT_POLL_SECONDS)
             for address in (
                 hook.stub_address,
-                hook.trampoline_address,
                 hook.state_address,
             ):
                 self._access.free(address)
+
+        del self._hooks[name]
 
     def remove_all(self) -> None:
         """Remove every hook this hooker installed, newest first."""
