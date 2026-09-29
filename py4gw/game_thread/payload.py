@@ -45,6 +45,7 @@ from .shared_block import (
     COMMAND_REGION_OFFSET,
     COMMAND_SIZE,
     DATA_REGION_OFFSET,
+    DATA_SIZE,
     DECODE_CAPACITY,
     DECODE_SLOT_LENGTH_OFFSET,
     DECODE_SLOT_OUTPUT_OFFSET,
@@ -60,6 +61,7 @@ from .shared_block import (
     HEADER_SIZE,
     MAGIC,
     PING_RESULT,
+    RESULT_BAD_ARGUMENTS,
     RESULT_BAD_DESCRIPTOR,
     RESULT_BAD_TARGET,
     RESULT_NO_TARGET,
@@ -75,6 +77,8 @@ from .shared_block import (
     EVENT_TEXT_OFFSET,
     EVENT_TEXT_STATE_OFFSET,
     EVENT_TEXT_WORDS,
+    EVENT_WORDS,
+    EVENT_WORDS_OFFSET,
     EventKind,
     EventTextState,
     Operation,
@@ -99,6 +103,7 @@ _JB = 0x82
 _JAE = 0x83
 _JE = 0x84
 _JNE = 0x85
+_JA = 0x87
 
 #: Instructions with no operand of their own.
 _PUSHAD = bytes((0x60,))
@@ -171,10 +176,16 @@ def _memory(
     )
 
 
-def _mov_r32_mem(dst: int, base: int, disp: int, index: int | None = None) -> bytes:
-    """Return ``mov dst, [base + index + disp]`` (``8B /r``)."""
+def _mov_r32_mem(
+    dst: int, base: int, disp: int, index: int | None = None, scale: int = 1
+) -> bytes:
+    """Return ``mov dst, [base + index*scale + disp]`` (``8B /r``).
 
-    return bytes((0x8B,)) + _memory(dst, base, disp, index)
+    ``scale`` is forwarded to :func:`_memory`'s SIB byte, which is what indexes a table of
+    four-byte entries — the per-header original-handler table the packet stub chains through.
+    """
+
+    return bytes((0x8B,)) + _memory(dst, base, disp, index, scale)
 
 
 def _movzx_r32_word(
@@ -427,8 +438,19 @@ _EVENT_SOURCES = (
 )
 
 #: The event fields written as zero. ``tick`` is among them because nothing
-#: produces a tick yet: the header has no frame counter to read one from.
-_EVENT_ZEROES = ("arg3", "tick", "reserved")
+#: produces a tick yet: the header has no frame counter to read one from. The three
+#: that describe a record's copies are among them because a slot is reused: a
+#: completion event carries no string and no packet, and a count left over from the
+#: event that used this slot before would have the host decode a copy that is not
+#: there.
+_EVENT_ZEROES = (
+    "arg3",
+    "tick",
+    "reserved",
+    "text_state",
+    "text_length",
+    "word_count",
+)
 
 
 class _Code:
@@ -498,6 +520,17 @@ def _capture_return(code: _Code) -> None:
     code.emit(_mov_mem_r32(_ESI, COMMAND_OFFSET["value"], _EAX))
 
 
+def _add_r32_r32(dst: int, src: int) -> bytes:
+    """Return ``add dst, src`` (``01 /r``).
+
+    The ``__cdecl`` forms release the words they pushed themselves, and the stack form's count is a
+    runtime number rather than an immediate, so the release is an ``add`` of one register to
+    ``esp`` — the ``add esp, imm8`` the fixed forms use cannot carry it.
+    """
+
+    return bytes((0x01, _modrm(_MOD_REGISTER, src, dst)))
+
+
 def _emit_call(
     code: _Code, call_table_address: int, module_base: int, module_size: int
 ) -> None:
@@ -555,6 +588,8 @@ def _emit_call(
     code.jcc(_JE, "u32_u32_u32_u32_u32")
     code.emit(_cmp_r32_imm8(_EDX, CallForm.FASTCALL_U32_U32_U32))
     code.jcc(_JE, "fastcall_u32_u32_u32")
+    code.emit(_cmp_r32_imm8(_EDX, CallForm.STACK_WORDS))
+    code.jcc(_JE, "stack_words")
     code.jump("unknown_form")
 
     # ``void __cdecl(void)``: nothing is pushed, so nothing is released.
@@ -719,6 +754,46 @@ def _emit_call(
     code.emit(_mov_r32_imm32(_ECX, CommandState.DONE))
     code.jump("store")
 
+    # ``void __cdecl(...)`` with the words the caller built in the block's data region: ``arg1`` is
+    # where they sit and ``arg2`` how many there are. The source's own calls of this shape pass
+    # records **by value** — ``GW::merchant::TransactItems`` and ``RequestQuote``
+    # (``merchant_methods.cpp:16-30``) — so the callee reads them off the stack and nothing but
+    # pushing them reproduces the ABI. They are pushed right to left, which is what makes the first
+    # word the callee's first parameter, and released here because ``__cdecl``'s caller does that.
+    #
+    # The span is checked before a word of it is read: the words live in the block, and a count that
+    # ran past the region would push whatever follows it onto the client's stack.
+    code.label("stack_words")
+    code.emit(_mov_r32_mem(_EDX, _ESI, COMMAND_OFFSET["arg2"]))
+    code.emit(_TEST_EDX_EDX)
+    code.jcc(_JE, "bad_arguments")
+    code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg1"]))
+    code.emit(_mov_r32_r32(_ECX, _EDX))
+    code.emit(_shl_r32_imm8(_ECX, 2))
+    code.emit(_add_r32_r32(_EAX, _ECX))
+    code.emit(_cmp_r32_imm32(_EAX, DATA_SIZE))
+    code.jcc(_JA, "bad_arguments")
+
+    code.emit(_mov_r32_mem(_ECX, _ESI, COMMAND_OFFSET["arg1"]))
+    code.emit(_lea_r32_mem(_ECX, _EBX, DATA_REGION_OFFSET, _ECX))
+    code.label("stack_word_next")
+    code.emit(bytes((0x4A,)))  # dec edx
+    code.emit(_mov_r32_mem(_EAX, _ECX, 0, _EDX, 4))
+    code.emit(_push_r32(_EAX))
+    code.emit(_TEST_EDX_EDX)
+    code.jcc(_JNE, "stack_word_next")
+
+    code.emit(_call_r32(_EBP))
+    _capture_return(code)
+    # The count is read again rather than kept: the loop's own counter reached zero, and a register
+    # spilled across the call is not something the client's function promises to leave alone.
+    code.emit(_mov_r32_mem(_EDX, _ESI, COMMAND_OFFSET["arg2"]))
+    code.emit(_shl_r32_imm8(_EDX, 2))
+    code.emit(_add_r32_r32(_ESP, _EDX))
+    code.emit(_xor_r32_r32(_EDX, _EDX))
+    code.emit(_mov_r32_imm32(_ECX, CommandState.DONE))
+    code.jump("store")
+
     code.label("bad_descriptor")
     code.emit(_mov_r32_imm32(_EDX, RESULT_BAD_DESCRIPTOR))
     code.emit(_mov_r32_imm32(_ECX, CommandState.FAILED))
@@ -736,6 +811,13 @@ def _emit_call(
 
     code.label("unknown_form")
     code.emit(_mov_r32_imm32(_EDX, RESULT_UNKNOWN_FORM))
+    code.emit(_mov_r32_imm32(_ECX, CommandState.FAILED))
+    code.jump("store")
+
+    # A form whose arguments travel in the data region can be handed a span the region does not
+    # hold. That is not an unknown form — the form is known and was refused — so it says so.
+    code.label("bad_arguments")
+    code.emit(_mov_r32_imm32(_EDX, RESULT_BAD_ARGUMENTS))
     code.emit(_mov_r32_imm32(_ECX, CommandState.FAILED))
     code.jump("store")
 
@@ -847,6 +929,9 @@ def build_observer(
         # counter this path increments at the end, so it is put back afterwards.
         code.emit(_mov_mem_imm32(_EDI, EVENT_TEXT_STATE_OFFSET, EventTextState.ABSENT))
         code.emit(_mov_mem_imm32(_EDI, EVENT_TEXT_LENGTH_OFFSET, 0))
+        # A message carries a string and not a packet: the count the record's words are read to
+        # is zero, so a slot that last held a packet does not hand its words to this event.
+        code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["word_count"], 0))
         code.emit(_PUSH_EAX)
         code.emit(_mov_r32_mem(_EAX, _EBP, WATCH_STRING_OFFSET))
         code.emit(_TEST_EAX_EAX)
@@ -939,6 +1024,191 @@ def observer_size() -> int:
 
     return len(build_observer(0x10000000))
 
+
+#: Where the packet stub finds the packet after ``pushad``: 32 bytes of pushed registers and the
+#: four-byte return address the client's dispatcher left on top of its argument.
+_PACKET_ARGUMENT_OFFSET = _OBSERVER_BLOCK_OFFSET
+
+#: ``ret`` — the packet handler is ``__cdecl`` (``stoc_methods.cpp:7``), so the **caller** cleans the
+#: stack. The observer's ``ret 0xC`` would eat the client's return address here, because this stub
+#: was not entered through the hooker's stub and has no arguments of its own.
+_CDECL_RET = bytes((0xC3,))
+
+#: ``push dword [esp+4]`` — the packet the client pushed for this handler, pushed a second time for
+#: the original. A ``call`` puts our own return address at ``[esp]``, so a callee that reads its
+#: argument at ``[esp+4]`` needs the packet under it, which is what the client's own frame has and
+#: what the original would have been handed had this project not replaced the entry at all.
+_PUSH_ARGUMENT = bytes((0xFF, 0x74, 0x24, 0x04))
+
+#: ``inc``/``dec dword [disp32]`` — the shared in-flight count, which is what makes freeing a stub's
+#: code safe on a thread this project does not own. ``hooker.py`` counts the same way for its stubs
+#: (``STATE_INFLIGHT_OFFSET``, ``:82-88``), and native counts ``g_active_render_hooks`` across its
+#: render calls and polls that count to zero at shutdown (``render.cpp:61-73``). The stub is the only
+#: writer, and a packet handler can run on a thread this controller never sees, so the count is taken
+#: on entry and given back on the single path every exit goes through.
+_INC_MEM32 = 0x05
+_DEC_MEM32 = 0x0D
+
+
+def _inc_mem32(address: int) -> bytes:
+    """Return ``inc dword [address]`` (``FF /0``)."""
+
+    return bytes((0xFF, _INC_MEM32)) + struct.pack("<I", address)
+
+
+def _dec_mem32(address: int) -> bytes:
+    """Return ``dec dword [address]`` (``FF /1``)."""
+
+    return bytes((0xFF, _DEC_MEM32)) + struct.pack("<I", address)
+
+
+def build_packet_stub(
+    block_address: int = 0,
+    header: int = 0,
+    words: int = 0,
+    original: int = 0,
+    kind: int = EventKind.PACKET,
+    inflight_address: int = 0,
+) -> bytes:
+    """Return the packet stub: what runs where the client's own packet handler ran.
+
+    **This is not a hook on a function.** Native takes a StoC callback by *replacing the client's
+    handler for that header* — ``g_game_server_handlers->at(header).handler_func =
+    &StoCHandler_Func`` (``stoc_methods.cpp:55-57``) — and keeps the client's own pointer to chain
+    to. This is the function that goes in that slot.
+
+    **Native shares one stub across every header and this one does not, and that is the port's own
+    difference.** ``StoCHandler_Func`` keys off ``packet->header`` because it serves all of them at
+    once and reads each callback's fields through compiled C++ (``stoc.cpp:80-99``). Emitted code
+    cannot do that: how much of a packet a given listener reads is fixed by that packet's struct,
+    so it is an immediate here, and the stub that carries it is built per header — the same way
+    every other stub in this file carries its own data. What the client observes is unchanged: its
+    handler pointer for a watched header goes to our code, our code records the packet, and the
+    client's own handler runs afterwards.
+
+    **What it does, in the source's order:**
+
+    1. validate the block, exactly as the observer does, so a block that is not this bridge's is
+       left alone;
+    2. append one event: the header it was built for, and the packet's first ``words`` words;
+    3. **chain to the original**, with the frame the client's dispatcher gave it, so the client's
+       own handler runs on the packet as it always did.
+
+    **The chain is not optional.** ``stoc.cpp:91-93`` calls the saved original whenever a callback
+    did not block, and without it the client would simply stop handling those packets. Every
+    recorded packet is chained, because this port has no blocking callback kind: the source's
+    ``HookStatus::blocked`` exists to let a callback *cancel* the client's own handling, and nothing
+    ported here asks for that.
+
+    **The original is called and its answer is discarded, which is native's order.** Its return is
+    ignored and the stub's own answer is ``true`` (``stoc.cpp:92``, ``:102``), because that is what
+    the client's dispatcher has been getting from the entry native installs — handing it the
+    original's answer instead would be this port inventing a behaviour for a slot the source pins.
+
+    ``words`` is how much of the packet travels with the event, and it is what that header's own
+    listener reads — ``WindowItems`` is its ``count`` and its ``item_ids[16]``, ``QuotedItemPrice``
+    its ``itemid`` and ``price``, ``TransactionDone`` nothing at all (``listeners.cpp:99-119``,
+    ``stoc.h:356-359``, ``:546-548``, ``:599-602``). The copy always starts at the header word, so
+    the record carries a prefix of the packet rather than a set of offsets, and zero is a
+    legitimate count: a callback that reads nothing still has to be recorded as having run.
+
+    ``original`` is the handler this header had before the replacement, read from the client's array
+    by the host *before* it writes this stub there — the order ``EnableHooks`` uses (``stoc.cpp:121-126``:
+    copy the entry, then replace ``handler_func``). It is an immediate rather than a table entry
+    because each stub serves exactly one header.
+
+    ``inflight_address`` is a word the stub counts itself into while it runs, because a packet
+    handler can be called on a thread this controller does not own and code that is freed under a
+    live instruction pointer is how a client is taken down (``hooker.py:783-805``). It is taken on
+    entry and given back on the single path every exit goes through, so the count is balanced
+    whichever branch the packet's arrival takes, and zero is what the host waits for before it frees
+    this code.
+
+    The return value is native's: ``StoCHandler_Func`` ends ``return true`` (``stoc.cpp:102``).
+    """
+
+    if not 0 <= words <= EVENT_WORDS:
+        raise ValueError(
+            f"a packet event carries at most {EVENT_WORDS} words; {words} were asked for."
+        )
+
+    code = _Code()
+
+    code.emit(_PUSHAD)
+    if inflight_address:
+        code.emit(_inc_mem32(inflight_address))
+    code.emit(_mov_r32_imm32(_EBX, block_address))
+    code.emit(_TEST_EBX_EBX)
+    code.jcc(_JE, "packet_chain")
+
+    for field, expected in _HEADER_CHECKS:
+        code.emit(_cmp_mem_imm32(_EBX, HEADER_OFFSET[field], expected))
+        code.jcc(_JNE, "packet_chain")
+
+    # esi the packet, edi the record being built. The packet pointer is the client's own argument,
+    # read past our frame; the client hands a listener a packet and never a null one.
+    code.emit(_mov_r32_mem(_ESI, _ESP, _PACKET_ARGUMENT_OFFSET))
+
+    # The event region can be full, in which case the packet is recorded nowhere: the host is told
+    # nothing rather than the client being asked to wait. The chain below still runs.
+    code.emit(_mov_r32_mem(_EAX, _EBX, HEADER_OFFSET["event_written"]))
+    code.emit(_mov_r32_mem(_ECX, _EBX, HEADER_OFFSET["event_taken"]))
+    code.emit(_sub_r32_r32(_EAX, _ECX))
+    code.emit(_cmp_r32_imm8(_EAX, EVENT_DEPTH))
+    code.jcc(_JAE, "packet_chain")
+
+    code.emit(_mov_r32_mem(_EAX, _EBX, HEADER_OFFSET["event_written"]))
+    code.emit(_mov_r32_r32(_ECX, _EAX))
+    code.emit(_and_r32_imm8(_ECX, _EVENT_SLOT_MASK))
+    code.emit(_shl_r32_imm8(_ECX, _EVENT_SLOT_SHIFT))
+    code.emit(_lea_r32_mem(_EDI, _EBX, EVENT_REGION_OFFSET, _ECX))
+
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["kind"], int(kind)))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["sequence"], header))
+    for word in range(words):
+        code.emit(_mov_r32_mem(_ECX, _ESI, word * 4))
+        code.emit(_mov_mem_r32(_EDI, EVENT_WORDS_OFFSET + word * 4, _ECX))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["tick"], 0))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["reserved"], 0))
+    # A packet carries no string, and the record's other fields are written rather than left as
+    # whatever the previous event in this slot put there.
+    code.emit(_mov_mem_imm32(_EDI, EVENT_TEXT_STATE_OFFSET, EventTextState.ABSENT))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_TEXT_LENGTH_OFFSET, 0))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["word_count"], words))
+
+    code.emit(_INC_EAX)
+    code.emit(_mov_mem_r32(_EBX, HEADER_OFFSET["event_written"], _EAX))
+
+    code.label("packet_chain")
+    code.emit(_POPAD)
+    if original:
+        # The client's frame is on top again, exactly as it was when its dispatcher called this: the
+        # return address at [esp] and the packet at [esp + 4]. The original is called with the packet
+        # in the place it reads it from, and control comes back here afterwards, so native's own
+        # order holds — the saved original runs, then the entry answers ``true``
+        # (``stoc.cpp:91-102``).
+        code.emit(_PUSH_ARGUMENT)
+        code.emit(_mov_r32_imm32(_EAX, original))
+        code.emit(_call_r32(_EAX))
+        code.emit(_add_esp_imm8(4))
+    if inflight_address:
+        code.emit(_dec_mem32(inflight_address))
+    code.emit(_mov_r32_imm32(_EAX, 1))
+    code.emit(_CDECL_RET)
+
+    return code.assemble()
+
+
+def packet_stub_size(words: int = EVENT_WORDS) -> int:
+    """Return the packet stub's length for one header's own word count.
+
+    The form it measures is the one the port places: an original to chain to — the host reads it from
+    the client's array before it writes the stub there — and the in-flight count around the call.
+    """
+
+    return len(
+        build_packet_stub(0x10000000, 0x1000, words, 0x10001000, inflight_address=0x10002000)
+    )
 
 #: How far the decoder stub will scan the client's string looking for its terminator, in wide
 #: characters. Native reads the string with ``wcslen`` inside an SEH frame

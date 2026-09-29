@@ -1,0 +1,127 @@
+{
+  "pid": 44052,
+  "elevated": true,
+  "module": {
+    "base": "0xa20000",
+    "end": "0x1969000"
+  },
+  "table": "0x20b32ec",
+  "entries_before": [
+    {
+      "header": "0x84",
+      "entry": "0x2141cf0",
+      "before": "0xe070000",
+      "recorded": "0xf3f1a0",
+      "action": "restored",
+      "recovered_from_stub": "0xf3f1a0",
+      "target": "0xf3f1a0",
+      "source": "the orphaned stub's own chained-original immediate",
+      "after": "0xf3f1a0"
+    },
+    {
+      "header": "0x85",
+      "entry": "0x2141cfc",
+      "before": "0xe080000",
+      "recorded": "0xf3f1c0",
+      "action": "restored",
+      "recovered_from_stub": "0xf3f1c0",
+      "target": "0xf3f1c0",
+      "source": "the orphaned stub's own chained-original immediate",
+      "after": "0xf3f1c0"
+    },
+    {
+      "header": "0x86",
+      "entry": "0x2141d08",
+      "before": "0xe090000",
+      "recorded": "0xf3f1e0",
+      "action": "restored",
+      "recovered_from_stub": "0xf3f1e0",
+      "target": "0xf3f1e0",
+      "source": "the orphaned stub's own chained-original immediate",
+      "after": "0xf3f1e0"
+    },
+    {
+      "header": "0xcc",
+      "entry": "0x2142050",
+      "before": "0xe0a0000",
+      "recorded": "0xf3fd00",
+      "action": "restored",
+      "recovered_from_stub": "0xf3fd00",
+      "target": "0xf3fd00",
+      "source": "the orphaned stub's own chained-original immediate",
+      "after": "0xf3fd00"
+    },
+    {
+      "header": "0xf7",
+      "entry": "0x2142254",
+      "before": "0xe0b0000",
+      "recorded": "0xf402f0",
+      "action": "restored",
+      "recovered_from_stub": "0xf402f0",
+      "target": "0xf402f0",
+      "source": "the orphaned stub's own chained-original immediate",
+      "after": "0xf402f0"
+    }
+  ],
+  "entries_matching_the_record": 0,
+  "entries_recoverable_from_stub": 5,
+  "entries_after": [
+    {
+      "header": "0x84",
+      "entry": "0x2141cf0",
+      "before": "0xe070000",
+      "recorded": "0xf3f1a0",
+      "action": "restored",
+      "recovered_from_stub": "0xf3f1a0",
+      "target": "0xf3f1a0",
+      "source": "the orphaned stub's own chained-original immediate",
+      "after": "0xf3f1a0"
+    },
+    {
+      "header": "0x85",
+      "entry": "0x2141cfc",
+      "before": "0xe080000",
+      "recorded": "0xf3f1c0",
+      "action": "restored",
+      "recovered_from_stub": "0xf3f1c0",
+      "target": "0xf3f1c0",
+      "source": "the orphaned stub's own chained-original immediate",
+      "after": "0xf3f1c0"
+    },
+    {
+      "header": "0x86",
+      "entry": "0x2141d08",
+      "before": "0xe090000",
+      "recorded": "0xf3f1e0",
+      "action": "restored",
+      "recovered_from_stub": "0xf3f1e0",
+      "target": "0xf3f1e0",
+      "source": "the orphaned stub's own chained-original immediate",
+      "after": "0xf3f1e0"
+    },
+    {
+      "header": "0xcc",
+      "entry": "0x2142050",
+      "before": "0xe0a0000",
+      "recorded": "0xf3fd00",
+      "action": "restored",
+      "recovered_from_stub": "0xf3fd00",
+      "target": "0xf3fd00",
+      "source": "the orphaned stub's own chained-original immediate",
+      "after": "0xf3fd00"
+    },
+    {
+      "header": "0xf7",
+      "entry": "0x2142254",
+      "before": "0xe0b0000",
+      "recorded": "0xf402f0",
+      "action": "restored",
+      "recovered_from_stub": "0xf402f0",
+      "target": "0xf402f0",
+      "source": "the orphaned stub's own chained-original immediate",
+      "after": "0xf402f0"
+    }
+  ],
+  "restored": 5,
+  "note": "a write, and only where an entry was not the client's own code. Nothing was called, no hook was placed and no connection was made: this puts back what a killed controller left behind."
+}

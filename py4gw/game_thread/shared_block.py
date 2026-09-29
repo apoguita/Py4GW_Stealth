@@ -56,7 +56,12 @@ MAGIC = 0x4B4C4253
 #: copy is what makes a dialog button's label readable at all: the pointer the client announces
 #: is a buffer it reuses, so the string has to be read **inside the client's own call** and
 #: carried out with the event (``docs/RESEARCH.md``, 2026-09-25).
-VERSION = 5
+#:
+#: 6: an event record gained a bounded copy of a packet's own words, for the same reason the
+#: string is copied: a packet is the client's buffer and it is reused, so the words a StoC
+#: callback reads have to be read where that callback runs. The record is the room both copies
+#: fit in, so it is larger and every offset after the event region moved.
+VERSION = 6
 
 HEADER_SIZE = 64
 COMMAND_DEPTH = 16
@@ -91,16 +96,33 @@ WATCH_STRING_OFFSET = 4
 #: read on for ever. Seven times the largest dialog text this project has measured (a 134-byte
 #: table entry, 67 units) — a longer string is reported as unterminated rather than truncated,
 #: because half a string decodes to the wrong text.
-#:
-#: A record's own words end at 40 and its text starts at 64, so the six words between them are
-#: unused room rather than a promise, and the text's 960 bytes bring the record to the 1024 the
-#: observer's shift needs.
 EVENT_TEXT_WORDS = 480
 EVENT_TEXT_STATE_OFFSET = 32
 EVENT_TEXT_LENGTH_OFFSET = 36
 EVENT_TEXT_OFFSET = 64
 EVENT_TEXT_SIZE = EVENT_TEXT_WORDS * 2
-EVENT_SIZE = EVENT_TEXT_OFFSET + EVENT_TEXT_SIZE
+
+#: How many words of a packet an event carries. A packet is copied for the same reason a message's
+#: string is: it is the client's own buffer, reused for the next packet, so the fields a StoC
+#: callback reads have to be read where that callback runs — inside the client's dispatch — and
+#: carried out with the event.
+#:
+#: Eighteen is native's widest watched packet, read whole: ``WindowItems`` is ``header``,
+#: ``count``, and ``item_ids[16]`` (``stoc.h:356-359``), which is what
+#: ``OnNormalMerchantItemsReceived(pak->item_ids, pak->count)`` reads (``listeners.cpp:115-119``).
+#: A shorter packet is copied by its own shorter count — the emitted stub is built per header and
+#: copies exactly what that header's source struct declares.
+EVENT_WORDS = 18
+EVENT_WORDS_OFFSET = EVENT_TEXT_OFFSET + EVENT_TEXT_SIZE
+EVENT_WORDS_SIZE = EVENT_WORDS * 4
+
+#: A record's size, which has to be a power of two: the emitted payload addresses a record by
+#: shifting its slot (``payload.py``). The two copies end at ``EVENT_WORDS_OFFSET +
+#: EVENT_WORDS_SIZE``; the room between there and here is padding rather than a promise, the same
+#: as the command slot's unused words. The record's own fields are eleven words — ``word_count``
+#: is the last — so they reach ``EVENT_TEXT_OFFSET`` with room to spare, and the bytes between
+#: the two are neither written by the payload nor read by the host.
+EVENT_SIZE = 2048
 
 COMMAND_REGION_OFFSET = HEADER_SIZE
 EVENT_REGION_OFFSET = COMMAND_REGION_OFFSET + COMMAND_DEPTH * COMMAND_SIZE
@@ -160,9 +182,12 @@ BLOCK_SIZE = DECODE_REGION_OFFSET + DECODE_DEPTH * DECODE_SLOT_SIZE
 _HEADER = struct.Struct("<16I")
 #: ``result`` is the one signed field: the call path's refusals are negative codes.
 _COMMAND = struct.Struct("<9IiI")
-#: An event's words, and then its copy of the string the watched message named
-#: (``EVENT_TEXT_OFFSET``), which is code units rather than words and is written separately.
-_EVENT = struct.Struct("<10I")
+#: An event's words, and then the two bounded copies it can carry: the string a watched message
+#: named (``EVENT_TEXT_OFFSET``), which is code units, and a packet's own words
+#: (``EVENT_WORDS_OFFSET``). The first ten words are the record's fields — the copy's state, its
+#: length in code units, and how many packet words follow — and both copies are written
+#: separately because neither is one of those words.
+_EVENT = struct.Struct("<11I")
 _DESCRIPTOR = struct.Struct("<2I")
 
 _COMMAND_FIELDS = (
@@ -190,6 +215,7 @@ _EVENT_FIELDS = (
     "reserved",
     "text_state",
     "text_length",
+    "word_count",
 )
 
 _DESCRIPTOR_FIELDS = (
@@ -350,6 +376,21 @@ class CallForm(IntEnum):
     #: leave the stack twelve bytes short of where the callee left it.
     FASTCALL_U32_U32_U32 = 9
 
+    #: ``void __cdecl(TransactionType, uint32_t, TransactionInfo, uint32_t, TransactionInfo)`` and
+    #: ``void __cdecl(TransactionType, uint32_t, QuoteInfo, QuoteInfo)``: the two merchant calls, whose
+    #: records travel **by value** (``merchant_methods.cpp:10-11``, ``ui.h:364-374``). By value is the
+    #: whole point and cannot be replaced by a pointer form: the callee reads its arguments off the
+    #: stack at the offsets the structs fix, so the words have to be pushed — nine for the first call
+    #: (``type``, ``gold_give``, three of ``give``, ``gold_recv``, three of ``recv``) and eight for the
+    #: second. They do not fit a command record, so ``arg1`` names where they sit in the block's **data
+    #: region** and ``arg2`` says how many there are; the payload checks that span against the region,
+    #: pushes the words right to left, and releases them afterwards — which is what ``__cdecl``
+    #: requires of its caller.
+    #:
+    #: This is the one form whose arguments are not carried in the command: they are the caller's own
+    #: records, written where the source builds its structures.
+    STACK_WORDS = 10
+
 
 def float_bits(value: float) -> int:
     """Return one ``float`` as the ``uint32`` a command word carries.
@@ -390,6 +431,14 @@ class EventKind(IntEnum):
     #: observer records the call and the host reads it. The argument travels in the record's
     #: ``sequence`` (it is what the watch list matched) and in ``arg0``.
     EFFECT_INTENSITY = 4
+    #: A StoC packet the client's own dispatcher handed to a handler this project replaced. Native
+    #: has no such event because its handler is its own function, called inside the client; here the
+    #: packet stub records it and the host reads it, so it travels the same channel every other
+    #: thing the client tells this project travels. The packet's header travels in ``sequence`` —
+    #: ``PacketBase``'s first word, which is also what indexes the handler array (``stoc.cpp:80``) —
+    #: and the packet's own words in the record's word copy (``EVENT_WORDS_OFFSET``), as many as
+    #: that header's listener reads and counted by ``word_count``.
+    PACKET = 5
     UI_MESSAGE = 63
 
 
@@ -448,11 +497,14 @@ RESULT_UNKNOWN_OPERATION = -100
 
 #: The call path's refusals. -101 and -102 are the earlier design's values for
 #: these same two cases. -103 and -104 are this project's: that design had no
-#: typed forms and named no descriptor slots.
+#: typed forms and named no descriptor slots. -105 is this project's too: a form whose arguments
+#: travel in the data region has a span that can name words the region does not hold, which is a
+#: different refusal from a form the payload does not know.
 RESULT_NO_TARGET = -101
 RESULT_BAD_TARGET = -102
 RESULT_UNKNOWN_FORM = -103
 RESULT_BAD_DESCRIPTOR = -104
+RESULT_BAD_ARGUMENTS = -105
 
 
 def _check_uint32(name: str, value: int) -> None:
@@ -840,6 +892,11 @@ class EventRecord:
     message names no string or names a null one, and ``text_state`` says which of the three
     outcomes it was (:class:`EventTextState`); a caller that needs the difference between "no
     string" and "a string with no terminator inside the bound" reads that word.
+
+    ``words`` is the copy the packet stub took of a packet's own words — the packet as far as
+    its listener reads it, the header first, exactly the fields native's own callback reads off
+    the pointer it was handed (``listeners.cpp:99-119``). It is empty for every other kind, and
+    ``sequence`` carries the header the stub was placed for.
     """
 
     kind: int
@@ -851,6 +908,7 @@ class EventRecord:
     tick: int = 0
     text_state: int = EventTextState.ABSENT
     text: tuple[int, ...] = ()
+    words: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         """Reject anything the record cannot carry."""
@@ -868,11 +926,18 @@ class EventRecord:
             _check_uint16("text unit", unit)
         if self.text_state is EventTextState.ABSENT and self.text:
             raise ValueError("an event with no string cannot carry text")
+        if len(self.words) > EVENT_WORDS:
+            raise ValueError(
+                f"an event carries at most {EVENT_WORDS} packet words; "
+                f"{len(self.words)} were given"
+            )
+        for word in self.words:
+            _check_uint32("packet word", word)
 
     def to_bytes(self) -> bytes:
         """Return the record in its fixed ``EVENT_SIZE``-byte form."""
 
-        words = _EVENT.pack(
+        fields = _EVENT.pack(
             self.kind,
             self.sequence,
             self.arg0,
@@ -883,13 +948,17 @@ class EventRecord:
             0,
             int(self.text_state),
             len(self.text),
+            len(self.words),
         )
         text = b"".join(struct.pack("<H", unit) for unit in self.text)
+        packet = b"".join(struct.pack("<I", word) for word in self.words)
         return (
-            words
+            fields
             + bytes(EVENT_TEXT_OFFSET - _EVENT.size)
             + text
             + bytes(EVENT_TEXT_SIZE - len(text))
+            + packet
+            + bytes(EVENT_SIZE - EVENT_WORDS_OFFSET - len(packet))
         )
 
     @classmethod
@@ -910,6 +979,7 @@ class EventRecord:
             reserved,
             text_state,
             text_length,
+            word_count,
         ) = _EVENT.unpack(raw[: _EVENT.size])
         if reserved != 0:
             raise ValueError("event reserved field must be zero")
@@ -918,10 +988,22 @@ class EventRecord:
                 f"event text length {text_length} is past the {EVENT_TEXT_WORDS} "
                 "code units a record carries"
             )
+        if word_count > EVENT_WORDS:
+            raise ValueError(
+                f"event word count {word_count} is past the {EVENT_WORDS} packet words "
+                "a record carries"
+            )
 
         text = tuple(
             struct.unpack_from("<H", raw, EVENT_TEXT_OFFSET + index * 2)[0]
             for index in range(text_length)
+        )
+        # Read to the count the stub wrote, which is the number of words that header's own packet
+        # fields occupy: the rest of the area still holds whatever the previous record in this
+        # slot left there, so it is not read at all.
+        words = tuple(
+            struct.unpack_from("<I", raw, EVENT_WORDS_OFFSET + index * 4)[0]
+            for index in range(word_count)
         )
         return cls(
             kind=kind,
@@ -933,6 +1015,7 @@ class EventRecord:
             tick=tick,
             text_state=text_state,
             text=text,
+            words=words,
         )
 
 

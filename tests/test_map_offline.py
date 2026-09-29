@@ -603,6 +603,8 @@ class BlockRegionTests(unittest.TestCase):
         ("py4gw.ui_manager", "_SETTINGS_OFFSET", 0xC40, 0x40),
         ("py4gw.ui.preferences", "_STRING_ARGUMENT_OFFSET", 0xD00, 0x100),
         ("py4gw.ui_manager", "_UI_PAYLOAD_OFFSET", 0xE00, 0x40),
+        ("py4gw.game_thread.packets", "PACKET_POINTER_OFFSET/_PACKET_INFLIGHT_OFFSET", 0xF50, 0x08),
+        ("py4gw.merchant", "MERCHANT_OFFSET (ids, quantities, record, received id)", 0x100, 0xE8),
     )
 
     #: The three overlaps between modules **this suite does not own**. Recorded, not asserted away:
@@ -629,10 +631,20 @@ class BlockRegionTests(unittest.TestCase):
 
         import py4gw.map as map_module
         from py4gw import map_methods
+        from py4gw.game_thread import packets as packets_module
+        from py4gw import merchant as merchant_module
 
         self.assertEqual(map_module._UI_STATE_OFFSET, 0xF40)
         self.assertEqual(map_methods._TRAVEL_OFFSET, 0xF00)
         self.assertEqual(map_methods._GHKEY_OFFSET, 0xF20)
+        self.assertEqual(packets_module.PACKET_POINTER_OFFSET, 0xF50)
+        self.assertEqual(packets_module.PACKET_INFLIGHT_OFFSET, 0xF54)
+        self.assertEqual(merchant_module.MERCHANT_OFFSET, 0x100)
+        self.assertEqual(
+            merchant_module.RECEIVED_ID_OFFSET + 4,
+            merchant_module.MERCHANT_OFFSET + 0xE8,
+            "the merchant span ends where the table says it does",
+        )
 
     def test_the_map_family_sits_in_a_gap_between_other_modules(self) -> None:
         """Each Map-family span fits between the region before it and the one after it.

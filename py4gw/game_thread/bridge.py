@@ -30,6 +30,7 @@ import time
 from collections.abc import Mapping, Sequence
 
 from .hooker import Hooker, WritableTarget
+from .packets import PacketHooks, PacketStub, read_handler_table
 from .patcher import PAGE_EXECUTE_READ
 from .payload import build_decoder_stub, build_dispatcher, build_observer, build_slot_capture
 from .shared_block import (
@@ -160,6 +161,10 @@ class Bridge:
         self._hooker: Hooker | None = None
         self._observer_hooker: Hooker | None = None
         self._effects_hooker: Hooker | None = None
+        #: The client's StoC handler entries this bridge replaced, if a listener asked for any. They
+        #: are not hooks: the entry is a pointer in the client's own array (``packets.py``), and the
+        #: array address and every saved original live here so ``remove`` can put them back.
+        self._packets: PacketHooks | None = None
         #: One use of the command ring at a time. Every publish goes through :meth:`publish`,
         #: and a call holds this across its wait as well, so two threads cannot interleave
         #: their publishes. It is **reentrant** because a call *is* a publish: ``call`` takes
@@ -242,10 +247,96 @@ class Bridge:
         return self._block_address
 
     @property
+    def access(self) -> WritableTarget:
+        """Return the transport this bridge reads and writes the client through.
+
+        The bridge owns it and a caller does not: it is exposed because the pieces the bridge places
+        — the packet hooks that replace entries in the client's own handler array — read through the
+        same transport, and they are given this bridge rather than a copy of it.
+        """
+
+        return self._access
+
+    @property
+    def module_range(self) -> tuple[int, int]:
+        """Return the client module's start and size, which is where its own code lives.
+
+        The call path bounds every target to this range inside the client, and the packet hooks use
+        it to tell the client's own handler from a pointer somebody else placed (``packets.py``).
+        """
+
+        return self._module_base, self._module_size
+
+    @property
     def call_table_address(self) -> int:
         """Return where the call table is, or zero before it is placed."""
 
         return self._call_table_address
+
+    # -- the client's packet handlers --------------------------------------
+
+    def install_packets(
+        self, table_address: int, wanted: Mapping[int, int]
+    ) -> tuple[PacketStub, ...]:
+        """Replace the client's handler for each wanted header, and return what was placed.
+
+        ``table_address`` is where the resolver ``stoc.handler_table_addr`` points — the address of
+        the client's ``GameServer*`` variable, which is native's own reading of it
+        (``stoc_patterns.cpp:43``). ``wanted`` maps a header to how many of that packet's words its
+        listener reads.
+
+        This is the one thing this project places that changes how the client dispatches **its own**
+        packets, so it is asked for explicitly and by name rather than folded into ``install``: a
+        connection that only reads never calls it, and every entry it takes is restored by
+        :meth:`remove_packets` before anything is freed.
+        """
+
+        if self._packets is not None and self._packets.headers:
+            raise RuntimeError(
+                f"pid {self._pid}: headers {self._packets.headers} are already replaced."
+            )
+        hooks = PacketHooks(self)
+        placed = hooks.install(table_address, wanted)
+        self._packets = hooks
+        return placed
+
+    def remove_packets(self, free_code: bool = False) -> tuple[int, ...]:
+        """Put the client's own handlers back, and free the stubs' code when it is safe to.
+
+        ``free_code`` is what a routine disconnect asks for; see :meth:`PacketHooks.remove` for why
+        it waits on the stubs' in-flight count before releasing anything.
+        """
+
+        hooks, self._packets = self._packets, None
+        if hooks is None:
+            return ()
+        return hooks.remove(free_code=free_code)
+
+    @property
+    def packet_headers(self) -> tuple[int, ...]:
+        """Return the headers whose handlers are this project's code right now."""
+
+        return () if self._packets is None else self._packets.headers
+
+    @property
+    def packets(self) -> PacketHooks | None:
+        """Return the packet hooks, or ``None`` when no header is replaced."""
+
+        return self._packets
+
+    def packet_table(self):
+        """Return the client's handler array as last read, or ``None``."""
+
+        return None if self._packets is None else self._packets.table
+
+    def read_packet_table(self, table_address: int):
+        """Walk to the client's handler array without replacing anything in it.
+
+        A read, for a caller that wants to see the table before it decides to replace an entry — the
+        same walk :meth:`install_packets` does, on its own.
+        """
+
+        return read_handler_table(self._access, table_address)
 
     @property
     def dispatcher_address(self) -> int:
@@ -310,6 +401,11 @@ class Bridge:
 
         session = _new_session_id() if session_id is None else session_id
         block_address = self._access.allocate(BLOCK_SIZE)
+        #: The module the calls are bounded to. Kept, because the packet hooks ask the same question
+        #: of the client's own handler pointers: a handler outside the module is not the client's own
+        #: code, and chaining to one is how a dead controller takes the client down later.
+        self._module_base = module_base
+        self._module_size = module_size
         table_address = 0
         watch_address = 0
         observer_address = 0
@@ -542,7 +638,14 @@ class Bridge:
     def remove(self, free_allocations: bool = False) -> None:
         """Disable dispatch and restore both hooked functions' own bytes.
 
-        Both hooks come out, the observing one first: it is the one on a function
+        **The client's packet handlers go back first**, and the reason is mechanical rather than
+        tidy: writing an entry back is a ``WRITE_MEMORY`` command, which runs on the game thread
+        inside the hooked function this bridge placed — so it needs the block and the dispatcher
+        hook, both of which the rest of this method takes away. A stub whose code was freed while the
+        client still points at it is how a client is taken down, so nothing is released before every
+        entry is back.
+
+        Both hooks come out next, the observing one first: it is the one on a function
         the client calls constantly, so it is the one worth removing soonest.
 
         ``free_allocations`` releases everything this bridge placed — the block,
@@ -557,6 +660,8 @@ class Bridge:
         address is how a controller takes the client down with it; the caller drains first
         (``ConnectedClient.close`` does, through the dialog module's own shutdown).
         """
+
+        self.remove_packets(free_code=free_allocations)
 
         if self.observing_render and self._capture_hooker is not None:
             self._capture_hooker.remove(RENDER_CAPTURE_NAME, free_code=free_allocations)

@@ -29,9 +29,11 @@ from py4gw.game_thread.payload import (
     build_decoder_stub,
     build_dispatcher,
     build_observer,
+    build_packet_stub,
     build_slot_capture,
     decoder_stub_size,
     dispatcher_size,
+    packet_stub_size,
 )
 from py4gw.game_thread.shared_block import (
     COMMAND_DEPTH,
@@ -41,11 +43,14 @@ from py4gw.game_thread.shared_block import (
     DESCRIPTOR_DEPTH,
     EVENT_DEPTH,
     EVENT_TEXT_WORDS,
+    EVENT_WORDS,
+    EVENT_WORDS_OFFSET,
     HEADER_OFFSET,
     HEADER_SIZE,
     MAGIC,
     PING_RESULT,
     RESULT_BAD_DESCRIPTOR,
+    RESULT_BAD_ARGUMENTS,
     RESULT_BAD_TARGET,
     RESULT_NO_TARGET,
     RESULT_UNKNOWN_FORM,
@@ -59,6 +64,7 @@ from py4gw.game_thread.shared_block import (
     DecodeState,
     Descriptor,
     EventKind,
+    EventRecord,
     EventTextState,
     Operation,
     decode_slot_offset,
@@ -72,6 +78,7 @@ from py4gw.game_thread.shared_block import (
     read_header,
     write_command,
     write_decode_request,
+    write_event,
 )
 
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -451,6 +458,36 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(event.arg0, 99)
         self.assertEqual(event.arg1, CommandState.FAILED)
         self.assertEqual(event.arg2, RESULT_UNKNOWN_OPERATION & UINT32_MASK)
+
+    def test_a_completion_event_carries_neither_a_string_nor_a_packet(self) -> None:
+        """A slot is reused, so the copies of the record before this one are cleared, not read.
+
+        The event that used this slot last may have been a message with a string or a packet with
+        eighteen words, and neither belongs to this record.
+        """
+
+        image = self.block.read()
+        write_event(
+            image,
+            0,
+            EventRecord(
+                kind=EventKind.PACKET,
+                sequence=0x2F,
+                text=tuple(range(32)),
+                text_state=EventTextState.COPIED,
+                words=tuple(range(EVENT_WORDS)),
+            ),
+        )
+        self.block.write(image)
+        self.block.publish(CommandRecord(sequence=4, operation=Operation.PING))
+
+        self.dispatcher(self.block.address)
+
+        event = self.block.event(0)
+        self.assertEqual(event.kind, EventKind.COMMAND_COMPLETE)
+        self.assertEqual(event.words, ())
+        self.assertEqual(event.text, ())
+        self.assertEqual(event.text_state, EventTextState.ABSENT)
 
     def test_the_event_ring_wraps(self) -> None:
         block = self.block
@@ -1000,6 +1037,12 @@ class SourceAbiFormTests(unittest.TestCase):
                 cls.fastcall_witness.address, word_count=0, fastcall_words=3
             )
         )
+        #: The stack form's own witness: nine words, which is the widest by-value record the sources
+        #: declare here (``SendMerchantTransactItemPacket``, ``ui.h:402-408``).
+        cls.stack_witness = ArgumentWitness()
+        cls.stack_target = EmittedCode(
+            cls.stack_witness.code(cls.stack_witness.address, word_count=9)
+        )
         cls.targets = (
             cls.none_target,
             cls.one_target,
@@ -1008,6 +1051,7 @@ class SourceAbiFormTests(unittest.TestCase):
             cls.float_target,
             cls.five_target,
             cls.fastcall_target,
+            cls.stack_target,
         )
         cls.witnesses = (
             cls.none_witness,
@@ -1017,6 +1061,7 @@ class SourceAbiFormTests(unittest.TestCase):
             cls.float_witness,
             cls.five_witness,
             cls.fastcall_witness,
+            cls.stack_witness,
         )
         cls.table = WitnessBuffer(DESCRIPTOR_DEPTH * 8)
         low = min(target.address for target in cls.targets) & ~0xFFFF
@@ -1074,6 +1119,13 @@ class SourceAbiFormTests(unittest.TestCase):
             Descriptor(
                 target=self.fastcall_target.address,
                 form=CallForm.FASTCALL_U32_U32_U32,
+            ),
+        )
+        self.table.write_descriptor(
+            7,
+            Descriptor(
+                target=self.stack_target.address,
+                form=CallForm.STACK_WORDS,
             ),
         )
 
@@ -1241,6 +1293,104 @@ class SourceAbiFormTests(unittest.TestCase):
 
         self.assertEqual(record.state, CommandState.DONE)
         self.assertEqual(record.result, 0)
+
+    # -- STACK_WORDS -------------------------------------------------------
+
+    #: Where these tests put the caller's record: a region-relative offset well inside the block's
+    #: data region, and far from anything else this suite writes.
+    RECORD_OFFSET = 0x100
+
+    def write_record(self, words: Sequence[int]) -> None:
+        """Place the caller's own words in the block's data region, as a member does."""
+
+        image = self.block.read()
+        start = DATA_REGION_OFFSET + self.RECORD_OFFSET
+        payload = b"".join(struct.pack("<I", word) for word in words)
+        image[start : start + len(payload)] = payload
+        self.block.write(image)
+
+    def test_the_stack_form_pushes_the_callers_own_words_in_order(self) -> None:
+        """``TransactItemFn``'s nine words, off the stack, first-declared first (``merchant_methods.cpp:10``).
+
+        Nine is the widest by-value record the sources declare here — ``type``, ``gold_give``, the
+        three words of ``give``, ``gold_recv`` and the three of ``recv``. The order is the whole
+        point: a record pushed the other way round still returns, and the callee reads a
+        ``TransactionInfo`` where its ``TransactionType`` should be.
+        """
+
+        words = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99]
+        self.write_record(words)
+
+        record = self.call(7, arg1=self.RECORD_OFFSET, arg2=9)
+
+        self.assertTrue(self.stack_witness.called())
+        self.assertEqual(self.stack_witness.first_word(), 0x11)
+        self.assertEqual(self.stack_witness.words(8), words[1:])
+        self.assertEqual(record.state, CommandState.DONE)
+
+    def test_the_stack_form_reads_only_the_words_it_was_told_about(self) -> None:
+        """The count is what travels; the callee sees exactly that many words."""
+
+        self.write_record([0xA0, 0xA1, 0xA2, 0xA3, 0xA4])
+
+        self.call(7, arg1=self.RECORD_OFFSET, arg2=5)
+
+        self.assertEqual(self.stack_witness.first_word(), 0xA0)
+        self.assertEqual(self.stack_witness.words(4), [0xA1, 0xA2, 0xA3, 0xA4])
+
+    def test_the_stack_form_reads_the_record_where_the_caller_put_it(self) -> None:
+        """``arg1`` is a data-region offset, so a second record at another offset is another call."""
+
+        self.write_record([0xB0, 0xB1, 0xB2])
+        image = self.block.read()
+        start = DATA_REGION_OFFSET + self.RECORD_OFFSET + 0x40
+        image[start : start + 12] = struct.pack("<3I", 0xC0, 0xC1, 0xC2)
+        self.block.write(image)
+
+        self.call(7, arg1=self.RECORD_OFFSET + 0x40, arg2=3)
+
+        self.assertEqual(self.stack_witness.first_word(), 0xC0)
+        self.assertEqual(self.stack_witness.words(2), [0xC1, 0xC2])
+
+    def test_the_stack_form_releases_what_it_pushed(self) -> None:
+        """``__cdecl``: the caller releases its own words, so the stack comes back where it was."""
+
+        self.write_record([1, 2, 3, 4, 5, 6, 7, 8, 9])
+        self.call(7, arg1=self.RECORD_OFFSET, arg2=9)
+        first = self.stack_witness.entry_esp()
+        self.call(7, arg1=self.RECORD_OFFSET, arg2=9)
+
+        self.assertEqual(self.stack_witness.entry_esp(), first)
+
+    def test_a_span_past_the_data_region_is_refused_before_anything_is_pushed(self) -> None:
+        """The words live in the block, so a count that ran past it would push the block's neighbours.
+
+        This is the one form whose arguments are not in the command record, and the refusal is its
+        own: the form is known, and the span it named is not.
+        """
+
+        for offset, count in (
+            (self.RECORD_OFFSET, 4096),
+            (DATA_REGION_OFFSET - 4, 2),
+            (DATA_REGION_OFFSET, 1),
+        ):
+            with self.subTest(offset=offset, count=count):
+                self.stack_witness.clear()
+
+                record = self.call(7, arg1=offset, arg2=count)
+
+                self.assertEqual(record.state, CommandState.FAILED)
+                self.assertEqual(record.result, RESULT_BAD_ARGUMENTS)
+                self.assertFalse(self.stack_witness.called())
+
+    def test_a_stack_form_with_no_words_is_refused(self) -> None:
+        """A zero count is not a call with no arguments — ``NO_ARGS`` is that form."""
+
+        record = self.call(7, arg1=self.RECORD_OFFSET, arg2=0)
+
+        self.assertEqual(record.state, CommandState.FAILED)
+        self.assertEqual(record.result, RESULT_BAD_ARGUMENTS)
+        self.assertFalse(self.stack_witness.called())
 
     # -- FLOAT_PTR ---------------------------------------------------------
 
@@ -1714,6 +1864,28 @@ class ObserverTests(unittest.TestCase):
         self.assertEqual(events[1].text_state, EventTextState.ABSENT)
         self.assertEqual(events[1].text, ())
 
+    def test_a_message_event_carries_no_packet_words(self) -> None:
+        """A message is not a packet, so the words a packet event left in this slot are cleared."""
+
+        image = self.block.read()
+        write_event(
+            image,
+            1,
+            EventRecord(
+                kind=EventKind.PACKET,
+                sequence=0x2F,
+                words=tuple(range(EVENT_WORDS)),
+            ),
+        )
+        self.block.write(image)
+
+        self.observe(self.MESSAGE, self.packet.address)
+
+        events = self.events()
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].kind, EventKind.UI_MESSAGE)
+        self.assertEqual(events[0].words, ())
+
     def test_an_observer_without_a_watch_list_records_nothing(self) -> None:
         observer = EmittedCode(build_observer(0))
         self.addCleanup(observer.close)
@@ -1950,6 +2122,364 @@ class DecoderStubTests(unittest.TestCase):
         after = self.block.read()
         self.assertEqual(read_decode_state(after, 1), DecodeState.IN_FLIGHT)
         self.assertEqual(read_decode_result(after, 1), ("", False))
+
+
+class PacketStubTests(unittest.TestCase):
+    """The packet stub: a StoC packet the client's dispatcher handed to our code.
+
+    It is called here exactly as the client calls a handler — ``bool __cdecl(PacketBase*)``, with a
+    packet in this test's memory — and the two things that matter are witnessed: the event it
+    writes, and that the **original handler still ran**, because a replacement that does not chain
+    silently stops the client from handling its own packets.
+    """
+
+    #: The header this stub is built for, and how much of the packet it is built to read. The
+    #: counts are per header in the source: ``WindowItems`` is the widest watched packet.
+    HEADER = 0x2F
+    WORDS = 18
+
+    #: What a handler returns when the stub does not chain to one.
+    STUB_RETURN = 1
+
+    #: What the witness original returns, so a call that reached it can be told from one that
+    #: returned the stub's own value.
+    ORIGINAL_RETURN = 0xBEEF
+
+    #: Where the witness original writes the pointer it was handed, and that it ran at all.
+    CHAIN_POINTER_OFFSET = 0
+    CHAIN_CANARY_OFFSET = 4
+    CHAIN_CANARY = 0x00C0FFEE
+
+    def setUp(self) -> None:
+        self.block = FakeBlock()
+        self.packet = WitnessBuffer(EVENT_WORDS * 4 + 32)
+        self.chained = WitnessBuffer(8)
+        #: The word the stub counts itself into, which the host waits on before it frees the code.
+        self.inflight = WitnessBuffer(4)
+        self.original_code = EmittedCode(self._original_code())
+
+    def tearDown(self) -> None:
+        self.original_code.close()
+
+    # -- the stub this test drives -----------------------------------------
+
+    def _original_code(self) -> bytes:
+        """Emit the witness original: ``u32 __cdecl(void* packet)``.
+
+        It records the pointer it was handed and returns a value of its own, which is what makes
+        "the original ran, with this packet" and "the stub returned instead" different answers.
+        """
+
+        body = bytearray()
+        body += bytes((0x8B, 0x44, 0x24, 0x04))  # mov eax, [esp+4]
+        body += bytes((0xA3,)) + struct.pack(
+            "<I", self.chained.address + self.CHAIN_POINTER_OFFSET
+        )
+        body += bytes((0xC7, 0x05)) + struct.pack(
+            "<II", self.chained.address + self.CHAIN_CANARY_OFFSET, self.CHAIN_CANARY
+        )
+        body += bytes((0xB8,)) + struct.pack("<I", self.ORIGINAL_RETURN)  # mov eax, imm32
+        body.append(0xC3)
+        return bytes(body)
+
+    def chained_pointer(self) -> int:
+        """Return the packet pointer the original was handed."""
+
+        return int.from_bytes(
+            self.chained.raw[
+                self.CHAIN_POINTER_OFFSET : self.CHAIN_POINTER_OFFSET + 4
+            ],
+            "little",
+        )
+
+    def chained_ran(self) -> bool:
+        """Return whether the original handler was reached."""
+
+        return (
+            int.from_bytes(
+                self.chained.raw[
+                    self.CHAIN_CANARY_OFFSET : self.CHAIN_CANARY_OFFSET + 4
+                ],
+                "little",
+            )
+            == self.CHAIN_CANARY
+        )
+
+    def build(
+        self,
+        words: int | None = None,
+        original: int | None = None,
+        block_address: int | None = None,
+    ) -> EmittedCode:
+        """Place a stub for this test's block, and return it as callable code."""
+
+        code = build_packet_stub(
+            self.block.address if block_address is None else block_address,
+            self.HEADER,
+            self.WORDS if words is None else words,
+            self.original_code.address if original is None else original,
+            inflight_address=self.inflight.address,
+        )
+        return EmittedCode(code)
+
+    def call(
+        self,
+        words: int | None = None,
+        packet: int | None = None,
+        original: int | None = None,
+        block_address: int | None = None,
+    ) -> int:
+        """Run one stub the way the client's dispatcher would, and return what it returned."""
+
+        stub = self.build(words, original, block_address)
+        try:
+            call = ctypes.CFUNCTYPE(ctypes.c_uint32, ctypes.c_void_p)(stub.address)
+            returned = int(
+                call(
+                    self.packet.address if packet is None else packet,
+                )
+            )
+            # The count is taken on entry and given back on the way out, whichever branch the call
+            # took: a stub that left it standing would make the host wait for ever before it freed
+            # the code, and the wait is what makes freeing it safe.
+            self.assertEqual(
+                self.in_flight(),
+                0,
+                "the stub did not give its in-flight count back",
+            )
+            return returned
+        finally:
+            stub.close()
+
+    def in_flight(self) -> int:
+        """Return the count the stub keeps while it runs."""
+
+        return int.from_bytes(self.inflight.raw[:4], "little")
+
+    # -- what the client observes ------------------------------------------
+
+    def test_the_event_is_the_packet_and_the_header_it_was_built_for(self) -> None:
+        packet = [0x100 + index for index in range(self.WORDS)]
+        self.packet.write(0, struct.pack(f"<{self.WORDS}I", *packet))
+
+        self.call()
+
+        events = self.events()
+        self.assertEqual(len(events), 1)
+        event = events[0]
+        self.assertEqual(event.kind, EventKind.PACKET)
+        self.assertEqual(event.sequence, self.HEADER)
+        self.assertEqual(list(event.words), packet)
+        # A packet carries no string, and the record says so rather than leaving a count the
+        # event before it in this slot wrote.
+        self.assertEqual(event.text_state, EventTextState.ABSENT)
+        self.assertEqual(event.text, ())
+        self.assertEqual(event.tick, 0)
+        self.assertEqual([event.arg0, event.arg1, event.arg2, event.arg3], [0, 0, 0, 0])
+
+    def test_only_the_words_that_header_reads_travel_with_the_event(self) -> None:
+        """The count is the packet's own struct, not the widest one this project carries.
+
+        ``QuotedItemPrice`` is its ``itemid`` and its ``price``; ``TransactionDone`` is read by a
+        callback that reads nothing at all (``listeners.cpp:99-107``), and a packet still has to
+        be recorded as having arrived.
+        """
+
+        self.packet.write(0, struct.pack("<8I", 1, 2, 3, 4, 5, 6, 7, 8))
+
+        for words, expected in ((3, [1, 2, 3]), (2, [1, 2]), (0, [])):
+            with self.subTest(words=words):
+                block = FakeBlock()
+                self.block = block
+
+                self.call(words=words)
+
+                events = self.events()
+                self.assertEqual(len(events), 1)
+                self.assertEqual(list(events[0].words), expected)
+
+    def test_the_packet_word_is_the_header_the_client_sent(self) -> None:
+        """The copy starts at the packet, so its first word is ``PacketBase::header``."""
+
+        self.packet.write(0, struct.pack("<3I", self.HEADER, 0x11, 0x22))
+
+        self.call(words=3)
+
+        event = self.events()[0]
+        self.assertEqual(event.words[0], self.HEADER)
+        self.assertEqual(event.sequence, self.HEADER)
+
+    def test_the_ring_stride_is_the_record_and_not_the_slot_count(self) -> None:
+        """A record is ``EVENT_SIZE`` bytes: the slot the counter names is where it lands."""
+
+        self.packet.write(0, struct.pack("<2I", self.HEADER, 0x99))
+        self.block.set_header(event_written=EVENT_DEPTH - 1, event_taken=EVENT_DEPTH - 1)
+
+        self.call(words=2)
+
+        self.assertEqual(self.block.event(EVENT_DEPTH - 1).sequence, self.HEADER)
+
+        self.block.set_header(event_written=EVENT_DEPTH, event_taken=EVENT_DEPTH)
+
+        self.call(words=2)
+
+        self.assertEqual(self.block.event(0).sequence, self.HEADER)
+        self.assertEqual(list(self.block.event(0).words), [self.HEADER, 0x99])
+
+    # -- the chain ---------------------------------------------------------
+
+    def test_the_original_runs_with_the_packet_and_its_return_is_discarded(self) -> None:
+        self.packet.write(0, struct.pack("<2I", self.HEADER, 0x77))
+
+        returned = self.call(words=2)
+
+        self.assertTrue(self.chained_ran(), "the original handler ran")
+        self.assertEqual(self.chained_pointer(), self.packet.address)
+        self.assertEqual(
+            returned,
+            self.STUB_RETURN,
+            "the answer is native's ``return true``, not the original's",
+        )
+        self.assertEqual(self.events_written(), 1)
+
+    def test_the_chain_calls_the_original_and_answers_true(self) -> None:
+        """``stoc.cpp:92`` calls the saved original with the frame it expects, then returns true.
+
+        The original's own answer is discarded and the client is given ``true``, which is what the
+        entry native installs has always answered (``stoc.cpp:102``). The bytes are pinned because a
+        tail call instead would hand the client the original's answer — a different behaviour in a
+        slot the source pins — and because a ``ret imm16`` here would clean a stack the client owns.
+        """
+
+        with_original = build_packet_stub(
+            self.block.address, self.HEADER, 2, self.original_code.address
+        )
+        without = build_packet_stub(self.block.address, self.HEADER, 2, 0)
+
+        self.assertEqual(
+            with_original[-20:],
+            bytes((0xFF, 0x74, 0x24, 0x04, 0xB8))
+            + struct.pack("<I", self.original_code.address)
+            + bytes((0xFF, 0xD0, 0x83, 0xC4, 0x04))
+            + bytes((0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3)),
+        )
+        self.assertEqual(without[-6:], bytes((0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3)))
+        self.assertLess(len(without), len(with_original))
+
+    def test_the_stub_returns_true_when_it_has_nothing_to_chain_to(self) -> None:
+        """``StoCHandler_Func`` ends ``return true`` (``stoc.cpp:102``)."""
+
+        self.packet.write(0, struct.pack("<2I", self.HEADER, 0x77))
+
+        returned = self.call(words=2, original=0)
+
+        self.assertEqual(returned, self.STUB_RETURN)
+        self.assertFalse(self.chained_ran())
+        self.assertEqual(self.events_written(), 1)
+
+    def test_it_returns_the_way_the_client_calls_it(self) -> None:
+        """``__cdecl``: the client cleans the stack, so the last byte is ``ret``, not ``ret imm16``."""
+
+        code = build_packet_stub(self.block.address, self.HEADER, 2, 0)
+
+        self.assertEqual(code[-1], 0xC3)
+        self.assertNotIn(0xC2, code[-3:])
+
+    # -- what it refuses to do ---------------------------------------------
+
+    def test_a_block_that_is_not_this_bridges_records_nothing_and_still_chains(self) -> None:
+        self.packet.write(0, struct.pack("<2I", self.HEADER, 0x77))
+
+        for field, value in (
+            ("magic", MAGIC + 1),
+            ("version", VERSION + 1),
+            ("header_size", HEADER_SIZE + 4),
+            ("event_depth", EVENT_DEPTH + 1),
+        ):
+            with self.subTest(field=field):
+                block = FakeBlock()
+                block.corrupt(field, value)
+                self.chained.clear()
+                self.block = block
+
+                returned = self.call(words=2)
+
+                # Read raw: the header is deliberately one this project's own decoder refuses.
+                self.assertEqual(self.events_written(), 0)
+                self.assertEqual(returned, self.STUB_RETURN)
+                self.assertEqual(self.chained_pointer(), self.packet.address)
+
+    def test_a_null_block_records_nothing_and_still_chains(self) -> None:
+        self.packet.write(0, struct.pack("<2I", self.HEADER, 0x77))
+
+        returned = self.call(words=2, block_address=0)
+
+        self.assertEqual(returned, self.STUB_RETURN)
+        self.assertEqual(self.chained_pointer(), self.packet.address)
+
+    def test_a_full_event_ring_drops_the_event_and_does_not_stall_the_client(self) -> None:
+        """The host is told nothing rather than the game being asked to wait."""
+
+        self.packet.write(0, struct.pack("<2I", self.HEADER, 0x77))
+        self.block.set_header(event_written=EVENT_DEPTH, event_taken=0)
+
+        returned = self.call(words=2)
+
+        self.assertEqual(self.events_written(), EVENT_DEPTH)
+        self.assertEqual(returned, self.STUB_RETURN)
+        self.assertEqual(self.chained_pointer(), self.packet.address)
+
+    def test_the_client_is_not_touched_apart_from_the_event(self) -> None:
+        self.packet.write(0, struct.pack("<2I", self.HEADER, 0x77))
+        before = bytes(self.packet.raw)
+
+        self.call(words=2)
+
+        self.assertEqual(bytes(self.packet.raw), before, "the packet is read, never written")
+        self.assertTrue(self.block.guards_intact())
+        header = self.block.header()
+        self.assertEqual(header.command_written, 0)
+        self.assertEqual(header.command_taken, 0)
+
+    # -- the code itself ---------------------------------------------------
+
+    def test_the_stub_is_built_per_header_and_carries_its_own_words(self) -> None:
+        """Emitted code cannot read a struct, so what a listener reads is an immediate."""
+
+        two = self.build(words=2)
+        three = self.build(words=3)
+
+        self.assertNotEqual(two.code, three.code)
+        self.assertIn(struct.pack("<I", 0x2F), two.code)
+        self.assertEqual(packet_stub_size(2), len(two.code))
+        self.assertEqual(packet_stub_size(3), len(three.code))
+        self.assertLess(packet_stub_size(2), packet_stub_size(EVENT_WORDS))
+        two.close()
+        three.close()
+
+    def test_the_stub_is_the_same_bytes_every_time_it_is_built(self) -> None:
+        arguments = (self.block.address, self.HEADER, self.WORDS, 0x10001000)
+
+        self.assertEqual(build_packet_stub(*arguments), build_packet_stub(*arguments))
+
+    def test_more_words_than_a_record_carries_is_refused(self) -> None:
+        """A stub that copied more than the record holds would write past it."""
+
+        with self.assertRaises(ValueError):
+            build_packet_stub(self.block.address, self.HEADER, EVENT_WORDS + 1, 0)
+
+    # -- helpers -----------------------------------------------------------
+
+    def events(self) -> list:
+        header = self.block.header()
+        return [self.block.event(slot) for slot in range(header.event_written)]
+
+    def events_written(self) -> int:
+        """Read the counter raw, for tests that corrupt the header on purpose."""
+
+        image = self.block.read()
+        offset = HEADER_OFFSET["event_written"]
+        return int.from_bytes(image[offset : offset + 4], "little")
 
 
 if __name__ == "__main__":

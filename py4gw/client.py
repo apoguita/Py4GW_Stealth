@@ -504,11 +504,31 @@ class ConnectedClient:
             chat.reset_live_history()
             self._callbacks.register(EventKind.UI_MESSAGE, chat._on_chat_log_line)
             self._callbacks.register(EventKind.STRING_DECODED, chat._on_string_decoded)
+            # The listeners come up last, which is where the source puts them: native's
+            # ``listeners::Initialize`` is wired into its bootstrap *after* the GW layer is ready
+            # (``listeners.h:94-96``), because a listener installs itself onto that layer. The
+            # merchant listener is the one that exists here, and installing it replaces five of the
+            # client's own packet handlers (``listeners.cpp:96-128``) — so it is a write, it is
+            # undone by :meth:`close`, and it is registered before the listener thread starts so no
+            # packet can arrive with nothing listening for it.
+            from . import listeners as listeners_module
+
+            listeners_module.Initialize()
             self._listener = EventListener(bridge, self._callbacks)
             self._listener.start()
-        except BaseException:
+        except BaseException as error:
             # A connection that could not start is not a connection anything may read
-            # through, so it stops being the current one before it is raised.
+            # through, so it gives back what it placed and stops being the current one before it is
+            # raised. The teardown is the same one :meth:`close` performs, and it runs while this
+            # is still the current client because the modules that put things back are reached
+            # through it. A teardown that fails is reported *beside* the failure that caused it
+            # rather than instead of it.
+            try:
+                self.close()
+            except BaseException as teardown_error:  # noqa: BLE001 - reported with the first failure
+                error.add_note(
+                    f"tearing the failed connection down also failed: {teardown_error}"
+                )
             _current_client = None
             raise
 
@@ -1468,6 +1488,18 @@ class ConnectedClient:
             dialog.Dialog.terminate()
         except BaseException as error:
             failure = error
+
+        # The listeners go next, and they go before the bridge: a listener's uninstall puts the
+        # client's own packet handlers back, and that write runs on the game thread through the
+        # hook the bridge is about to take out. Native's shutdown has the same order —
+        # ``listeners::Shutdown`` disables every listener, and the StoC layer's own ``Exit`` runs
+        # after it (``listeners.cpp:188-192``, ``stoc.cpp:200-208``).
+        try:
+            from . import listeners as listeners_module
+
+            listeners_module.Shutdown()
+        except BaseException as error:
+            failure = failure or error
 
         listener, self._listener = self._listener, None
         if listener is not None:

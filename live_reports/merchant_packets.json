@@ -1,0 +1,106 @@
+{
+  "pid": 34748,
+  "elevated": true,
+  "before": {
+    "table": "0x1d633b4",
+    "entries": 5,
+    "array_size": 487,
+    "handlers": {
+      "0x84": "0xf3f1a0",
+      "0x85": "0xf3f1c0",
+      "0x86": "0xf3f1e0",
+      "0xcc": "0xf3fd00",
+      "0xf7": "0xf402f0"
+    }
+  },
+  "before_head": {
+    "0x84": "55 8b ec 8b 4d 08 8d 41",
+    "0x85": "55 8b ec 8b 45 08 ff 70",
+    "0x86": "55 8b ec 8b 45 08 ff 70",
+    "0xcc": "55 8b ec 8b 45 08 ff 70",
+    "0xf7": "55 8b ec 8b 45 08 ff 70"
+  },
+  "connect_ms": 1448.0,
+  "installed_headers": [
+    "0x84",
+    "0x85",
+    "0x86",
+    "0xcc",
+    "0xf7"
+  ],
+  "stubs": {
+    "0x84": {
+      "words": 18,
+      "stub": "0xb2c0000",
+      "original": "0xf3f1a0",
+      "entry": "0x1df2578"
+    },
+    "0x85": {
+      "words": 1,
+      "stub": "0xb450000",
+      "original": "0xf3f1c0",
+      "entry": "0x1df2584"
+    },
+    "0x86": {
+      "words": 2,
+      "stub": "0xb460000",
+      "original": "0xf3f1e0",
+      "entry": "0x1df2590"
+    },
+    "0xcc": {
+      "words": 1,
+      "stub": "0xb470000",
+      "original": "0xf3fd00",
+      "entry": "0x1df28d8"
+    },
+    "0xf7": {
+      "words": 3,
+      "stub": "0xb620000",
+      "original": "0xf402f0",
+      "entry": "0x1df2adc"
+    }
+  },
+  "entries_after_install": {
+    "0x84": "0xb2c0000",
+    "0x85": "0xb450000",
+    "0x86": "0xb460000",
+    "0xcc": "0xb470000",
+    "0xf7": "0xb620000"
+  },
+  "every_entry_is_the_stub": true,
+  "originals_match_the_read_before": true,
+  "listener_delivered": 0,
+  "packets_seen": {},
+  "listener_total": 0,
+  "listener_state": {
+    "enabled": true,
+    "quoted_item_id": 0,
+    "quoted_value": 0,
+    "transaction_complete": false,
+    "window_items": 0,
+    "merchant_items": 0
+  },
+  "in_flight_at_end": 0,
+  "after": {
+    "table": "0x1d633b4",
+    "entries": 5,
+    "array_size": 487,
+    "handlers": {
+      "0x84": "0xf3f1a0",
+      "0x85": "0xf3f1c0",
+      "0x86": "0xf3f1e0",
+      "0xcc": "0xf3fd00",
+      "0xf7": "0xf402f0"
+    }
+  },
+  "after_head": {
+    "0x84": "55 8b ec 8b 4d 08 8d 41",
+    "0x85": "55 8b ec 8b 45 08 ff 70",
+    "0x86": "55 8b ec 8b 45 08 ff 70",
+    "0xcc": "55 8b ec 8b 45 08 ff 70",
+    "0xf7": "55 8b ec 8b 45 08 ff 70"
+  },
+  "restored": true,
+  "restored_differs": {},
+  "note": "a write: the five handler pointers were replaced on connect and restored on disconnect. Nothing else was called or changed. 'packets_seen' is what the client actually dispatched through the stubs while the probe listened — a header that is absent is one the client did not receive, not one that failed."
+}

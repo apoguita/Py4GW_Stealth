@@ -29,6 +29,7 @@ from py4gw.game_thread.shared_block import (
     BlockHeader,
     CommandRecord,
     CommandState,
+    EventKind,
     EventRecord,
     command_offset,
     empty_block,
@@ -51,9 +52,7 @@ class LayoutTests(unittest.TestCase):
     def test_sizes_are_what_the_payload_expects(self) -> None:
         self.assertEqual(block.HEADER_SIZE, 64)
         self.assertEqual(COMMAND_SIZE, 64)
-        self.assertEqual(
-            EVENT_SIZE, block.EVENT_TEXT_OFFSET + block.EVENT_TEXT_WORDS * 2
-        )
+        self.assertEqual(block.EVENT_SIZE, 2048)
         self.assertEqual(block.COMMAND_REGION_OFFSET, 64)
         self.assertEqual(block.EVENT_REGION_OFFSET, 64 + 16 * 64)
         self.assertEqual(
@@ -77,21 +76,62 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(COMMAND_SIZE & (COMMAND_SIZE - 1), 0)
         self.assertEqual(EVENT_SIZE & (EVENT_SIZE - 1), 0)
 
-    def test_the_event_text_starts_after_the_words_a_reader_reads(self) -> None:
-        """The copy the observer takes is its own area, past the record's ten words."""
+    def test_the_copy_a_record_carries_starts_after_the_words_a_reader_reads(self) -> None:
+        """The eleven words of fields come first, then the two bounded copies."""
 
-        # Ten words: the eight the record always had, then the state and length of the copy.
+        # Eleven words: the eight the record always had, then the state and length of the string
+        # copy and the count of the packet words.
         self.assertEqual(block.EVENT_TEXT_LENGTH_OFFSET + 4, 40)
-        self.assertEqual(block.EVENT_TEXT_OFFSET + block.EVENT_TEXT_SIZE, EVENT_SIZE)
+        self.assertEqual(block.EVENT_OFFSET["word_count"], 40)
+        self.assertEqual(block.EVENT_WORDS_OFFSET, block.EVENT_TEXT_OFFSET + block.EVENT_TEXT_SIZE)
         self.assertEqual(block.EVENT_TEXT_SIZE, block.EVENT_TEXT_WORDS * 2)
+        self.assertEqual(block.EVENT_WORDS_SIZE, block.EVENT_WORDS * 4)
+        self.assertLessEqual(
+            block.EVENT_WORDS_OFFSET + block.EVENT_WORDS_SIZE,
+            EVENT_SIZE,
+            "both copies are inside the record, and the rest of it is padding",
+        )
+        self.assertEqual(EVENT_SIZE & (EVENT_SIZE - 1), 0)
+
+    def test_a_packet_record_carries_the_packets_own_words(self) -> None:
+        """The words area is what a packet event travels in, and the count says how many."""
+
+        words = tuple(0x1000 + index for index in range(block.EVENT_WORDS))
+        record = EventRecord(kind=EventKind.PACKET, sequence=0x2F, words=words)
+
+        raw = record.to_bytes()
+        self.assertEqual(len(raw), EVENT_SIZE)
+        self.assertEqual(
+            raw[block.EVENT_WORDS_OFFSET : block.EVENT_WORDS_OFFSET + len(words) * 4],
+            b"".join(struct.pack("<I", word) for word in words),
+        )
+        self.assertEqual(EventRecord.from_bytes(raw), record)
+
+    def test_a_record_reads_only_the_words_its_own_count_names(self) -> None:
+        """A slot is reused, so the words past the count belong to the record before this one."""
+
+        image = bytearray(EventRecord(kind=EventKind.PACKET, words=(1, 2, 3, 4, 5)).to_bytes())
+        short = EventRecord(
+            kind=EventKind.PACKET, sequence=9, words=(0xAA,)
+        ).to_bytes()
+        image[: len(short)] = short
+
+        record = EventRecord.from_bytes(bytes(image))
+
+        self.assertEqual(record.words, (0xAA,))
+
+    def test_more_words_than_a_record_carries_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            EventRecord(kind=EventKind.PACKET, words=(0,) * (block.EVENT_WORDS + 1))
 
     def test_records_have_no_padding_except_the_command_slot(self) -> None:
-        """Event and header fields are four bytes each; the command keeps room it has not used.
+        """Event and header fields are four bytes each; both records keep room they have not used.
 
         Nine of the command slot's sixteen words are in use — the eight it always had plus
         ``value`` — so the record is padded to the slot rather than sized to the fields, and
-        the round trip has to survive that. An event record is sized to its own room: its words,
-        six unused bytes, and the bounded copy of a string a watched message named.
+        the round trip has to survive that. An event record's fields are eleven words, its two
+        bounded copies follow them, and the rest of the record is padding to the power of two
+        the emitted shift needs; the round trip survives that too.
         """
 
         record = CommandRecord(sequence=1, operation=2)

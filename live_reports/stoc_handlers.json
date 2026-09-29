@@ -1,0 +1,108 @@
+{
+  "pid": 34748,
+  "elevated": false,
+  "connect": "not used: this probe reads directly, so no elevation is required",
+  "text": {
+    "start": "0xa21000",
+    "end": "0xf59600"
+  },
+  "resolver": {
+    "name": "stoc.handler_table_addr",
+    "ok": true,
+    "value": "0x16aa018",
+    "trace": [
+      {
+        "step": "scan_pointer_ref",
+        "op": "scan",
+        "in": "0x0",
+        "out": "0xdfdfd5",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "step": "deref_ptr",
+        "op": "dereference",
+        "in": "0xdfdfd5",
+        "out": "0x16aa018",
+        "ok": true,
+        "detail": ""
+      }
+    ]
+  },
+  "resolved_head": "90 bc d6 01 00 00 00 00 ff ff ff ff ff ff ff ff",
+  "as_game_server_pointer_pointer": {
+    "game_server": "0x1d6bc90",
+    "gs_codec": "0x1d63388",
+    "handlers": "0x1d633b4",
+    "array": {
+      "buffer": "0x1df1f40",
+      "capacity": 504,
+      "size": 487,
+      "looks_like_a_header_table": true
+    },
+    "merchant_headers": [
+      {
+        "name": "GAME_SMSG_WINDOW_ADD_ITEMS",
+        "header": "0x84",
+        "words": 18,
+        "entry": "0x1df2570",
+        "packet_template": "0x1222f38",
+        "field_count": 3,
+        "handler_func": "0xf3f1a0",
+        "handler_is_code": true,
+        "handler_head": "55 8b ec 8b 4d 08 8d 41 08 50 ff 71 04 e8 2e 2c"
+      },
+      {
+        "name": "GAME_SMSG_WINDOW_ITEMS_END",
+        "header": "0x85",
+        "words": 1,
+        "entry": "0x1df257c",
+        "packet_template": "0x1222f44",
+        "field_count": 2,
+        "handler_func": "0xf3f1c0",
+        "handler_is_code": true,
+        "handler_head": "55 8b ec 8b 45 08 ff 70 04 e8 52 2c ef ff 83 c4"
+      },
+      {
+        "name": "GAME_SMSG_WINDOW_ITEM_STREAM_END",
+        "header": "0x86",
+        "words": 2,
+        "entry": "0x1df2588",
+        "packet_template": "0x1222f4c",
+        "field_count": 2,
+        "handler_func": "0xf3f1e0",
+        "handler_is_code": true,
+        "handler_head": "55 8b ec 8b 45 08 ff 70 04 e8 72 2c ef ff 83 c4"
+      },
+      {
+        "name": "GAME_SMSG_TRANSACTION_DONE",
+        "header": "0xcc",
+        "words": 1,
+        "entry": "0x1df28d0",
+        "packet_template": "0x1222dc8",
+        "field_count": 2,
+        "handler_func": "0xf3fd00",
+        "handler_is_code": true,
+        "handler_head": "55 8b ec 8b 45 08 ff 70 04 e8 42 4a ef ff 83 c4"
+      },
+      {
+        "name": "GAME_SMSG_ITEM_PRICE_QUOTE",
+        "header": "0xf7",
+        "words": 3,
+        "entry": "0x1df2ad4",
+        "packet_template": "0x1223600",
+        "field_count": 3,
+        "handler_func": "0xf402f0",
+        "handler_is_code": true,
+        "handler_head": "55 8b ec 8b 45 08 ff 70 08 ff 70 04 e8 9f 51 ef"
+      }
+    ]
+  },
+  "as_game_server_pointer": {
+    "game_server": "0x16aa018",
+    "gs_codec": "0xffffffff",
+    "handlers": "0x10000002b",
+    "error": "the handler array is not readable: OSError: [Errno 299] ReadProcessMemory(address=0x10000002B, size=0x10) failed with Windows error 299"
+  },
+  "note": "read-only: nothing was written, no entry was replaced and no code was placed. The reading whose array has a plausible size and code handlers is the one native's cast describes; the other one is reported so the difference is visible rather than assumed."
+}
