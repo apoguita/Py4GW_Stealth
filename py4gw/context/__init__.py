@@ -101,7 +101,6 @@ from .instance_info_context import (
     Region,
     InstanceInfo,
     InstanceInfoStruct,
-    InstanceType,
     MapDimensionsStruct,
 )
 from .text_parser_context import (
@@ -353,7 +352,6 @@ __all__ = [
     "PlayerAgentIdStruct",
     "InstanceInfo",
     "InstanceInfoStruct",
-    "InstanceType",
     "MapDimensionsStruct",
     "AreaInfoStruct",
     "TextParser",

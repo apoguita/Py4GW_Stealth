@@ -1,0 +1,73 @@
+[   0.00s] start: importing and finding the client
+[   0.15s] elevated=True clients=1
+[   0.15s] connecting to pid 34748 (this installs the capability layer)
+[   1.54s] connected
+[   1.54s] -- section: the readiness gate and identity
+[   1.54s] IsMapDataLoaded: 0.3 ms -> True
+[   1.54s] GetInstanceType: 0.0 ms -> 0
+[   1.54s] GetInstanceTypeName: 0.0 ms -> 'Outpost'
+[   1.54s] IsMapReady: 0.4 ms -> True
+[   1.54s] GetMapID: 0.4 ms -> 55
+[   1.54s] IsInCinematic: 0.4 ms -> False
+[   1.54s] IsObservingMatch: 0.1 ms -> False
+[   1.54s] -- section: the name tables
+[   1.54s] GetOutpostIDs: 0.0 ms -> 278
+[   1.54s] GetMapName: 0.4 ms -> 'Lions Arch'
+[   1.54s] GetMapIDByName: 0.5 ms -> 55
+[   1.54s] GetBaseMapID: 0.9 ms -> 55
+[   1.54s] GetAllMapVariants: 0.0 ms -> [55, 808, 809, 810]
+[   1.54s] -- section: region, language, district, uptime, players
+[   1.54s] GetRegion: 0.1 ms -> (0, 'America')
+[   1.54s] GetLanguage: 0.1 ms -> (0, 'English')
+[   1.54s] GetDistrict: 0.1 ms -> 1
+[   1.54s] GetRegionType: 0.1 ms -> (13, 'City')
+[   1.54s] GetCampaign: 0.1 ms -> (1, 'Prophecies')
+[   1.54s] GetContinent: 0.1 ms -> (0, 'Kryta')
+[   1.54s] GetInstanceUptime: 0.1 ms -> 2406062701
+[   1.54s] GetAmountOfPlayersInInstance: 0.2 ms -> 63
+[   1.54s] -- section: foes and vanquish
+[   1.54s] GetFoesKilled: 0.1 ms -> 0
+[   1.54s] GetFoesToKill: 0.1 ms -> 0
+[   1.54s] IsVanquishable: 0.0 ms -> False
+[   1.55s] IsVanquishCompleted: 0.2 ms -> False
+[   1.55s] IsMapUnlocked: 0.8 ms -> True
+[   1.55s] -- section: AreaInfo readers, then the array against the loaded record
+[   1.56s] GetUnloadedMapInfo(GetMapID()) vs the loaded AreaInfo: all fields agree
+[   1.56s] -- section: bounds
+[   1.56s] GetMapBoundaries: 0.1 ms -> (-18432.0, -18432.0, 18432.0, 18432.0)
+[   1.56s] GetMapWorldMapBounds: 0.1 ms -> (3712.0, 4704.0, 4096.0, 5088.0)
+[   1.56s] -- section: the window namespaces
+[   1.62s] IsEnteringChallenge: 67.3 ms -> False
+[   1.68s] MissionMap.GetFrame: 59.5 ms -> 'None'
+[   1.72s] MissionMap.IsWindowOpen: 36.1 ms -> False
+[   1.73s] MiniMap.GetFrameID: 6.8 ms -> 0
+[   1.77s] WorldMap.GetFrameID: 46.1 ms -> 0
+[   1.77s] Pregame.GetFrameID: 0.1 ms -> 0
+[   1.78s] -- section: frame geometry (needs the root frame and the render viewport)
+[   1.81s] MissionMap window coords: 36.4 ms -> (0.0, 0.0, 0.0, 0.0)
+[   1.85s] MissionMap contents coords: 35.1 ms -> (0.0, 0.0, 0.0, 0.0)
+[   1.88s] MissionMap.GetScale: 35.8 ms -> (0.0, 0.0)
+[   1.88s] MissionMap.GetZoom: 0.1 ms -> 1.0
+[   1.91s] MissionMap.GetPanOffset: 22.9 ms -> (0.0, 0.0)
+[   1.92s] MiniMap.GetWindowCoords: 8.0 ms -> (0.0, 0.0, 0.0, 0.0)
+[   1.93s] MiniMap.GetScale: 12.1 ms -> 0.0
+[   2.01s] MiniMap.GetRotation: 82.2 ms -> 0
+[   2.10s] MiniMap.IsLocked: 93.1 ms -> True
+[   2.10s] -- section: the projections
+[   2.20s] MissionMap GamePosToScreen: 98.3 ms -> (0.0, 0.0)
+[   2.24s] MissionMap ScreenToGamePos: 35.4 ms -> (-374784.0, 470016.0)
+[   2.28s] NormalizedScreenToScreen(0, 0): 38.9 ms -> (0.0, 0.0)
+[   2.28s] -- section: pathing reads
+[   2.34s] Pathing.GetPathingMaps: 53.1 ms -> [PathingMap(zplane=4294967295, h0004=4294967295, h0008=1209285184, h000C=17, h0010=1209285184, trapezoid_count=2285, sink_node_count=2285, x_node_c...
+[   2.34s] Pathing.GetAvailableMapIds: 2.6 ms -> 404
+[   2.34s] Pathing.GetSpawns: 0.3 ms -> [1, 10, 17]
+[   2.35s] Pathing.GetTravelPortals: 7.3 ms -> 3
+[   2.35s] -- section: the per-quad cost, on a sample (NOT the whole map)
+[  10.10s] one Quad(): 387.20 ms  (20 built)
+[  10.10s] GetMapQuads() would build 2836 of them: ~1098.1 s
+[  10.10s] SKIPPING IsPointInPathing: the estimate above is 1098 s, and this probe reports the cost rather than hanging. That estimate IS the finding.
+[  10.10s] -- section: the recorded divergences must still refuse
+[  10.10s] refusals: all four named their need
+[  10.10s] disconnecting (restores the client's own bytes)
+[  10.22s] disconnected
+[  10.22s] done in 10.2s

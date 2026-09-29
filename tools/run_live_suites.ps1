@@ -21,6 +21,8 @@ if (-not $Suites -or $Suites.Count -eq 0) {
     $Suites = @(
         "tests/probe_agent_effects_live.py", # read-only probe: names, effects and the timer, no connect
         "tests/probe_ui_manager_live.py",    # read-only probe: every UIManager read, incl. the key table
+        "tests/probe_map_live.py",           # the Map pass, sectioned and timed, with a progress file
+        "tests.test_map",                    # read-only: every answering Map member against its context
         "tests.test_live_agent_effects",     # read-only: the name binding, Effects, the skill timer
         "tests.test_agent_array",            # read-only: the source-shaped AgentArray view
         "tests.test_live_skill",             # read-only: Skill, SkillBar, Utils over the live client
@@ -47,16 +49,24 @@ foreach ($suite in $Suites) {
     # A probe script is not a unittest module: it is run as a file and reports through its own file.
     # The entry is a path relative to the repo root ("tests/probe_x.py"), kept as given — probes have
     # no TestCase, so `python -m unittest` would import them and run nothing.
+    #
+    # `Tee-Object`, not `*>`: a live suite that captures its output silently shows nothing until it
+    # ends, and a slow member then looks like a hang. A cancelled run teaches nothing, so the lines
+    # go to the console *and* to the report file as they arrive.
     if ($suite -like "*.py") {
         $file = Join-Path (Get-Location) $suite
-        & python $file *> $log
+        & python $file 2>&1 | Tee-Object -FilePath $log
     } else {
-        & python -m unittest $suite -v *> $log
+        & python -m unittest $suite -v 2>&1 | Tee-Object -FilePath $log
     }
 
+    # `$LASTEXITCODE` survives the pipeline: it is set by the native command, not by the cmdlet.
     $code = $LASTEXITCODE
     $elapsed = [int]((Get-Date) - $started).TotalSeconds
-    $tail = (Select-String -Path $log -Pattern "^(Ran |OK|FAILED)" | ForEach-Object { $_.Line }) -join " | "
+    # The lines arrive with a PowerShell error-record prefix on stderr, so the summary matches on the
+    # verdict anywhere in the line rather than at its start.
+    $tail = (Select-String -Path $log -Pattern "^(Ran |OK|FAILED)|: (OK|FAILED)|^OK$|^FAILED" |
+        ForEach-Object { $_.Line.Trim() } | Select-Object -Last 2) -join " | "
     $summary += ("{0,-34} exit={1,-3} {2,4}s  {3}" -f $suite, $code, $elapsed, $tail)
     Write-Host ("    exit={0} {1}s {2}" -f $code, $elapsed, $tail)
 }

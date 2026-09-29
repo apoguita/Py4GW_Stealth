@@ -6,9 +6,14 @@ something stopped — not something to wait on.
 
 | | |
 | --- | --- |
-| **Goal** | `goal-856c3b8b-da31-4f92-bbd0-0a7c9db6bcc7` (was `goal-5bdc438e-712d-4582-bc5a-947069da6a92`, `Inventory` + `Item` + `ItemArray`, completed) — **port `UIManager` faithfully** |
-| **Round** | 77 (**the value-preserving acting members are live-verified: 22 members now have live evidence.** tests/probe_ui_manager_writes_live.py runs each write with the value it just read, elevated on the write connection (pid 31024): **SetFPSLimit** 60 -> 60, **SetWindowVisible(0, visible)** true -> true, **SetEnumPreference(FrameLimiter, 2)** 2 -> 2, **SetIntPreference(TextLanguage, 0)** 0 -> 0, **SetBoolPreference(IsWindowed, true)** true -> true, and **SetStringPreference(0, ...)** returning apoguita@gmail.com - all six called without an exception, and **before == after: unchanged true**. So the call path is exercised end to end - game-thread connection, call form, the client own setter, the follow-ups - while the client state stays as it was, and the hooks came out cleanly (exit 0, same pid). What is left is the game-changing set: SendUIMessage/SendUIMessageRaw, Keydown/Keyup/Keypress, SetWindowPosition, and the dialog clicks, which need the owner watching the client. Reports: live_reports/ui_manager_writes_live.json) |
-| **Round (prev)** | 76 (**the calling reads are live-verified, and two of them cross-check each other.** With the owner approving UAC, the probe ran elevated with the write connection (game_thread=True, pid 31024): **GetTextLanguage 0**, **GetFPSLimit 60**, **GetEnumPreference(FrameLimiter) 2**, **GetIntPreference(TextLanguage) 0**, **GetBoolPreference(IsWindowed) true**, and **GetStringPreference(0) = apoguita@gmail.com** - a real wide string read from the client own pointer. The cross-checks are the sources own arithmetic: the frame-limiter preference is 2 and GetFrameLimit maps 2 to 60, which is what GetFPSLimit answered; and GetTextLanguage IS GetPreference(NumberPreference::TextLanguage), where both routes read 0. The write connection also installed and removed its hooks cleanly (exit 0), and the four pure reads repeated their earlier answers exactly. **16 members are now live-verified**; what remains is the members that act, which change the client and so get an owner-present run, smallest effect first. Reports live_reports/ui_manager_calls_live.json and ui_manager_reads_live.json) |
+| **Goal** | `goal-fc067d8b-58cc-463b-bd11-01d2c7a27cf4` (was `goal-856c3b8b-da31-4f92-bbd0-0a7c9db6bcc7`, `UIManager`, completed) — **port `Map` faithfully, whole and in source order** |
+| **Round** | 82 (**`Map` is done — the project owner's ruling, 2026-09-29:** *"mark this one as done, the things missing are the ones we already account for"*). The class's verdict moves to **COMPLETE for this port's purposes** in `CLASS_PORT_MAP.md` and `MAP_PORT.md`, the form `UIManager`, `Agent`, `Player` and `Inventory` carry: **168 of 178 members answer**, and the ten that do not are the accounted-for divergences — nine mouse members (`PyImGui.get_io()`, which cannot be installed here) and `Pathing.WorldToScreen` (`PyOverlay.Overlay()`, and this class has no render process). **No member of `Map` is a work item.** What remains is *verification breadth*, not porting: the live checks that need a game state (the world map open, the mission map and compass open, a cinematic, a mission offering a challenge) are listed in `MAP_PORT.md` as optional and state-dependent, and none of them is a reason to doubt a member. **The cascade the travel run produced is recorded too**: `UIManager.SendUIMessage` and `SendUIMessageRaw` were on the unverified game-changing list and are now **live-verified** — `Map.TravelGH`/`Map.Travel` drove the raw pair with `kGuildHall`/`kTravel` and `Map.LeaveGH` drove the packed one with `kLeaveGuildHall`, and the client acted on all three) |
+| **Round (prev)** | 81 (**the travel members are live-verified, and the owner's prediction held.**
+| **Round (prev 2)** | 80 (**the `Map` live pass ran, and it is green.**
+| **Round (prev 2)** | 79 (**`Map` is done: 168 of 178 answer, 10 recorded.**
+| **Round (prev 2)** | 78 (**`Map` lands as a class: 148 of its 178 members answer, and the class's own defects are closed.**
+| **Round (prev 2)** | 77 (**the value-preserving acting members are live-verified: 22 members now have live evidence.** tests/probe_ui_manager_writes_live.py runs each write with the value it just read, elevated on the write connection (pid 31024): **SetFPSLimit** 60 -> 60, **SetWindowVisible(0, visible)** true -> true, **SetEnumPreference(FrameLimiter, 2)** 2 -> 2, **SetIntPreference(TextLanguage, 0)** 0 -> 0, **SetBoolPreference(IsWindowed, true)** true -> true, and **SetStringPreference(0, ...)** returning apoguita@gmail.com - all six called without an exception, and **before == after: unchanged true**. So the call path is exercised end to end - game-thread connection, call form, the client own setter, the follow-ups - while the client state stays as it was, and the hooks came out cleanly (exit 0, same pid). What is left is the game-changing set: SendUIMessage/SendUIMessageRaw, Keydown/Keyup/Keypress, SetWindowPosition, and the dialog clicks, which need the owner watching the client. Reports: live_reports/ui_manager_writes_live.json) |
+| **Round (prev 2)** | 76 (**the calling reads are live-verified, and two of them cross-check each other.** With the owner approving UAC, the probe ran elevated with the write connection (game_thread=True, pid 31024): **GetTextLanguage 0**, **GetFPSLimit 60**, **GetEnumPreference(FrameLimiter) 2**, **GetIntPreference(TextLanguage) 0**, **GetBoolPreference(IsWindowed) true**, and **GetStringPreference(0) = apoguita@gmail.com** - a real wide string read from the client own pointer. The cross-checks are the sources own arithmetic: the frame-limiter preference is 2 and GetFrameLimit maps 2 to 60, which is what GetFPSLimit answered; and GetTextLanguage IS GetPreference(NumberPreference::TextLanguage), where both routes read 0. The write connection also installed and removed its hooks cleanly (exit 0), and the four pure reads repeated their earlier answers exactly. **16 members are now live-verified**; what remains is the members that act, which change the client and so get an owner-present run, smallest effect first. Reports live_reports/ui_manager_calls_live.json and ui_manager_reads_live.json) |
 | **Round (prev)** | 75 (**doc drift from my own later edits, found and fixed.** The owner ruling of round 72 changed this class verdict, but two places written before it still said the opposite: the Handoff section called CLASS_PORT_MAP INCOMPLETE and told a fresh session the class is never called ported until all 55 answer, and the doc closing **Do not** list repeated it. Both now say what the record says - **COMPLETE for this port purposes**, with the seven divergences named beside it - and the Do not entry is rewritten to forbid the real hazard: describing the class as ported *without* naming the seven, or filling them in with stand-ins. No code changed; a grep for any remaining UIManager-INCOMPLETE claim across docs now returns nothing. Suite OK; scoped pyright 0 errors. The only item still outstanding is the elevated call-based run, which needs the owner) |
 | **Round (prev)** | 74 (**the unelevated live probe reaches ten members, and the preference options are the cross-check the setters needed.** Three more reads joined tests/probe_ui_manager_reads_live.py: **GetPreferenceOptions**, and the two dialog visibility members - which the probe can now drive because a FrameArray is constructible from the read-only reader, scanner and catalog the connection itself uses. Against Gw.exe pid 31024 (elevated: false): **FrameLimiter -> [0, 1, 2, 3]** - exactly the list SetPreference own follow-up switches on (1 -> 30, 2 -> 60, 3 -> the monitor rate, ui_methods.cpp:1840-1852) - and **AntiAliasing -> [0, 1, 2, 3, 4]**, both read from the client EnumPreferenceInfo entries; **IsNPCDialogVisible and IsLockedChestWindowVisible both false**, which is the correct answer with no dialog in flight and proves the members resolve the frame tree rather than raising. Ten members of this class are now live-verified unelevated; the members that call the client still need the elevated connection. Report live_reports/ui_manager_reads_live.json; suite OK; scoped pyright 0 errors) |
 | **Round (prev)** | 73 (**the read half is verified against the live client - unelevated, and the key table is confirmed.** The elevation check of round 72 was true but incomplete: the project already had a route that needs none - the direct-memory probe shape probe_agent_effects_live.py established (ProcessMemoryReader plus RemoteScanner over the main module, a stand-in where require_client looks), which reads the client without connecting. tests/probe_ui_manager_reads_live.py runs the six pure-read members through it, and every one answered against Gw.exe pid 31024 with elevated: false: **all seven resolvers resolved**; IsWorldMapShowing false; IsUIDrawn **true** (the inverted flag); IsShiftScreenshot false; GetCurrentTooltipAddress 0x253D373C; GetSettings **798 bytes**; GetWindoPosition/IsWindowVisible real rects over six ids (window 0 [332, 76, 183, 140] visible, 0x40 [43, 237, 586, 732] not); and **GetKeyMappings 117 words - arrsize(s_remapTable) exactly - all 117 non-zero, max 260**. That closes round 66 derivation with live evidence, and the address cross-checks it a second way: the file preferred base gives 0x00C14C58, the live client at base 0x610000 answers 0x00E24C58 - the same RVA 0x814C58 rebased. Report live_reports/ui_manager_reads_live.json; suite OK; scoped pyright 0 errors. Still owed: the members that **call** the client (preference getters, GetFPSLimit, the senders, the keys, the window setters, the dialog clicks), which need the elevated connection) |
@@ -79,10 +84,132 @@ something stopped — not something to wait on.
 | **Phase (prev)** | live: the viewer's scheme read member by member; **one name tested alone** (agent 15, gadget, `\x0C6E` -> "Random Arenas"), six agents put through the port's decoder and the client's; the slot mapping verified live for the first time; the ring cost measured (~1.0 s per string file) |
 | **Phase (prev 2)** | live: names walked on all four branches with 0 byte mismatches; two client crashes traced to a killed run's orphaned patch |
 | **Phase** | **`Camera` is FULL**: 46/46 members answer, live-verified (reads median 5 us, a write read back from the client's own struct, the camera-unlock patch proven byte-for-byte); the payload gained `WRITE_MEMORY` so a member can change client state on the game's own thread, and the class now caches a patch's address *and* bytes the way `MemoryPatcher` does |
-| **Verdicts** | **`Agent`: COMPLETE for this port's purposes** (148 declared, 145 answer; the 3 that raise are two frame-loop halves and the injected-runtime artifact), **`AgentArray`: FULL**, **`Camera`: FULL (2026-09-27)**, **`Inventory`: COMPLETE for this port's purposes (53 of 57 methods; the 4 that raise are Reforged's three coroutine generators and the injected console's log)**, **`Item`: FULL**, **`ItemArray`: FULL**, **`FrameTree` package: all seven modules in, neither class FULL** (`_FrameTree` 33 of 41 answering, `Frame` 93 of 115) -- all counted from the modules' own ASTs |
+| **Verdicts** | **`Map`: COMPLETE for this port's purposes — DONE by the owner's ruling of 2026-09-29, 168 of 178** (rounds 78-81 — every member of the class, both `MapProjection`s, all three window namespaces, `Pregame`, `Pathing` and `Quad`; the ten that raise are the nine mouse members, which need the injected runtime's own ImGui, and `Pathing.WorldToScreen`, which needs its overlay manager — each says so in its own body), **`MapMethods`: FULL, and 3 of its 7 bodies are live-verified** (`Travel`, `TravelGH`, `LeaveGH` - the other four ride `Frame.click`, `skip_cinematic_func` and a game state), **`UIManager.SendUIMessage`/`SendUIMessageRaw`: live-verified (round 81)**, , **`FfnaMapMethods`: FULL**, **`Pathing`'s navmesh half: 2 of 31 unbuilt** (`AutoPathing.get_path`/`get_path_to`, both naming `PyPathing` and the `Routines` driver), **`Checks`: 7 of 65** (its `Map` namespace only — the cascade `Map` reaches; the rest is that class's own migration), **`Utils`: 39 of 40**, **`Agent`: COMPLETE for this port's purposes**
 | **Package status** | **`FrameTree`: the package is complete** — all seven of its modules are in place (the five tables verbatim, `frame.py` with both classes declared in full in the source's own order, and the source's own `__init__` re-export list). `_FrameTree` 41/41 declared (**32 answering**), `Frame` 115/115 (**89 answering**); both counts measured from the module's AST, order compared against the source's. **Neither class is FULL** — what is left is named, not unknown: the game-thread frame actions, the root-frame geometry, the client's title table + ImGui + the overlay, and the client-call lookups ([`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md)). Next: the salvage dialog's 17 `Inventory` members, which is why the package was ported. |
 | **Verdicts (prev)** | **`Agent`: COMPLETE for this port's purposes** (148 declared, 145 answer; the 3 that raise are two frame-loop halves and the injected-runtime artifact) and **`AgentArray`: FULL** (no raising member) -- both from the modules' own AST, 2026-09-27 |
 | **Updated** | 2026-09-27 (round 55 — the teardown fix: 1454 offline tests OK, pyright clean; a replay of the crash sequence did not reproduce it, and the client has been untouched since) |
+
+## Now (round 79 - `Map` is done: 168 of 178 answer, and the ten that do not cannot)
+
+**What moved.** `Map.Pathing` and `Quad`, and the three dependencies they reach. The class has **no
+porting work left**: every member either answers or is one of the ten divergences, and each of those says
+so in its own body.
+
+**The dependencies, each at the source's own place.**
+
+* **`Checks.Map`** — `py4gw/routines_src/Checks.py`. `GetPathingMaps`/`GetPathingMapsRaw` guard on
+  `Checks.Map.MapValid()` (`Map.py:2107, 2117`), so the `Map` namespace is ported in full: all seven
+  members, every one a guard over the already-ported `Map` and `Party`. **`Checks`'s other seven
+  namespaces are not declared here** — `Player`, `Party`, `Inventory`, `Items`, `Effects`, `Agents`,
+  `Skills`: `Map` reaches none of them, and declaring a member whose body cannot be written yet belongs to
+  `Checks`'s own migration, not to this cascade. `CLASS_PORT_MAP.md` now carries a row saying exactly
+  that, so it is recorded and not hidden. The source's `Routines = _RProxy()` is not carried either: none
+  of `Checks.Map` uses it.
+* **`FfnaMapMethods`** — `py4gw/ffna_map_methods.py`, the source's 681-line module whole: thirteen parser
+  functions, three dataclasses, the `FfnaMapMethods` class and the **404-entry** `_MAP_ID_TO_DAT_FILE_ID`
+  table. The table is checked **value for value** against the source by the new offline suite (404 entries,
+  identical). Its only external need was the archive read, and that is the already-live-verified
+  `dat_reader.read_file_by_id`.
+* **`Pathing`'s navmesh half** — `py4gw/pathing.py`. `AABB`, the BSP helpers, `TrapezoidBSP`, `NavMesh`
+  and `AutoPathing` whole, extracted from the source's own line ranges (`14-443`, `572-663`, `665-862`) so
+  nothing is retyped. `AutoPathing.get_path`/`get_path_to` are the two members that need
+  `PyPathing.PathPlanner` (the injected runtime's planner object) and the `Routines` coroutine driver;
+  they are declared and name both, and neither is on `Map.Pathing`'s path. `AStar`, `AStarNode`,
+  `chaikin_smooth_path` and `densify_path2d` are those two members' helpers and are not ported, because
+  nothing reached them. `PySystem.Console.Log` in `NavMesh.load_from_file` (`:439`) is the injected
+  console: recorded on the member, not replaced.
+
+**One recorded adaptation.** `Quad`'s corners are `PyOverlay.Vec2f(...)` in the source, and native binds
+that name to `GW::Vec2f` (`overlay_bindings.cpp:14-18`) — two floats with `x`/`y`. That is the record
+`py4gw/internals/types.py` already declares as the port of Reforged's own
+`native_src/internals/types.py::Vec2f`: same words, same fields, same construction.
+
+**The ten that remain, and they are not work.** Nine mouse members
+(`MissionMap`/`MiniMap`/`WorldMap` × `IsMouseOver`, `GetLastClickCoords`, `GetLastRightClickCoords`) read
+`PyImGui.get_io()` through `Frame.is_mouse_over`/`Frame.io_events` — the injected runtime's own ImGui,
+which this project installs nowhere and can install nowhere. One, `Pathing.WorldToScreen`, is
+`PyOverlay.Overlay()` and `Overlay.FindZ`: the injected runtime's overlay manager, and the class has no
+render process.
+
+**Verification.** `tests/test_map_offline.py` **8 tests OK** — 178/178 names in source order, 17/17
+class attributes, **168 implemented, 10 refusing**, the raising set pinned. New
+`tests/test_map_pathing_offline.py` **18 tests OK**: the FFNA table value for value, the chunk walk, the
+spawn groups and the `PathingMap` builder on synthetic FFNA bytes, `Checks.Map` against the source's own
+class body, the BSP and the navmesh on trapezoid fixtures (including the source's own duplicate-adjacency
+behaviour, pinned rather than tidied), and both injected members refusing with their reason. Suite
+**1557 tests**, **1 failure** — the pre-existing `test_ui_manager_offline` `GetWindoPosition`, which is
+still the uncommitted `int()` cast in `py4gw/ui_manager.py` and is not this class's. Scoped `pyright` on
+the seven files: **0 errors**.
+
+**Next: the live pass**, and it is the only thing left. The reads against a loaded map (the 22 `AreaInfo`
+readers, `GetUnloadedMapInfo(GetMapID())` against the loaded record, the name round trip, `MissionMap` open
+**and** closed), then the nine actions one at a time with the owner present, because they move the game.
+
+## Now (round 78 - `Map` lands as a class, and its own defects are closed)
+
+**What moved.** `py4gw/map.py` carries the whole of `Map`: the readiness gate, identity, both name-table
+groups, the region/language/instance group, the foes/vanquish group, all 22 `AreaInfo` readers, the four
+unloaded-map/challenge/bounds members, and the nine actions. Then `MissionMap` (13 of 16), both
+`MapProjection`s (15 and 16 members, pure arithmetic over the ported frame geometry), `MiniMap` (12 of
+15), `WorldMap` (9 of 12) and `Pregame` (all 9). **148 of 178 answer; 30 to port.**
+
+**The four defects this round found in the class, and the one it found below it.**
+
+1. **The 17 class attributes were undeclared.** `Map.py` declares click memory on four namespaces
+   (`892-895`, `1407-1410`, `1854-1857`, `2028-2031`), `MissionMap._last_pan_offset` (`1066`) and
+   `Pregame`'s two imported names (`2026`). `tests/test_map_offline.py` compared `FunctionDef` names, so
+   `AnnAssign` and the class-body import were invisible to every check the class had. All 17 are in, and
+   `test_every_source_class_attribute_is_declared` now reads the source's class bodies for `AnnAssign`,
+   `Assign` and `ImportFrom` and compares them name for name. `MissionMap.GetPanOffset` is the member
+   that needed it: its body holds `_last_pan_offset` rather than answering `(0.0, 0.0)`, and the field to
+   hold it did not exist.
+2. **Three members returned a plausible wrong value.** `GetRegionType`, `GetCampaign` and `GetContinent`
+   answered `(id, "")`. `PORTING_RULES.md` forbids exactly that. They read the ported name tables now, and
+   **two carry a source-internal `KeyError`**: the null path is `CampaignName[255]`/`ContinentName[255]`
+   and both tables are keyed `0..6`. Ported as written, recorded on the member.
+3. **An invented duplicate `InstanceType`.** `py4gw/context/instance_info_context.py` declared its own
+   `InstanceType` (`OUTPOST`/`EXPLORABLE`/`LOADING`), its own `InstanceTypeName` and a `display_name`
+   property, while the ported `enums_src/map_enums.py` already carried the source's single enum
+   (`Outpost`/`Explorable`/`Loading`) — and Reforged's `InstanceInfoContext.py` declares neither. It is the
+   inconsistency `AGENTS.md` names as the defect that clause exists to catch. Deleted; `Map`,
+   `py_inventory`, the test and both package exports read the source's.
+4. **Three `MiniMap.MapProjection` signatures were mis-transcribed** at Stage 1, and the name-only parity
+   test could not see a signature: `GamePosToScreen`/`ScreenToGamePos` were `(x, y)` where the source takes
+   six optional overrides, and `ComputedPathingGeometryToScreen` was `(geometry)` where the source takes
+   `map_bounds` plus the same six. All three are the source's now.
+5. **Below the class: `MissionMapContext._update_ptr` and `WorldMapContext._update_ptr` raised
+   unconditionally** ("requires the in-process shared-memory callback"), and `GWContext`'s `GetContext`
+   calls `_update_ptr` first. Every `Map.MissionMap` and `Map.WorldMap` context read would therefore have
+   failed *below* `Map`, with a `NotImplementedError` naming the wrong thing. The documented route already
+   existed — `py4gw/client.py`'s `mission_map_context`/`world_map_context`, acquired by walking the client's
+   UI frame array, read-only and live-verified. Both are now the port's lazy refresh in
+   `GuildContext._update_ptr`'s shape.
+
+**The dependencies built.** `native_src/methods/MapMethods.py` landed as **`py4gw/map_methods.py`** — the
+class whole, including `_GHKEY_SCRATCH`. Two of its arguments are host addresses in the source
+(`addressof(TravelStruct(...))`, `addressof(gh_key)`) because the sources run inside `Gw.exe`; `Travel`'s
+four words go into the block's data region instead, and `TravelGH` needs no copy at all because
+`player_gh_key` is a field of the client's own `GuildContext` at `+0x64`. The nine action members and the
+four window members run their inner action where Reforged's `ActionQueueManager`/`GLOBAL_CACHE.Coroutines`
+would have run it — this port has neither and no class here has either — which is the rule
+`Player.BuySkill` set.
+
+**Unexpected win.** `Map.MissionMap.GetScale` answering **unblocked `Utils.GwinchToPixels` and
+`Utils.PixelsToGwinch`**, which were already written source-identical and only ever raised from that read.
+`Utils` is now 39 of 40, with `TokenizeMarkupText` the last member.
+
+**Verification.** `tests/test_map_offline.py` **8 tests OK** — 178/178 names in source order, 17/17 class
+attributes, 148 implemented, 30 refusing, and the raising set pinned. Suite **1539 tests**, **1 failure**:
+`test_ui_manager_offline`'s `GetWindoPosition`, which is an uncommitted `int()` cast in
+`py4gw/ui_manager.py` that predates this round (`git diff` shows it and nothing here touches that file) —
+preserved, not reverted, and flagged. Scoped `pyright` on the 13 files this round touched: **0 errors**.
+
+**Next.** `Pathing` and `Quad` (21 members) need three things, all named: `Checks.Map.MapValid`
+(`routines_src/checks.py:352-410`), `FfnaMapMethods` (682 lines, a 404-entry table and 13 pure `struct`
+parsers over the ported `dat_reader.read_file_by_id`), and `Pathing`'s navmesh half
+(`Pathing.py:14-141, 665-741` — pure arithmetic; `PyPathing` is only `get_path`'s, and the three
+`PySystem.Console.Log` sites are in `NavMesh.load_from_file` and `AStar.search`, neither on
+`force_reload_navmesh`'s path). Then the owed live pass, and the `Pathing.WorldToScreen` record.
 
 ## Now (round 33 - the next seven queries all need `Frame`, so the order of work flips)
 
@@ -1306,6 +1433,11 @@ hooked call's own word arguments instead of dereferencing one (``docs/TARGET_SID
 
 | round | when | what changed | evidence | verdict |
 | --- | --- | --- | --- | --- |
+| 82 | 2026-09-29 | **`Map` marked done by the owner's ruling** (*"mark this one as done, the things missing are the ones we already account for"*). Verdict -> **COMPLETE for this port's purposes** in `CLASS_PORT_MAP.md` (both rows) and `MAP_PORT.md`; 168 of 178 answer, the ten are the accounted-for divergences, and no member is a work item. Remaining live checks reclassified as **optional and state-dependent** (world map open, mission map/compass open, a cinematic, a mission with a challenge). Also recorded: `UIManager.SendUIMessage`/`SendUIMessageRaw` are now live-verified by the travel run | no code changed; `tests/test_map_offline.py` **12 tests OK**; offline suite 1561 tests with the one pre-existing `ui_manager.py` failure; `pyright` 0 errors | done |
+| 81 | 2026-09-29 | **the travel members, live-verified.** `TravelGH` 55 -> 5 (Hunter's Isle, `IsGuildHall()` true, 1.0 s), `Travel(55)` 5 -> 0 -> 55 (2.0 s), `TravelGH` + `LeaveGH` 55 -> 0 -> 5 and 5 -> 0 -> 55 (the owner's prediction held) - character back where it started, client clean. Three of the nine actions verified. **Fixed on the way**: my block offsets `0x300`/`0x320` collided with `frame.py`'s mouse-click packet, and `0x350`/`0x360`/`0x370` were inside `chat.LOG_MESSAGE_OFFSET`'s `0x200..0x600` span; all three moved above `_UI_PAYLOAD_OFFSET`, with `BlockRegionTests` as the guard | `tests/test_map_offline.py` **12 tests OK** (incl. the new block-region guard, which exposed **ten pre-existing overlaps** between other modules, recorded as a known set); `tests/probe_map_travel_live.py` added; travel run exit 0, `original: true` after | landed; `SkipCinematic` and the three challenge members need a game state |
+| 80 | 2026-09-29 | **the `Map` live pass: 44 tests OK (skipped=2), 3.7 s, elevated, map 55.** `GetUnloadedMapInfo(GetMapID())` agrees with the loaded `AreaInfo` on all 31 fields; the three name halves answer real names; 50 pathing layers / 2,836 trapezoids / 404 offline ids; all ten divergences still raise. **Measured finding**: one `Quad()` 376-387 ms -> `GetMapQuads()` ~18 min on this map (a frame-array walk per projection, where Reforged reads in-process); plain context reads are 0.1-0.9 ms and the navmesh build ~7 us/trapezoid. `tests/test_map.py` rewritten for the 168 answering members and now **measures before it runs** the O(trapezoids) ones; `tests/probe_map_live.py` added (sectioned, timed, progress file); `tools/run_live_suites.ps1` now **tees** so a live run shows progress instead of looking stalled | suite 44 tests **OK (skipped=2)**; client `original: true` on both hook entries after the run; offline suite unchanged (1557 tests, 1 pre-existing failure); `pyright` 0 errors on `tests/test_map.py` and `tests/probe_map_live.py` | landed; world map closed (its reads skipped) and the nine actions still owed |
+| 79 | 2026-09-27 | **`Map` is done: 168 of 178 members answer, 10 recorded.** `Map.Pathing` and `Quad` landed with the three dependencies they reach — `Checks.Map` (`py4gw/routines_src/Checks.py`), `FfnaMapMethods` (`py4gw/ffna_map_methods.py`, the source's module whole including the 404-entry table) and `Pathing`'s navmesh half (`py4gw/pathing.py`: `AABB`, `TrapezoidBSP`, `NavMesh`, `AutoPathing`). The ten that raise are the nine mouse members (`PyImGui.get_io()`) and `Pathing.WorldToScreen` (`PyOverlay.Overlay()`) | `tests/test_map_offline.py` **8 tests OK** (178/178 names, 17/17 attributes, 168 implemented, 10 refusing); `tests/test_map_pathing_offline.py` **18 tests OK** (the FFNA table value for value, the parsers on synthetic bytes, `Checks.Map` against the source's class body, the BSP/navmesh on fixtures, both injected members refusing); suite **1557 tests**, 1 failure (pre-existing `ui_manager.py` `GetWindoPosition`); scoped `pyright` on 7 files **0 errors** | landed; the live pass is what remains |
+| 78 | 2026-09-27 | **`Map` lands as a class: 148 of 178 members answer, 30 to port.** The whole of `Map`, both `MapProjection`s, `MissionMap`, `MiniMap`, `WorldMap` and `Pregame`; the source's 17 class attributes; four class defects closed (the attributes, three name halves, an invented duplicate `InstanceType`, three mis-transcribed signatures); two `_update_ptr`s fixed below the class; `MapMethods` ported as `py4gw/map_methods.py`. `Utils.GwinchToPixels`/`PixelsToGwinch` unblocked -> `Utils` 39 of 40 | `tests/test_map_offline.py` **8 tests OK** (178/178 names, 17/17 attributes, 148 implemented, 30 refusing); suite **1539 tests**, 1 failure (`test_ui_manager_offline`'s `GetWindoPosition`, an uncommitted `int()` cast in `py4gw/ui_manager.py` predating the round); scoped `pyright` on 13 files **0 errors** | landed; `Pathing` + `Quad` and the live pass next |
 | 12 | 2026-09-27 04:30 | **a name is decoded by the client.** `Agent.GetNameByID` now hands the encoded string to the client's decoder (Native's `AsyncGetAgentName` route, `agent_methods.cpp:318-325`) and takes the text from its completion: **~115 ms** first time, **0.09-0.5 ms** cached, against ~2.1 s for the dat route's first name in a slot — and with no dat record at all. The table route stays in the tree for a caller that wants a table entry rendered on the host, and **no member reads it any more**, so the connect-time warm-up is off (it was competing with the decodes for the game thread: target/interact 70 ms -> 32 ms). Three defects fixed: `dialog._on_string_decoded` was taking decodes it did not own (consuming agent names and discarding their text), a disconnect could fail with names in flight (block orphaned), and the client answers only a few decodes at once (32 at once answered none; capped at 8). The owner's timed run: 8974 -> 7955 -> **4018 ms** process-start-to-interact | `1074 tests OK`; `pyright` `0 errors`; `live_reports/find_npc11.txt`, `name_member3.txt`, `name_scheme8.txt`, `perf_live.txt`; hook targets read back clean after every run | landed; cold map-wide sweep still ~2.9 s (levers named) |
 | 11 | 2026-09-27 02:30 | **the GW.dat handling left the call path.** The `TextParser` trigger (connect) now calls the source's own enqueue `load_string_table(language_id)`; the load runs on one daemon worker (`_start_warmup`/`_warmup_worker`), the table is parsed in file by file (`_read_slot`, so a name answers as soon as its file has been read), a decode whose entry is missing *asks* for the slot it needs (`_request_slot`) and is served next (`_slot_order`), and `ConnectedClient.close` joins the worker before the block it reads through is released. The two members invented for the on-demand path (`use_string_table_language`, `_ensure_entry_loaded`) are deleted. Nothing is re-read on a map change (the table is the client's language table) | `1073 tests OK` (1.0 s; `WarmupTests` pins the non-blocking enqueue and the requested-slot-first order); scoped `pyright` on 5 files `0 errors`; `docs/STRING_DECODE_PLAN.md` § 10.1 | landed, live timing to measure |
 | 10 | 2026-09-27 01:00 | **the owner's catch followed to the line**: the Reforged agent viewer (`Widgets/Coding/Debug/Guild Wars/Agent Info.py`) read member by member -- its rows, its name column (`Agent.GetNameByID`), its encoded column and its string-table state, which is the port's own scheme; `tests/probe_name_scheme.py` added and run live -- **one name alone** (agent 15: type `0x200` gadget, `\x0C6E`, entry 2926, slot 2, "Random Arenas") with native's gadget walk printed beside it (`gadget_name_enc = 0`, `gadget_id = 75`, `gadget_info` size 9524, the record's `name_enc` = the pointer read), six agents put through the port's decoder (Vekk, Dunkoro, Pet - %str1%, Zaishen Chest -- four correct records, two of them through RC4) and through the client's own decoder (native's route, first call: preconditions live, ~130 ms per call, answer empty -- open); **the slot mapping verified live for the first time** (`entries_per_file 1024`, `slot_count 99`, slots 0-7 `start_index == slot*1024`); the ring cost measured (one command per dispatcher hit, ~130 ms per command, ~1.0 s per string file, 0.104 ms cached) | `live_reports/name_scheme.txt`, `live_reports/name_scheme2*` (probe output); `pyright tests/probe_name_scheme.py` 0 errors; the sources' own tables quoted (`maps.h:954`, `agent.h:136`, `payload.py:978-996`, `Agent Info.py:42-90`, `:465-524`) | live: single name walked end to end; client-decode comparison open |

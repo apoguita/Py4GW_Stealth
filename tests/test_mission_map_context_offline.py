@@ -185,8 +185,12 @@ class MissionMapContextOfflineTests(unittest.TestCase):
         self.assertIsNone(MissionMapContext.get_context())
         with self.assertRaisesRegex(NotImplementedError, "callback"):
             MissionMapContext.enable()
-        with self.assertRaisesRegex(NotImplementedError, "callback"):
-            MissionMapContext._update_ptr()
+        # ``_update_ptr`` is the port's lazy refresh, not a refusal: with no client connected it
+        # clears both the pointer and the snapshot, which is the state the source's callback
+        # leaves behind when the frame publishes nothing (the mission map closed).
+        self.assertIsNone(MissionMapContext._update_ptr())
+        self.assertEqual(MissionMapContext.get_ptr(), 0)
+        self.assertIsNone(MissionMapContext.get_context())
 
 
 if __name__ == "__main__":

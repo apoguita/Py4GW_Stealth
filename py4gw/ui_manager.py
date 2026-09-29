@@ -1116,7 +1116,7 @@ class UIManager:
             base + int(window_id) * _WINDOW_POSITION_SIZE, _WINDOW_POSITION_SIZE
         )
         _state, p1x, p1y, p2x, p2y = struct.unpack("<Iffff", raw)
-        return [p1x, p1y, p2x, p2y]
+        return [int(p1x), int(p1y), int(p2x), int(p2y)]
 
     @staticmethod
     def IsWindowVisible(window_id: int) -> bool:

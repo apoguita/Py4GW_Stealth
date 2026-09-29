@@ -20,9 +20,10 @@ from unittest import mock
 from py4gw import item as item_module
 from py4gw import py_inventory
 from py4gw.context.gw_array import GWArray
-from py4gw.context.instance_info_context import AreaInfoStruct, InstanceType, Region
+from py4gw.context.instance_info_context import AreaInfoStruct, Region
 from py4gw.context.item_context import BagStruct, BagType, InventoryStruct, ItemStruct
 from py4gw.enums_src.item_enums import MAX_GOLD_CHARACTER, MAX_GOLD_STORAGE
+from py4gw.enums_src.map_enums import InstanceType
 from py4gw.item import PyItem
 from py4gw.map import Map
 
@@ -581,15 +582,15 @@ class CanAccessXunlaiChestTests(_FixtureCase):
     def test_only_an_outpost_reaches_the_chest(self) -> None:
         """``GetInstanceType() != Outpost`` answers false before the map record is read at all."""
 
-        self.assertFalse(self._chest(InstanceType.EXPLORABLE, int(Region.Region_Kryta)))
-        self.assertFalse(self._chest(InstanceType.LOADING, int(Region.Region_Kryta)))
-        self.assertTrue(self._chest(InstanceType.OUTPOST, int(Region.Region_Kryta)))
+        self.assertFalse(self._chest(InstanceType.Explorable.value, int(Region.Region_Kryta)))
+        self.assertFalse(self._chest(InstanceType.Loading.value, int(Region.Region_Kryta)))
+        self.assertTrue(self._chest(InstanceType.Outpost.value, int(Region.Region_Kryta)))
 
     def test_presearing_is_the_one_region_that_may_not(self) -> None:
         """``region != Region_Presearing``, and a record that cannot be read is false."""
 
-        self.assertFalse(self._chest(InstanceType.OUTPOST, int(Region.Region_Presearing)))
-        self.assertFalse(self._chest(InstanceType.OUTPOST, None))
+        self.assertFalse(self._chest(InstanceType.Outpost.value, int(Region.Region_Presearing)))
+        self.assertFalse(self._chest(InstanceType.Outpost.value, None))
 
 
 class InteractGuardTests(_FixtureCase):

@@ -1,0 +1,6 @@
+elevated: True
+started:  2026-09-29T11:20:12.4087542-06:00
+
+tests.test_map                     exit=0      4s  Ran 44 tests in 3.710s | OK (skipped=2)
+
+finished: 2026-09-29T11:20:16.5547490-06:00

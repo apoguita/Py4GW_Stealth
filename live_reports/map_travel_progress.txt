@@ -1,0 +1,25 @@
+[   0.00s] start: importing and finding the client
+[   0.14s] connecting to pid 34748
+[   1.57s] connected
+[   1.57s] start: map 55 (Lions Arch), guild hall=False
+[   1.57s] step 1: Map.TravelGH()
+[   1.61s]     TravelGH: map_id=55 ready=True instance=Outpost
+[   2.61s]     TravelGH: map_id=5 ready=True instance=Outpost
+[   2.61s] step 1 result: guild hall=True map=5 (Guild Hall - Hunter's Isle)
+[   2.61s] step 2: Map.Travel(55)
+[   3.32s]     Travel(55): map_id=5 ready=True instance=Outpost
+[   4.32s]     Travel(55): map_id=0 ready=False instance=Loading
+[   5.32s]     Travel(55): map_id=55 ready=True instance=Outpost
+[   5.32s] step 2 result: back in 55 (Lions Arch) = True
+[   5.32s] step 3: Map.TravelGH() again, then Map.LeaveGH()
+[   5.43s]     TravelGH (second): map_id=55 ready=True instance=Outpost
+[   6.43s]     TravelGH (second): map_id=0 ready=False instance=Loading
+[   7.44s]     TravelGH (second): map_id=5 ready=True instance=Outpost
+[   7.44s] in the guild hall at map 5; calling Map.LeaveGH()
+[   7.60s]     LeaveGH: map_id=5 ready=True instance=Outpost
+[   8.61s]     LeaveGH: map_id=0 ready=False instance=Loading
+[   9.61s]     LeaveGH: map_id=55 ready=True instance=Outpost
+[   9.61s] step 3 result: left the hall=True; now {'map_id': 55, 'name': 'Lions Arch', 'is_guild_hall': False}
+[   9.61s] disconnecting (restores the client's own bytes)
+[  11.46s] disconnected
+[  11.46s] done in 11.5s

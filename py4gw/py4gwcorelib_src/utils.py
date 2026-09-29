@@ -243,9 +243,11 @@ class Utils:
         """``Utils.py:151-160``, written as the source writes it.
 
         The two reads it makes are ``Map``'s — ``Map.MissionMap.GetZoom()`` and
-        ``Map.MissionMap.GetScale()`` — so this port needs no arithmetic of its own, and the raise
-        a caller sees on this build is ``MissionMap.GetScale``'s own (``py4gw/map.py``): the frame
-        viewport-scale read is Map's Stage 5 work, recorded in ``docs/MAP_PORT.md``.
+        ``Map.MissionMap.GetScale()`` — and both answer: ``GetZoom`` is the gameplay context's
+        word, and ``GetScale`` is ``frame_info.viewport_scale()``, answerable since the frame
+        geometry landed (``py4gw/frame_tree/frame.py``, native's
+        ``FramePosition::GetViewportScale`` over the root frame and the captured render viewport).
+        This member has no raise of its own left.
         """
 
         from ..map import Map

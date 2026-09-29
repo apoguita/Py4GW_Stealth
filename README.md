@@ -225,7 +225,11 @@ print(Player.GetName(), Player.GetLevel(), Player.GetXY())
 
 `Map`, `Player`, `Party`, `Scanner` and `Dialog` are ported, and each one carries a
 verdict in [`docs/CLASS_PORT_MAP.md`](docs/CLASS_PORT_MAP.md): **FULL** when every member
-works, **INCOMPLETE** with the remaining members named. `Scanner` is FULL. `Player` has 71
+works, **INCOMPLETE** with the remaining members named. **`Map` is done** — the project
+owner's ruling of 2026-09-29 put it at the same *complete for this port's purposes* verdict
+`UIManager`, `Agent`, `Player` and `Inventory` carry: 168 of its 178 members answer, and the ten
+that do not are accounted for — nine need the injected runtime's own ImGui (which nothing here
+installs) and one needs its overlay manager (and this class has no render process). `Scanner` is FULL. `Player` has 71
 Reforged members: 51 that read, 18 that act by calling the client's own function on its own
 thread, and 1 that refuses — `player_instance`, an artifact of the port that is no longer valid for
 anything: it returned Reforged's in-process `PyPlayer` object, this project has no player object,

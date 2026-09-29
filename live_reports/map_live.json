@@ -1,0 +1,143 @@
+{
+  "elevated": true,
+  "clients": 1,
+  "pid": 34748,
+  "gate": {
+    "IsMapDataLoaded": true,
+    "GetInstanceType": 0,
+    "GetInstanceTypeName": "Outpost",
+    "IsMapReady": true,
+    "GetMapID": 55,
+    "IsInCinematic": false,
+    "IsObservingMatch": false
+  },
+  "names": {
+    "outposts": 278,
+    "map_name": "Lions Arch",
+    "id_by_name": 55,
+    "base_map_id": 55,
+    "variants": [
+      55,
+      808,
+      809,
+      810
+    ]
+  },
+  "instance": {
+    "GetRegion": [
+      0,
+      "America"
+    ],
+    "GetLanguage": [
+      0,
+      "English"
+    ],
+    "GetDistrict": 1,
+    "GetRegionType": [
+      13,
+      "City"
+    ],
+    "GetCampaign": [
+      1,
+      "Prophecies"
+    ],
+    "GetContinent": [
+      0,
+      "Kryta"
+    ],
+    "GetInstanceUptime": 2406062701,
+    "GetAmountOfPlayersInInstance": 63
+  },
+  "foes": {
+    "GetFoesKilled": 0,
+    "GetFoesToKill": 0,
+    "IsVanquishable": false,
+    "IsVanquishCompleted": false,
+    "IsMapUnlocked": true
+  },
+  "area_present": true,
+  "unloaded_vs_loaded_mismatches": [],
+  "bounds": {
+    "GetMapBoundaries": [
+      -18432.0,
+      -18432.0,
+      18432.0,
+      18432.0
+    ],
+    "GetMapWorldMapBounds": [
+      3712.0,
+      4704.0,
+      4096.0,
+      5088.0
+    ]
+  },
+  "frames": {
+    "IsEnteringChallenge": false,
+    "MissionMap.GetFrame": "None",
+    "MissionMap.IsWindowOpen": false,
+    "MiniMap.GetFrameID": 0,
+    "WorldMap.GetFrameID": 0,
+    "Pregame.GetFrameID": 0
+  },
+  "geometry": {
+    "MissionMap.GetMissionMapWindowCoords": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "MissionMap.GetMissionMapContentsCoords": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "MissionMap.GetScale": [
+      0.0,
+      0.0
+    ],
+    "MissionMap.GetZoom": 1.0,
+    "MissionMap.GetPanOffset": [
+      0.0,
+      0.0
+    ],
+    "MiniMap.GetWindowCoords": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "MiniMap.GetScale": 0.0,
+    "MiniMap.GetRotation": 0,
+    "MiniMap.IsLocked": true
+  },
+  "projection_round_trip_error": [
+    378496.0,
+    465312.0
+  ],
+  "normalized": [
+    0.0,
+    0.0
+  ],
+  "pathing_maps": 50,
+  "pathing_trapezoids": 2836,
+  "available_map_ids": 404,
+  "spawns": [
+    1,
+    10,
+    17
+  ],
+  "travel_portals": 3,
+  "quad_ms_each": 387.19887000042945,
+  "quad_estimate_seconds": 1098.095995321218,
+  "point_in_pathing": {
+    "skipped": true,
+    "estimated_seconds": 1098.095995321218
+  },
+  "refusals": {
+    "MissionMap.IsMouseOver": "Map.MissionMap.IsMouseOver is declared but not built here yet: it needs PyImGui.get_io() —",
+    "MiniMap.GetLastClickCoords": "Map.MiniMap.GetLastClickCoords is declared but not built here yet: it needs UIManager.GetI",
+    "WorldMap.GetLastRightClickCoords": "Map.WorldMap.GetLastRightClickCoords is declared but not built here yet: it needs UIManage",
+    "Pathing.WorldToScreen": "Map.Pathing.WorldToScreen is declared but not built here yet: it needs PyOverlay.Overlay()"
+  }
+}

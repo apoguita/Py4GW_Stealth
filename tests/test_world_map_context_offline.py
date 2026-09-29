@@ -91,8 +91,12 @@ class WorldMapContextOfflineTests(unittest.TestCase):
         self.assertIsNone(WorldMapContext.get_context())
         with self.assertRaisesRegex(NotImplementedError, "callback"):
             WorldMapContext.enable()
-        with self.assertRaisesRegex(NotImplementedError, "callback"):
-            WorldMapContext._update_ptr()
+        # ``_update_ptr`` is the port's lazy refresh, not a refusal: with no client connected it
+        # clears both the pointer and the snapshot, which is the state the source's callback
+        # leaves behind when the frame publishes nothing (the world map closed).
+        self.assertIsNone(WorldMapContext._update_ptr())
+        self.assertEqual(WorldMapContext.get_ptr(), 0)
+        self.assertIsNone(WorldMapContext.get_context())
 
 
 if __name__ == "__main__":

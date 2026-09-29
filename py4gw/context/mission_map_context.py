@@ -258,11 +258,33 @@ class MissionMapContext:
 
     @staticmethod
     def _update_ptr() -> None:
-        """Preserve the source callback entry point; it requires in-process code."""
+        """Refresh the facade lazily, the way every other context facade does.
 
-        raise NotImplementedError(
-            "MissionMapContext._update_ptr requires the in-process shared-memory callback."
-        )
+        The source's ``_update_ptr`` is the entry point its in-process callback calls each frame,
+        and it assigns the pointer that callback published. Stealth has no dispatcher
+        (``PORTING_RULES.md`` § *There is no dispatcher: every read is lazy*), so the refresh
+        happens here, at the point of use, through the same read the module's own ``get()``
+        makes: the context is acquired by walking the client's UI frame array, which writes
+        nothing to the client. With no client, or a map the frame does not publish (the mission
+        map closed), both the pointer and the snapshot answer nothing — which is what the
+        source's callback leaves behind in the same state.
+        """
+
+        from ..client import current_client
+
+        client = current_client()
+        if client is None:
+            MissionMapContext._ptr = 0
+            MissionMapContext._cached_ctx = None
+            return
+        try:
+            context = client.mission_map_context
+            address = context.resolve_address()
+            MissionMapContext._ptr = address or 0
+            MissionMapContext._cached_ctx = cast(Any, context.read())
+        except (OSError, RuntimeError):
+            MissionMapContext._ptr = 0
+            MissionMapContext._cached_ctx = None
 
     @staticmethod
     def enable() -> None:

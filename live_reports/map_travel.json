@@ -1,0 +1,106 @@
+{
+  "steps": [
+    {
+      "step": "TravelGH",
+      "call_seconds": 0.0348237999714911,
+      "landed": true,
+      "seconds": 1.0046741999685764,
+      "map_id": 5,
+      "transitions": [
+        [
+          0.002419700031168759,
+          55,
+          true
+        ],
+        [
+          1.0045743000227958,
+          5,
+          true
+        ]
+      ]
+    },
+    {
+      "step": "Travel(55)",
+      "call_seconds": 0.7081295000389218,
+      "landed": true,
+      "seconds": 2.0051821999950334,
+      "map_id": 55,
+      "transitions": [
+        [
+          0.002520899986848235,
+          5,
+          true
+        ],
+        [
+          1.0031409000512213,
+          0,
+          false
+        ],
+        [
+          2.0051754999440163,
+          55,
+          true
+        ]
+      ]
+    },
+    {
+      "step": "TravelGH (second)",
+      "landed": true,
+      "seconds": 2.0058547999942675,
+      "map_id": 5,
+      "transitions": [
+        [
+          0.001270200009457767,
+          55,
+          true
+        ],
+        [
+          1.001950600068085,
+          0,
+          false
+        ],
+        [
+          2.0057416000636294,
+          5,
+          true
+        ]
+      ]
+    },
+    {
+      "step": "LeaveGH",
+      "call_seconds": 0.16545870003756136,
+      "landed": true,
+      "seconds": 2.0043339000549167,
+      "map_id": 55,
+      "transitions": [
+        [
+          0.0012899000430479646,
+          5,
+          true
+        ],
+        [
+          1.0025070999981835,
+          0,
+          false
+        ],
+        [
+          2.004242100054398,
+          55,
+          true
+        ]
+      ]
+    }
+  ],
+  "elevated": true,
+  "pid": 34748,
+  "start": {
+    "map_id": 55,
+    "name": "Lions Arch",
+    "is_guild_hall": false
+  },
+  "final": {
+    "map_id": 55,
+    "name": "Lions Arch",
+    "is_guild_hall": false
+  }
+}

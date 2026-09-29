@@ -57,9 +57,10 @@ from typing import Any
 
 from .client import require_client
 from .context.gw_context import GWContext
-from .context.instance_info_context import InstanceType, Region
+from .context.instance_info_context import Region
 from .context.item_context import BagStruct, BagType
 from .enums_src.item_enums import MAX_GOLD_CHARACTER, MAX_GOLD_STORAGE
+from .enums_src.map_enums import InstanceType
 from .game_thread.shared_block import CallForm
 from .item import PyItem
 
@@ -121,7 +122,7 @@ def _can_access_xunlai_chest() -> bool:
 
     from .map import Map
 
-    if Map.GetInstanceType() != InstanceType.OUTPOST:
+    if Map.GetInstanceType() != InstanceType.Outpost:
         return False
     map_info = GWContext.InstanceInfo().GetMapInfo()
     return map_info is not None and int(map_info.region) != int(Region.Region_Presearing)

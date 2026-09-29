@@ -634,10 +634,17 @@ Recorded so they are **not** mistaken for defects:
   the six that do not name what they need (the control-action mechanism for the three skill presses,
   native's `DecodeSkillTemplate` for the two loaders, and the skill timer for `get_recharge`). It
   completed `Utils.GenerateSkillbarTemplate`; see [`SKILLBAR_PORT.md`](SKILLBAR_PORT.md).
-- `py4gw/map.py` — the full 178-member surface is declared and nested the way
-  `Map.py` nests it, with 45 members reading the client so far and 133 still to port
-  (projections, pathing reads, frame lookup).
-  [`MAP_PORT.md`](MAP_PORT.md) is the staged plan and the progress record.
+- `py4gw/map.py` — **DONE (rounds 78-81; the owner's ruling of 2026-09-29: *"mark this one as done,
+  the things missing are the ones we already account for"*)**: 178 members declared and nested the way
+  `Map.py` nests it, **168 answering**, plus the source's own 17 class attributes. The ten that raise
+  are the accounted-for divergences — nine mouse members (`PyImGui.get_io()`, the injected runtime's
+  own ImGui, which nothing here installs) and `Pathing.WorldToScreen` (`PyOverlay.Overlay()`, and this
+  class has no render process) — and each says so in its own body. **No member of `Map` is a work
+  item.** Dependencies ported with it: `MapMethods` (`py4gw/map_methods.py`, with `Travel`, `TravelGH`
+  and `LeaveGH` live-verified), `Checks.Map` (`py4gw/routines_src/Checks.py`), `FfnaMapMethods`
+  (`py4gw/ffna_map_methods.py`) and `Pathing`'s navmesh half (`py4gw/pathing.py`). The live checks
+  still open need a game state, not code. [`MAP_PORT.md`](MAP_PORT.md) is the plan and the progress
+  record.
 - `py4gw/dialog.py` — Reforged's 10-member `Dialog.py` plus the native `PyDialog`
   surface behind it: 32 statics and 6 records, **31 answering; 1 reports the work it needs**
   (`get_dialog_text_decoded`, and the catalog `content` behind `get_dialog_info` and

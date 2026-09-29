@@ -20,47 +20,6 @@ class _memory_reader(RemoteMemoryReader, Protocol):
 _structure_type = TypeVar("_structure_type", bound=Structure)
 
 
-class InstanceType(IntEnum):
-    """Native ``GW::Constants::InstanceType`` values.
-
-    The client has exactly **two** map phases: ``Outpost`` (0) and
-    ``Explorable`` (1). Every other value is a loading phase, and the native
-    spelling for that state is ``Loading`` (2).
-
-    The client's own readiness test is written that way round, not as an
-    equality against ``Loading``: Reforged's ``Map.IsMapLoading()`` is
-    ``GetInstanceType() not in (Outpost, Explorable)``, so an undeclared value
-    counts as loading too. Names come from :data:`InstanceTypeName`, as in
-    Reforged's ``Map_enums.py``.
-    """
-
-    OUTPOST = 0
-    EXPLORABLE = 1
-    LOADING = 2
-
-
-
-
-
-    @property
-    def display_name(self) -> str:
-        """Return the native spelling for reports and examples."""
-
-        return {
-            InstanceType.OUTPOST: "Outpost",
-            InstanceType.EXPLORABLE: "Explorable",
-            InstanceType.LOADING: "Loading",
-        }[self]
-
-
-#: Native instance-type names, ported from Reforged's ``Map_enums.py``.
-InstanceTypeName: dict[int, str] = {
-    InstanceType.OUTPOST: "Outpost",
-    InstanceType.EXPLORABLE: "Explorable",
-    InstanceType.LOADING: "Loading",
-}
-
-
 class MapDimensionsStruct(TargetStruct):
     """The fixed-width native ``MapDimensions`` record."""
 
@@ -303,7 +262,7 @@ class InstanceInfo:
     A null slot pointer is meaningful rather than an error.  ``read()`` returns
     ``None`` and :attr:`InstanceInfoStruct.instance_type` cannot be reported,
     which is the external equivalent of native ``GetInstanceType()`` returning
-    ``InstanceType.LOADING``.
+    ``enums_src.map_enums.InstanceType.Loading``.
     """
 
     _SLOT_RESOLVER = "map.instance_info_ptr_ref"

@@ -15,6 +15,7 @@ from .memory import ProcessMemoryReader
 from .perf_counter import MAX_SAMPLES, MetricSummary, PerfCounter
 from .agent_array import AgentArray
 from .enums_src.game_data_enums import Allegiance
+from .enums_src.map_enums import InstanceType, InstanceTypeName
 from .map import Map
 from .party import HERO_NAME_TO_ID, Hero, HeroType, Party
 from .player import ChatChannel, Player, PlayerStatus
@@ -76,7 +77,6 @@ from .context import (
     PlayerAgentIdStruct,
     InstanceInfo,
     InstanceInfoStruct,
-    InstanceType,
     MapDimensionsStruct,
     AreaInfoStruct,
     Region,

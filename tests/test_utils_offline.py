@@ -433,13 +433,24 @@ class UtilsDelegationTests(unittest.TestCase):
             self.assertEqual(Utils.PixelsToGwinch(pixels), 96.0)
             self.assertEqual(Utils.GwinchToPixels(96.0, 0.5), 96.0 * (1.5 * 2.5) / 96.0)
 
-    def test_the_scale_read_is_where_the_raise_comes_from(self) -> None:
-        """``GetZoom`` is ported; ``GetScale`` is Map's Stage 5 read, so the raise names it."""
+    def test_the_scale_read_answers(self) -> None:
+        """``GetZoom`` and ``GetScale`` both answer, so the converters compute.
+
+        The pair used to raise from ``Map.MissionMap.GetScale`` — Map's frame viewport-scale
+        read, which is native's ``FramePosition::GetViewportScale`` over the root frame and the
+        captured render viewport, and which landed with the frame geometry. Both reads are
+        patched here so the member's own arithmetic is what is measured.
+        """
 
         with mock.patch.object(Map.MissionMap, "GetZoom", staticmethod(lambda: 2.0)):
-            with self.assertRaises(NotImplementedError) as caught:
-                Utils.GwinchToPixels(96.0)
-        self.assertIn("MissionMap.GetScale", str(caught.exception))
+            with mock.patch.object(
+                Map.MissionMap, "GetScale", staticmethod(lambda: (2.5, 0.0))
+            ):
+                self.assertEqual(Utils.GwinchToPixels(96.0), 96.0 * (2.5 * 2.0) / 96.0)
+                self.assertEqual(
+                    Utils.PixelsToGwinch(96.0 * (2.5 * 2.0) / 96.0),
+                    96.0,
+                )
 
 
 class UtilsAdaptationTests(unittest.TestCase):
