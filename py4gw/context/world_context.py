@@ -650,12 +650,6 @@ class PlayerStruct(TargetStruct):
         return bool(int(self.reforged_or_dhuums_flags) & 0x4)
 
     @property
-    def name_encoded(self) -> str:
-        """Read the target name pointer without applying game text mapping."""
-
-        return _read_target_text(self._remote_reader, int(self.name_ptr)) or ""
-
-    @property
     def name_enc_encoded_str(self) -> str | None:
         """Read the encoded name-pointer field used by Reforged."""
 
@@ -680,37 +674,37 @@ class PlayerStruct(TargetStruct):
         return _format_encoded_text(self.name_encoded_str)
 
     @property
-    def name(self) -> str:
-        """Return the bounded player name."""
-
-        return self.name_encoded
-
-    @property
-    def auxiliary_pointers(self) -> list[int]:
-        """Read every source auxiliary pointer value."""
-
-        if self._remote_reader is None:
-            return []
-        raw = _read_world_array_bytes(self._remote_reader, self.h0040_array, c_uint32)
-        if raw is None:
-            return []
-        return [
-            int(c_uint32.from_buffer_copy(raw, offset).value)
-            for offset in range(0, len(raw), ctypes.sizeof(c_uint32))
-        ]
-
-    @property
     def h0040_ptrs(self) -> list[int] | None:
-        """Return the source-compatible auxiliary pointer list."""
+        """``WorldContext.py:632-638`` — the record's ``void*`` array as Python ints, or ``None``.
+
+        The body is the source's own read of ``h0040_array``; the walk an earlier round of this port
+        factored out as a public ``auxiliary_pointers`` property is inlined here, because neither source
+        declares that name.
+        """
 
         if self._remote_reader is None or not self.h0040_array.m_buffer:
             return None
-        values = self.auxiliary_pointers
+        raw = _read_world_array_bytes(self._remote_reader, self.h0040_array, c_uint32)
+        if raw is None:
+            return None
+        values = [
+            int(c_uint32.from_buffer_copy(raw, offset).value)
+            for offset in range(0, len(raw), ctypes.sizeof(c_uint32))
+        ]
         return values or None
 
 
 class HeroFlagStruct(TargetStruct):
-    """The native 0x24 hero flag record."""
+    """The native 0x24 hero flag record (``native_src/context/WorldContext.py:242-262``).
+
+    **The field name is Reforged's, and so is the property.** This module ports Reforged's
+    ``WorldContext.py``, and that file spells the record's ``Vec2f`` field ``flag_ptr`` (``:249``) and
+    puts a ``flag`` property on top of it (``:255-262``) that builds a fresh ``Vec2f`` and answers
+    ``None`` when the coordinates are not finite. Native's ``context/hero.h:20`` calls the field
+    ``flag`` — it is the *layout* authority, not this class's shape — and **round 18 briefly followed
+    the header instead, removing the property and renaming the field; round 19 restored Reforged's
+    shape, which is what the port had all along.**
+    """
 
     _pack_ = 1
     _fields_ = [
@@ -726,15 +720,30 @@ class HeroFlagStruct(TargetStruct):
 
     @property
     def flag(self) -> Vec2f | None:
-        """Return finite hero-flag target coordinates."""
+        """Return the flag position as a copy, or ``None`` when it is not finite.
 
-        if not math.isfinite(float(self.flag_ptr.x)) or not math.isfinite(float(self.flag_ptr.y)):
+        Reforged's own body, line for line: read the field, refuse a non-finite pair, and hand back a
+        **new** ``Vec2f`` rather than the record's own view of it.
+        """
+
+        flag = self.flag_ptr
+
+        if not math.isfinite(flag.x) or not math.isfinite(flag.y):
             return None
-        return self.flag_ptr
+
+        return Vec2f(flag.x, flag.y)
 
 
 class HeroInfoStruct(TargetStruct):
-    """The native 0x78 hero information record."""
+    """The native 0x78 hero information record (``native_src/context/WorldContext.py:264-281``).
+
+    The field carries Reforged's own name (``name_encoded_str``) and the class's one member is its
+    ``name_str``. Native's header spells the same field ``wchar_t name[20]`` (``context/hero.h:36``) and
+    an earlier round of this port exposed that spelling as a ``name`` property beside it, plus a
+    ``name_enc`` "compatibility alias" — two more names for one field, reachable from neither source's
+    Python. Round 21 removed both; the decode they wrapped is now ``name_str``'s own body, as the source
+    writes it.
+    """
 
     _pack_ = 1
     _fields_ = [
@@ -750,23 +759,12 @@ class HeroInfoStruct(TargetStruct):
     ]
 
     @property
-    def name(self) -> str:
-        """Decode the fixed-width UTF-16 hero name."""
-
-        raw = bytes(self.name_encoded_str)
-        return raw.decode("utf-16-le", errors="replace").split("\x00", 1)[0]
-
-    @property
-    def name_enc(self) -> ctypes.Array[c_uint16]:
-        """Compatibility alias for the source ``name_encoded_str`` field."""
-
-        return self.name_encoded_str
-
-    @property
     def name_str(self) -> str:
         """Return the display-safe hero name."""
 
-        return _format_encoded_text(self.name) or ""
+        raw = bytes(self.name_encoded_str)
+        name = raw.decode("utf-16-le", errors="replace").split("\x00", 1)[0]
+        return _format_encoded_text(name) or ""
 
 
 class ControlledMinionsStruct(TargetStruct):
@@ -956,12 +954,6 @@ class PetInfoStruct(TargetStruct):
         return self
 
     @property
-    def name(self) -> str:
-        """Read the bounded pet name through its target pointer."""
-
-        return _read_target_text(self._remote_reader, int(self.pet_name_ptr)) or ""
-
-    @property
     def pet_name_encoded_str(self) -> str | None:
         """Return the encoded pet name."""
 
@@ -1096,24 +1088,18 @@ class SkillbarStruct(TargetStruct):
 
         return bool(int(self.agent_id))
 
-    @property
-    def skill_ids(self) -> list[int]:
-        """Return the eight maintained skill identifiers."""
+    def GetSkillById(self, skill_id: int) -> SkillbarSkillStruct | None:
+        """``WorldContext.py:444-448`` — the slot whose ``skill_id`` matches, or ``None``.
 
-        return [int(skill.skill_id) for skill in self.skills]
-
-    def get_skill_by_id(self, skill_id: int) -> SkillbarSkillStruct | None:
-        """Return one maintained skill slot by identifier."""
+        The body is the source's own walk. An earlier round of this port put it behind a snake_case
+        twin (``get_skill_by_id``) and left this member delegating to it; round 21 removed the twin,
+        because the source declares this spelling and nothing reaches the other.
+        """
 
         for skill in self.skills:
             if int(skill.skill_id) == skill_id:
                 return skill
         return None
-
-    def GetSkillById(self, skill_id: int) -> SkillbarSkillStruct | None:
-        """Return the Reforged compatibility spelling."""
-
-        return self.get_skill_by_id(skill_id)
 
     @property
     def casted_skills(self) -> list[SkillbarCastStruct]:

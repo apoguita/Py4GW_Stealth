@@ -1,0 +1,120 @@
+{
+  "stage": "act",
+  "pid": 44052,
+  "controller_elevated": true,
+  "game_thread": true,
+  "plan": [
+    {
+      "step": "flags",
+      "what": "FlagAllHeroes to the party's own flag position, then UnflagAllHeroes",
+      "allowed": false
+    },
+    {
+      "step": "flag-hero",
+      "what": "FlagHero for one hero, then UnflagHero",
+      "allowed": false
+    },
+    {
+      "step": "behaviour",
+      "what": "SetHeroBehavior with a different value for one hero, then back",
+      "allowed": false
+    },
+    {
+      "step": "skill-ai",
+      "what": "SetSkillAIEnabled on one slot, then back",
+      "allowed": false
+    },
+    {
+      "step": "difficulty",
+      "what": "SetHardMode/SetNormalMode, in an outpost, then back",
+      "allowed": false
+    },
+    {
+      "step": "search",
+      "what": "SearchParty with a short advertisement, then SearchPartyCancel",
+      "allowed": true
+    },
+    {
+      "step": "pet",
+      "what": "SetPetBehavior(Fight, current target) — needs a living enemy target — then back",
+      "allowed": false
+    },
+    {
+      "step": "use-skill",
+      "what": "Heroes.UseSkill on one hero number and slot (`--hero-number`, `--slot`)",
+      "allowed": false
+    },
+    {
+      "step": "party-add",
+      "what": "AddHeroByName (`--hero`), and AddHenchman when `--henchman <agent_id>` is given — **changes the party**, outposts only",
+      "allowed": false
+    },
+    {
+      "step": "party-kick",
+      "what": "KickHeroByName (`--hero`), and KickHenchman with `--henchman` — **changes the party**",
+      "allowed": false
+    },
+    {
+      "step": "leave",
+      "what": "LeaveParty — **changes the party**, and only with someone else in it",
+      "allowed": false
+    },
+    {
+      "step": "outpost",
+      "what": "ReturnToOutpost — **leaves the map**",
+      "allowed": false
+    }
+  ],
+  "before": {
+    "party_size": 3,
+    "hard_mode": false,
+    "all_flag": [
+      Infinity,
+      Infinity
+    ],
+    "heroes": [
+      {
+        "position": 1,
+        "agent_id": 1493,
+        "behavior": 0,
+        "disabled": 1
+      },
+      {
+        "position": 2,
+        "agent_id": 1494,
+        "behavior": 1,
+        "disabled": 64
+      }
+    ],
+    "pet": null
+  },
+  "acted": {
+    "SearchParty(0, 'Stealth probe')": true,
+    "SearchPartyCancel": null
+  },
+  "after": {
+    "party_size": 3,
+    "hard_mode": false,
+    "all_flag": [
+      Infinity,
+      Infinity
+    ],
+    "heroes": [
+      {
+        "position": 1,
+        "agent_id": 1493,
+        "behavior": 0,
+        "disabled": 1
+      },
+      {
+        "position": 2,
+        "agent_id": 1494,
+        "behavior": 1,
+        "disabled": 64
+      }
+    ],
+    "pet": null
+  },
+  "note": "act stage: only the named steps ran, and each reversible one was put back. The steps that change the party or leave the map are the owner's call, one at a time — and each refuses here when the client's own condition for it is not met (no such hero, a party of one, not an outpost).",
+  "hooks_original_after_disconnect": true
+}

@@ -1,0 +1,80 @@
+{
+  "stage": "hold",
+  "pid": 44052,
+  "controller_elevated": true,
+  "game_thread": true,
+  "before": {
+    "party_size": 3,
+    "hard_mode": false,
+    "all_flag": [
+      Infinity,
+      Infinity
+    ],
+    "heroes": [
+      {
+        "position": 1,
+        "agent_id": 1493,
+        "behavior": 1,
+        "disabled": 0
+      },
+      {
+        "position": 2,
+        "agent_id": 1494,
+        "behavior": 1,
+        "disabled": 64
+      }
+    ],
+    "pet": null
+  },
+  "held": {
+    "SetTickasToggle(False)": null,
+    "SetTicked(True)": null,
+    "RespondToPartyRequest(0, True)": null,
+    "SetNormalMode (already normal)": null,
+    "SetHeroBehavior(1493, 1)": null,
+    "SetSkillAIEnabled(1493, 1, True)": true,
+    "SetSkillAIEnabled(1493, 2, True)": true,
+    "SetSkillAIEnabled(1493, 3, True)": true,
+    "SetSkillAIEnabled(1493, 4, True)": true,
+    "SetSkillAIEnabled(1493, 5, True)": true,
+    "SetSkillAIEnabled(1493, 6, True)": true,
+    "SetSkillAIEnabled(1493, 7, True)": true,
+    "SetSkillAIEnabled(1493, 8, True)": true,
+    "SetHeroBehavior(1494, 1)": null,
+    "SetSkillAIEnabled(1494, 1, True)": true,
+    "SetSkillAIEnabled(1494, 2, True)": true,
+    "SetSkillAIEnabled(1494, 3, True)": true,
+    "SetSkillAIEnabled(1494, 4, True)": true,
+    "SetSkillAIEnabled(1494, 5, True)": true,
+    "SetSkillAIEnabled(1494, 6, True)": true,
+    "SetSkillAIEnabled(1494, 7, False)": true,
+    "SetSkillAIEnabled(1494, 8, True)": true,
+    "SetPetBehavior": "skipped: this party has no pet record"
+  },
+  "after": {
+    "party_size": 3,
+    "hard_mode": false,
+    "all_flag": [
+      Infinity,
+      Infinity
+    ],
+    "heroes": [
+      {
+        "position": 1,
+        "agent_id": 1493,
+        "behavior": 1,
+        "disabled": 0
+      },
+      {
+        "position": 2,
+        "agent_id": 1494,
+        "behavior": 1,
+        "disabled": 64
+      }
+    ],
+    "pet": null
+  },
+  "unchanged": true,
+  "note": "hold stage: every call used the value the client already reports, so the sources' own guards refuse the write and the state must be identical afterwards. A 'changed' result here is a defect, not an expected write.",
+  "hooks_original_after_disconnect": true
+}

@@ -899,15 +899,20 @@ class ArgumentWitness:
         word_count: int,
         float_pointer: bool = False,
         fastcall_words: int = 0,
+        pointer_argument: int = 1,
+        caller_releases: bool = False,
     ) -> bytes:
         """Emit a callee that records what it was entered with.
 
         The default is ``void __cdecl(...)`` recording ``word_count`` stack words. With
-        ``float_pointer`` the first argument is treated as a pointer and the four dwords behind it are
-        recorded too, which is what the ``FLOAT_PTR`` form is supposed to pass. With ``fastcall_words``
-        the callee is the client's ``__thiscall`` shape instead: it records ``ecx`` and ``edx``, records
-        that many stack words, and **releases them itself** (``ret imm16``) — the half of that convention
-        a cdecl witness cannot show.
+        ``float_pointer`` the argument named by ``pointer_argument`` is treated as a pointer and the
+        four dwords behind it are recorded too — one for the ``FLOAT_PTR`` form, two for
+        ``U32_FLOAT_PTR``, whose word comes first. With ``fastcall_words`` the callee is the client's
+        ``__thiscall`` shape instead: it records ``ecx`` and ``edx``, records that many stack words,
+        and **releases them itself** (``ret imm16``) — the half of that convention a cdecl witness
+        cannot show. ``caller_releases`` turns that last part off, which is the shape
+        ``party.party_window_button_callback_func`` was measured to have: a ``__fastcall``-declared
+        function that ends with a bare ``ret``.
         """
 
         body = bytearray()
@@ -934,21 +939,22 @@ class ArgumentWitness:
                 body += bytes((0xA3,)) + struct.pack("<I", address + store)
 
         if float_pointer:
-            body += bytes((0x8B, 0x54, 0x24, 0x04))  # mov edx, [esp+4]
+            displacement = pointer_argument * 4
+            body += bytes((0x8B, 0x54, 0x24, displacement))  # mov edx, [esp+disp]
             for word in range(4):
-                displacement = word * 4
-                if displacement:
-                    body += bytes((0x8B, 0x42, displacement))
+                offset = word * 4
+                if offset:
+                    body += bytes((0x8B, 0x42, offset))
                 else:
                     body += bytes((0x8B, 0x02))
                 body += bytes((0xA3,)) + struct.pack(
-                    "<I", address + self.FLOATS_OFFSET + displacement
+                    "<I", address + self.FLOATS_OFFSET + offset
                 )
 
         body += bytes((0xC7, 0x05)) + struct.pack(
             "<II", address + self.CANARY_OFFSET, self.CANARY
         )
-        if fastcall_words:
+        if fastcall_words and not caller_releases:
             # ``ret imm16``: the callee releases the words the caller pushed, which is what
             # ``__thiscall`` and ``__fastcall`` do — and the reason the caller must not.
             body.append(0xC2)
@@ -1043,6 +1049,36 @@ class SourceAbiFormTests(unittest.TestCase):
         cls.stack_target = EmittedCode(
             cls.stack_witness.code(cls.stack_witness.address, word_count=9)
         )
+        #: The party button callback's shape, as the client was measured to have it: two register
+        #: words and **one** stack word, released by the callee (``ret 4``).
+        cls.fastcall_one_witness = ArgumentWitness()
+        cls.fastcall_one_target = EmittedCode(
+            cls.fastcall_one_witness.code(
+                cls.fastcall_one_witness.address, word_count=0, fastcall_words=1
+            )
+        )
+        #: The same shape where the client leaves the word for its caller — the party *window*
+        #: callback, whose bare ``ret`` disagrees with the ``__fastcall`` typedef native declares.
+        cls.fastcall_one_caller_witness = ArgumentWitness()
+        cls.fastcall_one_caller_target = EmittedCode(
+            cls.fastcall_one_caller_witness.code(
+                cls.fastcall_one_caller_witness.address,
+                word_count=0,
+                fastcall_words=1,
+                caller_releases=True,
+            )
+        )
+        #: ``void __cdecl(uint32_t, GamePos*)``: the word first, the record's address second, which is
+        #: the shape ``flag_hero_agent_func`` declares.
+        cls.word_pointer_witness = ArgumentWitness()
+        cls.word_pointer_target = EmittedCode(
+            cls.word_pointer_witness.code(
+                cls.word_pointer_witness.address,
+                word_count=2,
+                float_pointer=True,
+                pointer_argument=2,
+            )
+        )
         cls.targets = (
             cls.none_target,
             cls.one_target,
@@ -1052,6 +1088,9 @@ class SourceAbiFormTests(unittest.TestCase):
             cls.five_target,
             cls.fastcall_target,
             cls.stack_target,
+            cls.fastcall_one_target,
+            cls.fastcall_one_caller_target,
+            cls.word_pointer_target,
         )
         cls.witnesses = (
             cls.none_witness,
@@ -1062,6 +1101,9 @@ class SourceAbiFormTests(unittest.TestCase):
             cls.five_witness,
             cls.fastcall_witness,
             cls.stack_witness,
+            cls.fastcall_one_witness,
+            cls.fastcall_one_caller_witness,
+            cls.word_pointer_witness,
         )
         cls.table = WitnessBuffer(DESCRIPTOR_DEPTH * 8)
         low = min(target.address for target in cls.targets) & ~0xFFFF
@@ -1126,6 +1168,27 @@ class SourceAbiFormTests(unittest.TestCase):
             Descriptor(
                 target=self.stack_target.address,
                 form=CallForm.STACK_WORDS,
+            ),
+        )
+        self.table.write_descriptor(
+            8,
+            Descriptor(
+                target=self.fastcall_one_target.address,
+                form=CallForm.FASTCALL_U32,
+            ),
+        )
+        self.table.write_descriptor(
+            9,
+            Descriptor(
+                target=self.fastcall_one_caller_target.address,
+                form=CallForm.FASTCALL_U32_CALLER_RELEASES,
+            ),
+        )
+        self.table.write_descriptor(
+            10,
+            Descriptor(
+                target=self.word_pointer_target.address,
+                form=CallForm.U32_FLOAT_PTR,
             ),
         )
 
@@ -1391,6 +1454,99 @@ class SourceAbiFormTests(unittest.TestCase):
         self.assertEqual(record.state, CommandState.FAILED)
         self.assertEqual(record.result, RESULT_BAD_ARGUMENTS)
         self.assertFalse(self.stack_witness.called())
+
+    # -- FLOAT_PTR ---------------------------------------------------------
+
+    # -- FASTCALL_U32 and its caller-releasing twin ------------------------
+
+    def test_the_fastcall_u32_form_puts_two_words_in_registers_and_one_on_the_stack(self) -> None:
+        """``void __fastcall(void* ctx, uint32_t edx, uint32_t* wparam)``.
+
+        Native declares this shape for the party's own button callbacks
+        (``PartySearchButtonCallbackFn``, ``party_methods.cpp:20``): the context array in **ECX**, the
+        second word in **EDX**, and the ``wparam`` array pushed. The client's party-search handler
+        was measured ending ``ret 4``, so the callee releases that word and the caller must not.
+        """
+
+        self.call(8, arg1=0x00C0FFEE, arg2=0x2, arg3=0x00BADF00)
+
+        registers = self.fastcall_one_witness.registers()
+        self.assertEqual(registers, (0x00C0FFEE, 0x2), "ecx and edx carry the first two")
+        self.assertEqual(
+            self.fastcall_one_witness.first_word(),
+            0x00BADF00,
+            "the third is the one stack word",
+        )
+
+    def test_the_fastcall_u32_form_leaves_the_callee_to_pop_its_word(self) -> None:
+        """A ``ret 4`` callee has already taken the word off; an ``add esp`` here would be four short."""
+
+        self.call(8, arg1=1, arg2=2, arg3=3)
+        first = self.fastcall_one_witness.entry_esp()
+        self.call(8, arg1=1, arg2=2, arg3=4)
+
+        self.assertEqual(
+            self.fastcall_one_witness.entry_esp(),
+            first,
+            "the stack the second call is entered with must be where the first found it",
+        )
+
+    def test_the_caller_releasing_twin_pops_the_word_itself(self) -> None:
+        """The party *window* callback ends with a bare ``ret``, so the caller releases the word.
+
+        Its witness is entered with the same stack pointer both times only because the form releases
+        the word: this is the half a callee-released form cannot show.
+        """
+
+        self.call(9, arg1=0x11, arg2=0x22, arg3=0x33)
+
+        self.assertEqual(self.fastcall_one_caller_witness.registers(), (0x11, 0x22))
+        self.assertEqual(self.fastcall_one_caller_witness.first_word(), 0x33)
+
+        first = self.fastcall_one_caller_witness.entry_esp()
+        self.call(9, arg1=0x11, arg2=0x22, arg3=0x44)
+
+        self.assertEqual(self.fastcall_one_caller_witness.entry_esp(), first)
+
+    # -- U32_FLOAT_PTR -----------------------------------------------------
+
+    def test_the_word_and_pointer_form_passes_the_word_then_the_records_address(self) -> None:
+        """``void __cdecl(uint32_t agent_id, GamePos* pos)`` — ``flag_hero_agent_func``'s shape.
+
+        The record is built in the payload's own frame from the command's ``arg2``-``arg4``, and the
+        callee is handed its **address**, which is what the source does with a record it built on its
+        own stack (``party_methods.cpp:325-332``).
+        """
+
+        x = struct.unpack("<I", struct.pack("<f", 1234.5))[0]
+        y = struct.unpack("<I", struct.pack("<f", -678.25))[0]
+        z = struct.unpack("<I", struct.pack("<f", 0.0))[0]
+
+        self.call(10, arg1=0xAABBCCDD, arg2=x, arg3=y, arg4=z)
+
+        self.assertTrue(self.word_pointer_witness.called())
+        self.assertEqual(
+            self.word_pointer_witness.first_word(),
+            0xAABBCCDD,
+            "the agent id is the first argument",
+        )
+        self.assertEqual(
+            self.word_pointer_witness.words(1)[0],
+            self.word_pointer_witness.first_word() * 0 + self.word_pointer_witness.words(1)[0],
+            "the second argument is a pointer, and it is not null",
+        )
+        self.assertEqual(
+            [round(value, 3) for value in self.word_pointer_witness.floats()[:3]],
+            [1234.5, -678.25, 0.0],
+            "the record the pointer names is the one the form built",
+        )
+
+    def test_the_word_and_pointer_form_releases_both_its_words(self) -> None:
+        self.call(10, arg1=1, arg2=2, arg3=3, arg4=4)
+        first = self.word_pointer_witness.entry_esp()
+        self.call(10, arg1=1, arg2=2, arg3=3, arg4=4)
+
+        self.assertEqual(self.word_pointer_witness.entry_esp(), first)
 
     # -- FLOAT_PTR ---------------------------------------------------------
 

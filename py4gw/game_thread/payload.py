@@ -590,6 +590,12 @@ def _emit_call(
     code.jcc(_JE, "fastcall_u32_u32_u32")
     code.emit(_cmp_r32_imm8(_EDX, CallForm.STACK_WORDS))
     code.jcc(_JE, "stack_words")
+    code.emit(_cmp_r32_imm8(_EDX, CallForm.FASTCALL_U32))
+    code.jcc(_JE, "fastcall_u32")
+    code.emit(_cmp_r32_imm8(_EDX, CallForm.FASTCALL_U32_CALLER_RELEASES))
+    code.jcc(_JE, "fastcall_u32_caller_releases")
+    code.emit(_cmp_r32_imm8(_EDX, CallForm.U32_FLOAT_PTR))
+    code.jcc(_JE, "u32_float_ptr")
     code.jump("unknown_form")
 
     # ``void __cdecl(void)``: nothing is pushed, so nothing is released.
@@ -750,6 +756,66 @@ def _emit_call(
 
     # The function returns void, so a completed call carries no value of its own.
     # A zero here means "it ran", not "it returned zero".
+    code.emit(_xor_r32_r32(_EDX, _EDX))
+    code.emit(_mov_r32_imm32(_ECX, CommandState.DONE))
+    code.jump("store")
+
+    # ``void __fastcall(void* context, uint32_t edx, uint32_t* wparam)``: two register words and
+    # **one** pushed word. This is the shape native declares for the party's own button callbacks
+    # (``PartySearchButtonCallbackFn``, ``party_methods.cpp:20``), and the client's party-search
+    # handler ends ``mov esp,ebp; pop ebp; ret 4`` — measured on this build by
+    # ``tests/probe_party_abi.py`` — so the callee releases the word and nothing is released here.
+    # Its five-word sibling cannot stand in: three pushed words against a callee that pops one is a
+    # stack four bytes short for the rest of the session.
+    code.label("fastcall_u32")
+    code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg3"]))
+    code.emit(_push_r32(_EAX))
+    code.emit(_mov_r32_mem(_ECX, _ESI, COMMAND_OFFSET["arg1"]))
+    code.emit(_mov_r32_mem(_EDX, _ESI, COMMAND_OFFSET["arg2"]))
+    code.emit(_call_r32(_EBP))
+    _capture_return(code)
+    code.emit(_xor_r32_r32(_EDX, _EDX))
+    code.emit(_mov_r32_imm32(_ECX, CommandState.DONE))
+    code.jump("store")
+
+    # The same shape where the **caller** releases the word: the client's other party callback
+    # (``party.party_window_button_callback_func``) ends with a bare ``ret``, which is a disagreement
+    # with the ``__fastcall`` typedef native declares for both of them — measured, and recorded.
+    code.label("fastcall_u32_caller_releases")
+    code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg3"]))
+    code.emit(_push_r32(_EAX))
+    code.emit(_mov_r32_mem(_ECX, _ESI, COMMAND_OFFSET["arg1"]))
+    code.emit(_mov_r32_mem(_EDX, _ESI, COMMAND_OFFSET["arg2"]))
+    code.emit(_call_r32(_EBP))
+    _capture_return(code)
+    code.emit(_add_esp_imm8(4))
+    code.emit(_xor_r32_r32(_EDX, _EDX))
+    code.emit(_mov_r32_imm32(_ECX, CommandState.DONE))
+    code.jump("store")
+
+    # ``void __cdecl(uint32_t, GamePos*)``: build the record in our own frame from ``arg2``-``arg4``,
+    # then push its address **and the word**, right to left, so the word is the first parameter —
+    # which is what ``flag_hero_agent_func(AgentID, GamePos*)`` declares (``party_methods.cpp:22``)
+    # and what ``flag_hero`` passes: ``&pos`` of a record the source built on its own stack.
+    code.label("u32_float_ptr")
+    code.emit(_sub_esp_imm8(_FLOAT_ARRAY_BYTES))
+    code.emit(_xor_r32_r32(_EAX, _EAX))
+    code.emit(_mov_mem_r32(_ESP, 12, _EAX))
+    for word in (2, 1, 0):
+        code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg2"] + word * 4))
+        code.emit(_mov_mem_r32(_ESP, word * 4, _EAX))
+    # The record's address is where ``esp`` points **before** anything is pushed for the callee: the
+    # pushes go below it, so the two words the callee reads and the record it points at never
+    # overlap. (The UI-message form adds four here, because there the first slot *is* the pushed
+    # argument — this form pushes after taking the address, not before.)
+    code.emit(_mov_r32_esp(_EAX))
+    code.emit(_push_r32(_EAX))
+    code.emit(_mov_r32_mem(_EAX, _ESI, COMMAND_OFFSET["arg1"]))
+    code.emit(_push_r32(_EAX))
+    code.emit(_call_r32(_EBP))
+    _capture_return(code)
+    code.emit(_add_esp_imm8(8))
+    code.emit(_add_esp_imm8(_FLOAT_ARRAY_BYTES))
     code.emit(_xor_r32_r32(_EDX, _EDX))
     code.emit(_mov_r32_imm32(_ECX, CommandState.DONE))
     code.jump("store")

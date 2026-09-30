@@ -3,21 +3,26 @@
 **Status: all seven of the package's modules are ported, and both of `frame.py`'s classes are declared in
 full, in the source's own order.** `py4gw/frame_tree/` holds `frame_window_keys`, `frame_names`,
 `frame_aliases`, `frame_registry`, `frame_ids` (5,010 lines, verbatim), `frame.py` — `_FrameTree`'s 41 members
-(33 answering) and `Frame`'s 115 (95 answering), checked against both ASTs rather than by eye — and the
-source's own `__init__` re-export list, compared name for name against the source's `__all__`. The
-tree's eight that carry a raise name their requirement: `enable`/`disable` (`PyCallback`),
-`by_label`/`hash_for_label` (the client's `CreateHashFromWChar`), `child_by_parent_hash` (the client's
-`g_get_child_frame_id_func`), `color_frames`/`overlay` (the injected
-`PyOverlay`), and `anchor_ids` — which names only its *label fallback* and answers on its snapshot and hash
-paths. `root` answers since round 36 (the catalog's `ui.get_root_frame_func`, native's `GetRootFrame`), so
+(35 answering) and `Frame`'s 115 (96 answering), checked against both ASTs rather than by eye — and the
+source's own `__init__` re-export list, compared name for name against the source's `__all__`. **Round 90
+(2026-09-30) closed four of them and fixed a defect**, all of it reached from `Party.ReturnToOutpost`:
+`hash_for_label` and `by_label` answer over the client's own `CreateHashFromWChar` (the wide label placed in
+the block's data region — the mechanism `UIManager.SetStringPreference` proved in round 65, so the bodies
+were the whole of the work), `child_native` answers over `g_get_child_frame_id_func` behind `GetFrameById`'s
+own validity test, and `_FrameTree.root` was reading the **command's status word** instead of the callee's
+return register — see §9, where the defect and its fix are written down. What is left is the tree's four
+(`enable`/`disable` (`PyCallback`), `child_by_parent_hash` (the same `g_get_child_frame_id_func` walk,
+one hash in), and `color_frames`/`overlay` (the injected `PyOverlay`)) and `anchor_ids`, which names only its
+*label fallback* and answers on its snapshot and hash paths. `root` answers since round 36 (the catalog's
+`ui.get_root_frame_func`, native's `GetRootFrame`), so
 `viewport_height` reads through it and `sort_by_vertical` delegates to `rect`. `send_message` and `click`
-answer since round 59 — both over the client's own `__thiscall` sender, live-verified. `Frame`'s 24 fall
+answer since round 59 — both over the client's own `__thiscall` sender, live-verified. `Frame`'s 19 fall
 into four features: the **game-thread frame actions** (`set_visible`, `set_disabled`, `show`, `set_layer`,
 `set_opacity`, `double_click`, `mouse_action`, `mouse_click_action`,
 `send_message_text`, `set_text`), the **root-frame geometry** (`rect`, `size`, `viewport_scale`,
 `content_coords`), the **client's own text and input** (`label` and `title` through its title table,
 `is_mouse_over` through its ImGui) plus the **overlay** (`draw`, `draw_outline`), and the lookups that call the
-client directly (`child_native`, `child_path_native`, `item`, `tab`, `io_events`). Every one is written down in
+client directly (`child_path_native`, `item`, `tab`, `io_events`). Every one is written down in
 [`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md); nothing is stubbed.
 
 **Sources.** `Py4GW_Reforged/Py4GWCoreLib/FrameTree/` — 5,444 lines across seven files: `frame.py` 1620,
@@ -674,3 +679,60 @@ logging through the injected console). See [`ITEM_PORT.md`](ITEM_PORT.md).
 vocabulary already carries the packed UI-message form those needs, and the catalog carries the `ui`
 resolvers the ported modules use; **which resolver each action needs, and whether it is present, is
 established when `frame.py` is ported** — recorded here as the open question rather than guessed at now.
+
+## 5. Round 90: the label lookup, the child walk, and one wrong word
+
+**Three members landed, and they were the last bodies `Party.ReturnToOutpost` was waiting on**
+(`party_methods.cpp:119-121`, ``return ui::ButtonClick(ui::GetChildFrame(ui::GetFrameByLabel(L"DlgRedirect"), 0));``).
+
+| member | what it now does |
+| --- | --- |
+| `_FrameTree.hash_for_label` (`:587-588`) | ``PyUIManager.UIManager.get_hash_by_label`` → ``GW::ui::GetHashByLabel`` (`ui_methods.cpp:542-546`), i.e. ``g_create_hash_from_wchar_func(label, -1)``: the label is placed in the block's data region as UTF-16 code units with the terminator (`std::wstring::c_str()`'s), its address passed, and the client's answer read from the **return register**. Native's own guard — an unresolvable function or a missing label answers `0` — is kept |
+| `_FrameTree.by_label` (`:583-585`) | ``get_frame_id_by_label`` → ``GetFrameIDByLabel`` (`:570-573`) → ``GetFrameByLabel`` (`:556-568`): the hash, then native's **own loop** over the frame array for the first valid frame whose ``relation.frame_hash_id`` matches. The source writes that loop twice (once for the label form, once for ``GetFrameIDByHash``), so the port keeps this member's own copy rather than delegating to `by_hash` |
+| `Frame.child_native` (`:1517-1521`) | ``get_child_frame_by_frame_id`` (`ui_bindings.cpp:707-710`) = ``GetChildFrame(GetFrameById(parent_frame_id), child_offset)``: the port's ``FrameArray.get`` answers native's ``GetFrameById`` (out-of-range, null and the deleted sentinel are all ``None``, i.e. ``nullptr``), and ``GetChildFrame`` (`:444-449`) refuses a null parent, otherwise calling ``g_get_child_frame_id_func(parent->frame_id, child_offset)`` once |
+
+**No new mechanism was needed for any of them**, which is what round 65 established when it corrected this
+project's own record: ``ConnectedClient.bridge.write_data`` places arbitrary bytes **inside the client** and
+answers their address, which is exactly what a pointer argument needs. The two steps the client is asked for
+are ``ui.create_hash_from_wchar_func`` and ``ui.get_child_frame_id_func``, both already in the catalog and
+both already driven by ``UIManager.Keydown``'s button-action frame (``py4gw/ui_manager.py``).
+
+**The label's region is the gap between the UI payload and the map travel words (``0xE40``, 192 bytes).**
+The first choice was ``0x340``, right after the click's two structs — and the block-region guard in
+``tests/test_map_offline.py`` refused it: ``0x340`` is inside ``chat.LOG_MESSAGE_OFFSET``'s
+``0x200..0x600`` span. The guard caught what a reading of one module's constants would not.
+
+### The defect: `_FrameTree.root` read the status word
+
+`root` (`:554-560`) is ``PyUIManager.UIManager.get_root_frame_id()`` → ``ui::GetRootFrame``
+(`ui_methods.cpp:415-417`), and the port drives it with the catalog's ``ui.get_root_frame_func``. It read
+``record.result`` — the **command's own status code** — where the callee's return register lives in
+``record.value`` (``payload._capture_return``: *"Store the callee's `eax` in the command's `value` word"*).
+So the member resolved the root from a status word: it answered ``Frame.from_id(0)`` on a fresh tree and the
+last cached id afterwards, and ``viewport_height`` — which reads through it — was along for the ride.
+
+**It survived because its test fixture encoded the same mistake**: ``_CallRecord`` carried one word and the
+test read it, so member and fixture agreed with each other and neither with the dispatcher. The fixture now
+models **both** words (``value`` the return, ``result`` the status), which is the part that matters: a
+member reading the wrong one cannot pass any more, and a second test pins that a **nonzero status** (a
+refused command) does not replace the return it carries. Every other caller in this port already read
+``.value`` — ``dat_reader``, ``ui/preferences``, ``ui_manager``, ``memory_manager``, ``dialog`` — and the
+DAT read is live-verified, so the convention was never in doubt; this one member was simply wrong.
+
+### The divergence: `Frame.click` answers native's bool
+
+``ui::ButtonClick`` ends ``return SendFrameUIMessage(parent_frame, kMouseClick2, &action);``
+(`ui_methods.cpp:1273`), so it answers ``false`` for a frame or parent that is not created and for a parent
+with no callbacks (``SendFrameUIMessage``'s guard, `:1332-1335`), and ``true`` once the client has been
+handed the action. Reforged's ``Frame.click`` is declared ``-> None`` (`FrameTree/frame.py:1260`) and the
+port matched that — until round 90, where a real consumer appeared:
+``GW::party::return_to_outpost`` returns that bool and Reforged's ``Party.ReturnToOutpost`` passes it on
+(``Party.py:388``). An external port has no in-process ``PyParty`` to reach, so the value has to come from
+the click, and the port's click **is** ``ui::ButtonClick``'s body.
+
+So ``Frame.click`` now returns it. That is a **recorded divergence from Reforged's wrapper**, and its blast
+radius was checked rather than assumed: every other caller in this port discards the answer (``Map``'s
+cancel/confirm buttons, ``Inventory``'s salvage dialog, ``UIManager.ClickDialogButton``). The guard
+``is_usable`` is Reforged's own and stays ahead of native's, so a created-but-hidden frame answers ``false``
+where native's own ``ButtonClick`` would have clicked — that ordering is this member's pre-existing shape and
+is unchanged.

@@ -46,8 +46,18 @@ def _format_encoded_text(value: str) -> str:
     return "".join(output)
 
 
-class PlayerPartyMemberStruct(TargetStruct):
-    """The native 0x0C player-party member record."""
+class PlayerPartyMember(TargetStruct):
+    """The native 0x0C player-party member record.
+
+    **The surface is Reforged's** (``native_src/context/PartyContext.py:9-21``): the field is
+    ``called_target_id`` and the two state members are ``is_connected``/``is_ticked``. Native's header
+    spells the field ``calledTargetId`` and the helpers ``connected()``/``ticked()``
+    (``context/party.h:13-20``) — but that is the *layout* authority, and Native's own Python binding
+    renames them back to Reforged's spelling before they can be reached from Python
+    (``party_bindings.cpp:504-511`` binds ``called_target_id``, ``is_connected``, ``is_ticked``). Round 21
+    removed the port's copies of the C++ spellings: a second vocabulary for one field is the defect the
+    porting rule names, and nothing in either source reaches the record by them.
+    """
 
     _pack_ = 1
     _fields_ = [
@@ -55,12 +65,6 @@ class PlayerPartyMemberStruct(TargetStruct):
         ("called_target_id", c_uint32),
         ("state", c_uint32),
     ]
-
-    @property
-    def calledTargetId(self) -> int:
-        """Return the native C++ spelling of ``called_target_id``."""
-
-        return int(self.called_target_id)
 
     @property
     def is_connected(self) -> bool:
@@ -74,18 +78,8 @@ class PlayerPartyMemberStruct(TargetStruct):
 
         return bool(int(self.state) & 2)
 
-    def connected(self) -> bool:
-        """Return the native C++ connected-state helper result."""
 
-        return self.is_connected
-
-    def ticked(self) -> bool:
-        """Return the native C++ ticked-state helper result."""
-
-        return self.is_ticked
-
-
-class HeroPartyMemberStruct(TargetStruct):
+class HeroPartyMember(TargetStruct):
     """The native 0x18 hero-party member record."""
 
     _pack_ = 1
@@ -99,7 +93,7 @@ class HeroPartyMemberStruct(TargetStruct):
     ]
 
 
-class HenchmanPartyMemberStruct(TargetStruct):
+class HenchmanPartyMember(TargetStruct):
     """The native 0x34 henchman-party member record."""
 
     _pack_ = 1
@@ -137,11 +131,6 @@ class PartyInfoStruct(TargetStruct):
         self._remote_address = address
         return self
 
-    def GetPartySize(self) -> int:
-        """Return the native C++ count of player, henchman, and hero members."""
-
-        return len(self.players) + len(self.henchmen) + len(self.heroes)
-
     def _require_reader(self) -> _memory_reader:
         if self._remote_reader is None:
             raise RuntimeError("This party record is not bound to a memory reader.")
@@ -156,22 +145,22 @@ class PartyInfoStruct(TargetStruct):
         return [value for value in view.to_list()]
 
     @property
-    def players(self) -> list[PlayerPartyMemberStruct]:
+    def players(self) -> list[PlayerPartyMember]:
         """Read the current player members."""
 
-        return self._read_array_values(self.players_array, PlayerPartyMemberStruct)
+        return self._read_array_values(self.players_array, PlayerPartyMember)
 
     @property
-    def henchmen(self) -> list[HenchmanPartyMemberStruct]:
+    def henchmen(self) -> list[HenchmanPartyMember]:
         """Read the current henchman members."""
 
-        return self._read_array_values(self.henchmen_array, HenchmanPartyMemberStruct)
+        return self._read_array_values(self.henchmen_array, HenchmanPartyMember)
 
     @property
-    def heroes(self) -> list[HeroPartyMemberStruct]:
+    def heroes(self) -> list[HeroPartyMember]:
         """Read the current hero members."""
 
-        return self._read_array_values(self.heroes_array, HeroPartyMemberStruct)
+        return self._read_array_values(self.heroes_array, HeroPartyMember)
 
     @property
     def others(self) -> list[int]:
@@ -250,18 +239,19 @@ class PartySearchStruct(TargetStruct):
 
 
 class PartySearchType(IntEnum):
-    """Native party-search category values."""
+    """Native party-search category values (``context/party.h:60-66``).
+
+    **The five names are the header's own, and they are all of them.** An earlier round had added
+    upper-case aliases (``HUNTING``, ``MISSION``, …) beside them; neither source has those — Native's
+    header spells the enumerators ``PartySearchType_Hunting`` and Reforged's Python has no such class
+    at all — so round 18 removed them, and nothing had used them.
+    """
 
     PartySearchType_Hunting = 0
     PartySearchType_Mission = 1
     PartySearchType_Quest = 2
     PartySearchType_Trade = 3
     PartySearchType_Guild = 4
-    HUNTING = PartySearchType_Hunting
-    MISSION = PartySearchType_Mission
-    QUEST = PartySearchType_Quest
-    TRADE = PartySearchType_Trade
-    GUILD = PartySearchType_Guild
 
 
 class PartyContextStruct(TargetStruct):
@@ -297,12 +287,6 @@ class PartyContextStruct(TargetStruct):
         self._remote_address = address
         return self
 
-    @property
-    def h0004(self) -> GWArray:
-        """Return the native C++ spelling of the auxiliary array header."""
-
-        return self.h0004_array
-
     def _require_reader(self) -> _memory_reader:
         if self._remote_reader is None:
             raise RuntimeError("This context snapshot is not bound to a memory reader.")
@@ -326,21 +310,6 @@ class PartyContextStruct(TargetStruct):
 
         return bool((int(self.flag) >> 7) & 1)
 
-    def InHardMode(self) -> bool:
-        """Return the native C++ hard-mode helper result."""
-
-        return self.in_hard_mode
-
-    def IsDefeated(self) -> bool:
-        """Return the native C++ defeated-state helper result."""
-
-        return self.is_defeated
-
-    def IsPartyLeader(self) -> bool:
-        """Return the native C++ party-leader helper result."""
-
-        return self.is_party_leader
-
     @property
     def h0004_ptrs(self) -> list[int]:
         """Read the maintained auxiliary pointer values."""
@@ -349,7 +318,7 @@ class PartyContextStruct(TargetStruct):
         return [int(value) for value in view.to_list()]
 
     @property
-    def requests(self) -> list[PartyInfoStruct]:
+    def request(self) -> list[PartyInfoStruct]:
         """Read the intrusive request-party list."""
 
         if self._remote_address is None:
@@ -361,12 +330,6 @@ class PartyContextStruct(TargetStruct):
             PartyInfoStruct,
         )
         return view.to_list()
-
-    @property
-    def request(self) -> list[PartyInfoStruct]:
-        """Return the Reforged-compatible singular request-list property."""
-
-        return self.requests
 
     @property
     def sending(self) -> list[PartyInfoStruct]:
@@ -411,16 +374,10 @@ class PartyContextStruct(TargetStruct):
         )
         return [value for value in view.to_list()]
 
-    @property
-    def party_search(self) -> list[PartySearchStruct]:
-        """Return party-search entries using the native field spelling."""
 
-        return self.party_searches
-
-
-assert ctypes.sizeof(PlayerPartyMemberStruct) == 0x0C
-assert ctypes.sizeof(HeroPartyMemberStruct) == 0x18
-assert ctypes.sizeof(HenchmanPartyMemberStruct) == 0x34
+assert ctypes.sizeof(PlayerPartyMember) == 0x0C
+assert ctypes.sizeof(HeroPartyMember) == 0x18
+assert ctypes.sizeof(HenchmanPartyMember) == 0x34
 assert ctypes.sizeof(PartyInfoStruct) == 0x84
 assert ctypes.sizeof(PartySearchStruct) == 0x94
 assert ctypes.sizeof(PartyContextStruct) == 0xD0
@@ -526,11 +483,3 @@ def get() -> PartyContextStruct | None:
 
     client = current_client()
     return cast(Any, client.read_party_context() if client is not None else None)
-
-
-# The Reforged source uses the concise names for these fixed-width records.
-# Keep the implementation's ``*Struct`` names while exporting one object per
-# layout so callers can use either spelling without changing the ABI.
-PlayerPartyMember = PlayerPartyMemberStruct
-HeroPartyMember = HeroPartyMemberStruct
-HenchmanPartyMember = HenchmanPartyMemberStruct

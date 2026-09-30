@@ -1,0 +1,422 @@
+=== repair: started Tue 09/29/2026 15:12:06.06 === 
+recorded original state: {"1": {"behavior": 1, "disabled": 0}, "2": {"behavior": 1, "disabled": 64}}
+state before repair:     {"party_size": 0, "hard_mode": false, "all_flag": [0.0, 0.0], "heroes": [], "pet": "AttributeError: 'str' object has no attribute 'pets'"}
+restored: True
+  position 1 (agent 1493): wanted {'behavior': 1, 'disabled': 0}, read back {'behavior': 1, 'disabled': 0}, matches=True
+  position 2 (agent 1494): wanted {'behavior': 1, 'disabled': 64}, read back {'behavior': 1, 'disabled': 64}, matches=True
+state after repair:      {"party_size": 0, "hard_mode": false, "all_flag": [0.0, 0.0], "heroes": [], "pet": "AttributeError: 'str' object has no attribute 'pets'"}
+hooks original after disconnect: True
+difficulty: before=False unlocked=False -> {"settled": false, "after": false, "expected": true, "waited_ms": 10003.2}
+=== repair: exit=0 === 
+act: SetHeroBehavior(other) -> None
+act: SetHeroBehavior(other) landed -> {'settled': True, 'after': 0, 'waited_ms': 109.1}
+act: SetHeroBehavior(back) -> None
+act: SetHeroBehavior(back) landed -> {'settled': True, 'after': 1, 'waited_ms': 112.5}
+act: every change the client was sent is visible in its own records: True
+{
+  "stage": "act",
+  "pid": 44052,
+  "controller_elevated": true,
+  "game_thread": true,
+  "plan": [
+    {
+      "step": "flags",
+      "what": "FlagAllHeroes to the party's own flag position, then UnflagAllHeroes",
+      "allowed": false
+    },
+    {
+      "step": "flag-hero",
+      "what": "FlagHero for one hero, then UnflagHero",
+      "allowed": false
+    },
+    {
+      "step": "behaviour",
+      "what": "SetHeroBehavior with a different value for one hero, then back",
+      "allowed": true
+    },
+    {
+      "step": "skill-ai",
+      "what": "SetSkillAIEnabled on one slot, then back",
+      "allowed": false
+    },
+    {
+      "step": "difficulty",
+      "what": "SetHardMode/SetNormalMode, in an outpost, then back",
+      "allowed": false
+    },
+    {
+      "step": "search",
+      "what": "SearchParty with a short advertisement, then SearchPartyCancel",
+      "allowed": false
+    },
+    {
+      "step": "pet",
+      "what": "SetPetBehavior(Fight, current target) — needs a living enemy target — then back",
+      "allowed": false
+    },
+    {
+      "step": "use-skill",
+      "what": "Heroes.UseSkill on one hero number and slot (`--hero-number`, `--slot`)",
+      "allowed": false
+    },
+    {
+      "step": "party-add",
+      "what": "AddHeroByName (`--hero`), and AddHenchman when `--henchman <agent_id>` is given — **changes the party**, outposts only",
+      "allowed": false
+    },
+    {
+      "step": "party-kick",
+      "what": "KickHeroByName (`--hero`), and KickHenchman with `--henchman` — **changes the party**",
+      "allowed": false
+    },
+    {
+      "step": "leave",
+      "what": "LeaveParty — **changes the party**, and only with someone else in it",
+      "allowed": false
+    },
+    {
+      "step": "outpost",
+      "what": "ReturnToOutpost — **leaves the map**",
+      "allowed": false
+    }
+  ],
+  "before": {
+    "party_size": 3,
+    "hard_mode": false,
+    "all_flag": [
+      Infinity,
+      Infinity
+    ],
+    "heroes": [
+      {
+        "position": 1,
+        "agent_id": 1493,
+        "behavior": 1,
+        "disabled": 0
+      },
+      {
+        "position": 2,
+        "agent_id": 1494,
+        "behavior": 1,
+        "disabled": 64
+      }
+    ],
+    "pet": null
+  },
+  "acted": {
+    "SetHeroBehavior(other)": null,
+    "SetHeroBehavior(other) landed": {
+      "settled": true,
+      "after": 0,
+      "waited_ms": 109.1
+    },
+    "SetHeroBehavior(back)": null,
+    "SetHeroBehavior(back) landed": {
+      "settled": true,
+      "after": 1,
+      "waited_ms": 112.5
+    }
+  },
+  "settled": true,
+  "after": {
+    "party_size": 3,
+    "hard_mode": false,
+    "all_flag": [
+      Infinity,
+      Infinity
+    ],
+    "heroes": [
+      {
+        "position": 1,
+        "agent_id": 1493,
+        "behavior": 1,
+        "disabled": 0
+      },
+      {
+        "position": 2,
+        "agent_id": 1494,
+        "behavior": 1,
+        "disabled": 64
+      }
+    ],
+    "pet": null
+  },
+  "note": "act stage: only the named steps ran, and each reversible one was put back — after waiting, bounded, for the client to show the change it was sent ('settled'), because the client applies a party change when it processes the command and a restore computed before that lands replaces the value it meant to keep. The steps that change the party or leave the map are the owner's call, one at a time — and each refuses here when the client's own condition for it is not met (no such hero, a party of one, not an outpost).",
+  "hooks_original_after_disconnect": true
+}
+=== behaviour: exit=0 === 
+act: SetSkillAIEnabled(flip) -> True
+act: SetSkillAIEnabled(flip) landed -> {'settled': True, 'after': 1, 'waited_ms': 101.6}
+act: SetSkillAIEnabled(back) -> True
+act: SetSkillAIEnabled(back) landed -> {'settled': True, 'after': 0, 'waited_ms': 101.2}
+act: every change the client was sent is visible in its own records: True
+{
+  "stage": "act",
+  "pid": 44052,
+  "controller_elevated": true,
+  "game_thread": true,
+  "plan": [
+    {
+      "step": "flags",
+      "what": "FlagAllHeroes to the party's own flag position, then UnflagAllHeroes",
+      "allowed": false
+    },
+    {
+      "step": "flag-hero",
+      "what": "FlagHero for one hero, then UnflagHero",
+      "allowed": false
+    },
+    {
+      "step": "behaviour",
+      "what": "SetHeroBehavior with a different value for one hero, then back",
+      "allowed": false
+    },
+    {
+      "step": "skill-ai",
+      "what": "SetSkillAIEnabled on one slot, then back",
+      "allowed": true
+    },
+    {
+      "step": "difficulty",
+      "what": "SetHardMode/SetNormalMode, in an outpost, then back",
+      "allowed": false
+    },
+    {
+      "step": "search",
+      "what": "SearchParty with a short advertisement, then SearchPartyCancel",
+      "allowed": false
+    },
+    {
+      "step": "pet",
+      "what": "SetPetBehavior(Fight, current target) — needs a living enemy target — then back",
+      "allowed": false
+    },
+    {
+      "step": "use-skill",
+      "what": "Heroes.UseSkill on one hero number and slot (`--hero-number`, `--slot`)",
+      "allowed": false
+    },
+    {
+      "step": "party-add",
+      "what": "AddHeroByName (`--hero`), and AddHenchman when `--henchman <agent_id>` is given — **changes the party**, outposts only",
+      "allowed": false
+    },
+    {
+      "step": "party-kick",
+      "what": "KickHeroByName (`--hero`), and KickHenchman with `--henchman` — **changes the party**",
+      "allowed": false
+    },
+    {
+      "step": "leave",
+      "what": "LeaveParty — **changes the party**, and only with someone else in it",
+      "allowed": false
+    },
+    {
+      "step": "outpost",
+      "what": "ReturnToOutpost — **leaves the map**",
+      "allowed": false
+    }
+  ],
+  "before": {
+    "party_size": 3,
+    "hard_mode": false,
+    "all_flag": [
+      Infinity,
+      Infinity
+    ],
+    "heroes": [
+      {
+        "position": 1,
+        "agent_id": 1493,
+        "behavior": 1,
+        "disabled": 0
+      },
+      {
+        "position": 2,
+        "agent_id": 1494,
+        "behavior": 1,
+        "disabled": 64
+      }
+    ],
+    "pet": null
+  },
+  "acted": {
+    "SetSkillAIEnabled(flip)": true,
+    "SetSkillAIEnabled(flip) landed": {
+      "settled": true,
+      "after": 1,
+      "waited_ms": 101.6
+    },
+    "SetSkillAIEnabled(back)": true,
+    "SetSkillAIEnabled(back) landed": {
+      "settled": true,
+      "after": 0,
+      "waited_ms": 101.2
+    }
+  },
+  "settled": true,
+  "after": {
+    "party_size": 3,
+    "hard_mode": false,
+    "all_flag": [
+      Infinity,
+      Infinity
+    ],
+    "heroes": [
+      {
+        "position": 1,
+        "agent_id": 1493,
+        "behavior": 1,
+        "disabled": 0
+      },
+      {
+        "position": 2,
+        "agent_id": 1494,
+        "behavior": 1,
+        "disabled": 64
+      }
+    ],
+    "pet": null
+  },
+  "note": "act stage: only the named steps ran, and each reversible one was put back — after waiting, bounded, for the client to show the change it was sent ('settled'), because the client applies a party change when it processes the command and a restore computed before that lands replaces the value it meant to keep. The steps that change the party or leave the map are the owner's call, one at a time — and each refuses here when the client's own condition for it is not met (no such hero, a party of one, not an outpost).",
+  "hooks_original_after_disconnect": true
+}
+=== skill-ai: exit=0 === 
+act: SetHardMode -> None
+act: SetHardMode landed -> {'settled': False, 'after': False, 'expected': True, 'waited_ms': 3033.3}
+act: SetNormalMode(back) -> None
+act: SetNormalMode(back) landed -> {'settled': True, 'after': False, 'waited_ms': 0.0}
+act: every change the client was sent is visible in its own records: False  <-- A STEP DID NOT LAND
+{
+  "stage": "act",
+  "pid": 44052,
+  "controller_elevated": true,
+  "game_thread": true,
+  "plan": [
+    {
+      "step": "flags",
+      "what": "FlagAllHeroes to the party's own flag position, then UnflagAllHeroes",
+      "allowed": false
+    },
+    {
+      "step": "flag-hero",
+      "what": "FlagHero for one hero, then UnflagHero",
+      "allowed": false
+    },
+    {
+      "step": "behaviour",
+      "what": "SetHeroBehavior with a different value for one hero, then back",
+      "allowed": false
+    },
+    {
+      "step": "skill-ai",
+      "what": "SetSkillAIEnabled on one slot, then back",
+      "allowed": false
+    },
+    {
+      "step": "difficulty",
+      "what": "SetHardMode/SetNormalMode, in an outpost, then back",
+      "allowed": true
+    },
+    {
+      "step": "search",
+      "what": "SearchParty with a short advertisement, then SearchPartyCancel",
+      "allowed": false
+    },
+    {
+      "step": "pet",
+      "what": "SetPetBehavior(Fight, current target) — needs a living enemy target — then back",
+      "allowed": false
+    },
+    {
+      "step": "use-skill",
+      "what": "Heroes.UseSkill on one hero number and slot (`--hero-number`, `--slot`)",
+      "allowed": false
+    },
+    {
+      "step": "party-add",
+      "what": "AddHeroByName (`--hero`), and AddHenchman when `--henchman <agent_id>` is given — **changes the party**, outposts only",
+      "allowed": false
+    },
+    {
+      "step": "party-kick",
+      "what": "KickHeroByName (`--hero`), and KickHenchman with `--henchman` — **changes the party**",
+      "allowed": false
+    },
+    {
+      "step": "leave",
+      "what": "LeaveParty — **changes the party**, and only with someone else in it",
+      "allowed": false
+    },
+    {
+      "step": "outpost",
+      "what": "ReturnToOutpost — **leaves the map**",
+      "allowed": false
+    }
+  ],
+  "before": {
+    "party_size": 3,
+    "hard_mode": false,
+    "all_flag": [
+      Infinity,
+      Infinity
+    ],
+    "heroes": [
+      {
+        "position": 1,
+        "agent_id": 1493,
+        "behavior": 1,
+        "disabled": 0
+      },
+      {
+        "position": 2,
+        "agent_id": 1494,
+        "behavior": 1,
+        "disabled": 64
+      }
+    ],
+    "pet": null
+  },
+  "acted": {
+    "SetHardMode": null,
+    "SetHardMode landed": {
+      "settled": false,
+      "after": false,
+      "expected": true,
+      "waited_ms": 3033.3
+    },
+    "SetNormalMode(back)": null,
+    "SetNormalMode(back) landed": {
+      "settled": true,
+      "after": false,
+      "waited_ms": 0.0
+    }
+  },
+  "settled": false,
+  "after": {
+    "party_size": 3,
+    "hard_mode": false,
+    "all_flag": [
+      Infinity,
+      Infinity
+    ],
+    "heroes": [
+      {
+        "position": 1,
+        "agent_id": 1493,
+        "behavior": 1,
+        "disabled": 0
+      },
+      {
+        "position": 2,
+        "agent_id": 1494,
+        "behavior": 1,
+        "disabled": 64
+      }
+    ],
+    "pet": null
+  },
+  "note": "act stage: only the named steps ran, and each reversible one was put back — after waiting, bounded, for the client to show the change it was sent ('settled'), because the client applies a party change when it processes the command and a restore computed before that lands replaces the value it meant to keep. The steps that change the party or leave the map are the owner's call, one at a time — and each refuses here when the client's own condition for it is not met (no such hero, a party of one, not an outpost).",
+  "hooks_original_after_disconnect": true
+}
+=== difficulty: exit=0 === 

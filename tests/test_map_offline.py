@@ -590,6 +590,7 @@ class BlockRegionTests(unittest.TestCase):
         ("py4gw.ui.preferences", "_PREFERENCE_WORD_OFFSET", 0x280, 0x04),
         ("py4gw.frame_tree.frame", "_MOUSE_ACTION_OFFSET", 0x300, 0x10),
         ("py4gw.frame_tree.frame", "_BUTTON_PARAM_OFFSET", 0x320, 0x0C),
+        ("py4gw.frame_tree.frame", "_LABEL_OFFSET (a lookup's wide label)", 0xE40, 0xC0),
         ("py4gw.map_methods", "_TRAVEL_OFFSET", 0xF00, 0x10),
         ("py4gw.map_methods", "_GHKEY_OFFSET", 0xF20, 0x04),
         ("py4gw.map", "_UI_STATE_OFFSET", 0xF40, 0x04),
@@ -604,6 +605,8 @@ class BlockRegionTests(unittest.TestCase):
         ("py4gw.ui.preferences", "_STRING_ARGUMENT_OFFSET", 0xD00, 0x100),
         ("py4gw.ui_manager", "_UI_PAYLOAD_OFFSET", 0xE00, 0x40),
         ("py4gw.game_thread.packets", "PACKET_POINTER_OFFSET/_PACKET_INFLIGHT_OFFSET", 0xF50, 0x08),
+        ("py4gw.party", "PARTY_CTX_OFFSET (native's ctx[13]/ctx[14])", 0x040, 0x50),
+        ("py4gw.party", "PARTY_WPARAM_OFFSET (native's wparam[4])", 0x090, 0x10),
         ("py4gw.merchant", "MERCHANT_OFFSET (ids, quantities, record, received id)", 0x100, 0xE8),
     )
 
@@ -631,6 +634,7 @@ class BlockRegionTests(unittest.TestCase):
 
         import py4gw.map as map_module
         from py4gw import map_methods
+        from py4gw import party as party_module
         from py4gw.game_thread import packets as packets_module
         from py4gw import merchant as merchant_module
 
@@ -639,6 +643,27 @@ class BlockRegionTests(unittest.TestCase):
         self.assertEqual(map_methods._GHKEY_OFFSET, 0xF20)
         self.assertEqual(packets_module.PACKET_POINTER_OFFSET, 0xF50)
         self.assertEqual(packets_module.PACKET_INFLIGHT_OFFSET, 0xF54)
+        self.assertEqual(party_module.PARTY_CTX_OFFSET, 0x040)
+        self.assertEqual(party_module.PARTY_WPARAM_OFFSET, 0x090)
+        self.assertEqual(
+            party_module.PARTY_CTX_OFFSET + party_module.PARTY_CTX_WORDS * 4,
+            party_module.PARTY_WPARAM_OFFSET,
+            "the party spans end where the table says they do",
+        )
+        from py4gw.frame_tree import frame as frame_module
+        from py4gw import ui_manager as ui_manager_module
+
+        self.assertEqual(frame_module._LABEL_OFFSET, 0xE40)
+        self.assertEqual(
+            ui_manager_module._UI_PAYLOAD_OFFSET + 0x40,
+            frame_module._LABEL_OFFSET,
+            "the label span starts where the UI payload ends",
+        )
+        self.assertEqual(
+            frame_module._LABEL_OFFSET + frame_module._LABEL_BYTES,
+            map_methods._TRAVEL_OFFSET,
+            "and ends where the map travel words begin",
+        )
         self.assertEqual(merchant_module.MERCHANT_OFFSET, 0x100)
         self.assertEqual(
             merchant_module.RECEIVED_ID_OFFSET + 4,

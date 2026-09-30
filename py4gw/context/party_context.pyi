@@ -8,13 +8,10 @@ from .gw_array import GWArray, RemoteMemoryReader
 from .gw_list import GWLinkStruct, GWListStruct
 
 
-class PlayerPartyMemberStruct(TargetStruct):
+class PlayerPartyMember(TargetStruct):
     login_number: int
     called_target_id: int
     state: int
-
-    @property
-    def calledTargetId(self) -> int: ...
 
     @property
     def is_connected(self) -> bool: ...
@@ -22,15 +19,8 @@ class PlayerPartyMemberStruct(TargetStruct):
     @property
     def is_ticked(self) -> bool: ...
 
-    def connected(self) -> bool: ...
 
-    def ticked(self) -> bool: ...
-
-
-PlayerPartyMember = PlayerPartyMemberStruct
-
-
-class HeroPartyMemberStruct(TargetStruct):
+class HeroPartyMember(TargetStruct):
     agent_id: int
     owner_player_id: int
     hero_id: int
@@ -39,17 +29,11 @@ class HeroPartyMemberStruct(TargetStruct):
     level: int
 
 
-HeroPartyMember = HeroPartyMemberStruct
-
-
-class HenchmanPartyMemberStruct(TargetStruct):
+class HenchmanPartyMember(TargetStruct):
     agent_id: int
     h0004: Any
     profession: int
     level: int
-
-
-HenchmanPartyMember = HenchmanPartyMemberStruct
 
 
 class PartyInfoStruct(TargetStruct):
@@ -65,16 +49,14 @@ class PartyInfoStruct(TargetStruct):
         self, reader: RemoteMemoryReader, address: int | None = ...
     ) -> PartyInfoStruct: ...
 
-    def GetPartySize(self) -> int: ...
+    @property
+    def players(self) -> list[PlayerPartyMember]: ...
 
     @property
-    def players(self) -> list[PlayerPartyMemberStruct]: ...
+    def henchmen(self) -> list[HenchmanPartyMember]: ...
 
     @property
-    def henchmen(self) -> list[HenchmanPartyMemberStruct]: ...
-
-    @property
-    def heroes(self) -> list[HeroPartyMemberStruct]: ...
+    def heroes(self) -> list[HeroPartyMember]: ...
 
     @property
     def others(self) -> list[int]: ...
@@ -117,11 +99,6 @@ class PartySearchType:
     PartySearchType_Quest: int
     PartySearchType_Trade: int
     PartySearchType_Guild: int
-    HUNTING: int
-    MISSION: int
-    QUEST: int
-    TRADE: int
-    GUILD: int
 
 
 class PartyContextStruct(TargetStruct):
@@ -145,9 +122,6 @@ class PartyContextStruct(TargetStruct):
     ) -> PartyContextStruct: ...
 
     @property
-    def h0004(self) -> GWArray: ...
-
-    @property
     def in_hard_mode(self) -> bool: ...
 
     @property
@@ -156,17 +130,8 @@ class PartyContextStruct(TargetStruct):
     @property
     def is_party_leader(self) -> bool: ...
 
-    def InHardMode(self) -> bool: ...
-
-    def IsDefeated(self) -> bool: ...
-
-    def IsPartyLeader(self) -> bool: ...
-
     @property
     def h0004_ptrs(self) -> list[int]: ...
-
-    @property
-    def requests(self) -> list[PartyInfoStruct]: ...
 
     @property
     def request(self) -> list[PartyInfoStruct]: ...
@@ -182,9 +147,6 @@ class PartyContextStruct(TargetStruct):
 
     @property
     def party_searches(self) -> list[PartySearchStruct]: ...
-
-    @property
-    def party_search(self) -> list[PartySearchStruct]: ...
 
 
 class PartyContext:

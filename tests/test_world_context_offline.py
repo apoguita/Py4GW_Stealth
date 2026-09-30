@@ -360,6 +360,13 @@ class WorldContextOfflineTests(unittest.TestCase):
         self.assertEqual(player.name_encoded_str, "actual name")
         self.assertEqual(player.name_enc_encoded_str, "other name")
         self.assertEqual(player.name_enc_str, player.name_str)
+        for twin in ("name_encoded", "name", "auxiliary_pointers"):
+            self.assertFalse(
+                hasattr(player, twin),
+                f"round 21 removed the port's {twin!r} on this record: Reforged declares "
+                "name_encoded_str/name_str and h0040_ptrs (WorldContext.py:616-638), and neither "
+                "source declares a third spelling for either name",
+            )
 
     def test_indirect_strings_are_not_silently_truncated_at_256(self) -> None:
         """Longer source strings are returned whole within the safety limit."""
@@ -462,27 +469,58 @@ class WorldContextOfflineTests(unittest.TestCase):
         self.assertTrue(npc.is_hero)
 
     def test_hero_name_and_flag_properties_are_local(self) -> None:
-        """Hero names and flag coordinates use fixed inline fields."""
+        """Hero names are local; the flag property is Reforged's own (``WorldContext.py:255-262``).
+
+        The record spells its ``Vec2f`` field ``flag_ptr`` and the ``flag`` property returns a **copy**
+        of it, or ``None`` when the pair is not finite — Reforged's shape, which this port had all
+        along. Round 18 briefly replaced it with Native's header shape (``Vec2f flag``, no property)
+        and round 19 restored it; this test is what makes the difference visible either way.
+
+        The hero-info record's name is the same story in miniature: the field is Reforged's
+        ``name_encoded_str`` and the member is its ``name_str``, so round 21 removed the port's
+        ``name``/``name_enc`` twins (Native's header spells the field ``wchar_t name[20]`` —
+        ``context/hero.h:36`` — which is layout evidence, not a name to expose twice).
+        """
 
         hero = HeroInfoStruct()
-        hero.name_enc[0] = ord("A")
-        hero.name_enc[1] = ord("b")
-        self.assertEqual(hero.name, "Ab")
+        hero.name_encoded_str[0] = ord("A")
+        hero.name_encoded_str[1] = ord("b")
+        self.assertEqual(hero.name_str, "Ab")
+        for twin in ("name", "name_enc"):
+            self.assertFalse(
+                hasattr(hero, twin),
+                f"round 21 removed the port's {twin!r} spelling of the source's name_encoded_str field",
+            )
         flag = HeroFlagStruct()
         flag.flag_ptr.x = 10.5
         flag.flag_ptr.y = -4.0
         self.assertIsNotNone(flag.flag)
         assert flag.flag is not None
         self.assertEqual((flag.flag.x, flag.flag.y), (10.5, -4.0))
+        self.assertIsNot(
+            flag.flag, flag.flag_ptr, "the property hands back a copy, as the source builds one"
+        )
+        flag.flag_ptr.x = float("inf")
+        self.assertIsNone(flag.flag, "a non-finite pair is the source's own None")
 
     def test_skillbar_properties_are_local(self) -> None:
-        """Skillbar validity and slot IDs use the fixed native record."""
+        """Skillbar validity and slot lookup use the fixed native record and the source's member."""
 
         skillbar = SkillbarStruct()
         skillbar.agent_id = 31
         skillbar.skills[0].skill_id = 123
         self.assertTrue(skillbar.is_valid)
-        self.assertEqual(skillbar.skill_ids[0], 123)
+        found = skillbar.GetSkillById(123)
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(int(found.skill_id), 123)
+        self.assertIsNone(skillbar.GetSkillById(124))
+        for twin in ("skill_ids", "get_skill_by_id"):
+            self.assertFalse(
+                hasattr(skillbar, twin),
+                f"round 21 removed the port's {twin!r}: Reforged declares GetSkillById "
+                "(WorldContext.py:444-448) and neither source declares the other two",
+            )
 
     def test_quest_and_title_flags_are_decoded_locally(self) -> None:
         """Quest/title status properties use only fixed fields."""

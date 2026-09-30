@@ -73,6 +73,27 @@ _FRAME_STATE_CREATED = 0x4
 _MOUSE_ACTION_OFFSET = 0x300
 _BUTTON_PARAM_OFFSET = 0x320
 
+#: Where a frame lookup's **label** goes before the client hashes it (``GetHashByLabel``,
+#: ``ui_methods.cpp:542-546``): the wide string native passes as ``label.c_str()``, placed in the
+#: block's data region because the port has no frame of its own in the client to build it in — the
+#: same substitution the two structs above make, and the same one ``py4gw/ui_manager.py`` makes for
+#: the button-action frame's ``L"Game"`` at its own ``0xB00``. **The free gap it sits in** is the one
+#: between ``ui_manager``'s UI payload (``0xE00`` + ``0x40``) and the map travel words (``0xF00``);
+#: ``0x340``, the space right after the click's two structs, was the first choice and is **not** free —
+#: it is inside ``chat.LOG_MESSAGE_OFFSET``'s ``0x200..0x600`` span, which the block-region guard in
+#: ``tests/test_map_offline.py`` reports.
+_LABEL_OFFSET = 0xE40
+_LABEL_BYTES = 0xC0
+
+#: ``PyUIManager.UIManager.get_hash_by_label`` / ``get_frame_id_by_label`` (``ui_bindings.cpp:700-706``)
+#: end in ``GW::ui::GetHashByLabel`` — ``g_create_hash_from_wchar_func(label, -1)`` — and in
+#: ``GW::ui::GetChildFrame`` (``ui_bindings.cpp:707-710``), which is ``GetChildFrameID``'s own walk:
+#: ``g_get_child_frame_id_func(parent->frame_id, child_offset)`` (``ui_methods.cpp:589-607``). Both
+#: resolvers are in the catalog; ``_HASH_LABEL_LENGTH`` is native's literal ``-1`` as the word it is.
+_CREATE_HASH_FROM_WCHAR_FUNC = "ui.create_hash_from_wchar_func"
+_GET_CHILD_FRAME_ID_FUNC = "ui.get_child_frame_id_func"
+_HASH_LABEL_LENGTH = 0xFFFFFFFF
+
 # native relation_kind values for get_related_frame_id
 RELATION_FIRST_CHILD = 0
 RELATION_LAST_CHILD = 1
@@ -89,6 +110,18 @@ def _unported(member: str, requirement: str) -> NotImplementedError:
         "The source's member works; this port raises at the call site and names the work "
         "item instead of returning a wrong value."
     )
+
+
+def _label_bytes(label: str) -> bytes:
+    """One label as the wide bytes the client's own hasher walks.
+
+    Reforged passes a Python ``str`` to a binding whose parameter is ``const std::wstring&``
+    (``ui_bindings.cpp:700-706``), so pybind converts it to UTF-16 code units and ``c_str()`` adds
+    the terminator — which is what the client needs, because ``GetHashByLabel`` passes ``-1`` as the
+    length and the walk stops at that terminator (``ui_methods.cpp:542-546``).
+    """
+
+    return label.encode("utf-16-le") + b"\x00\x00"
 
 
 class FrameError(Exception):
@@ -693,7 +726,12 @@ class _FrameTree:
 
         client = require_client()
         record = client.call_function("ui.get_root_frame_func", CallForm.NO_ARGS)
-        pointer = int(record.result)
+        # The callee's **return register**, which the payload stores in the command's `value` word
+        # (`payload._capture_return`, "Store the callee's `eax` in the command's `value` word"); the
+        # record's `result` is the command's own status code. Reading `result` here answered the status
+        # instead of the pointer — a defect found and fixed in round 90, recorded in
+        # `docs/FRAME_TREE_PORT.md`.
+        pointer = int(record.value)
         fid = 0
         if pointer:
             fid = int(client.frame_array.read_u32(pointer + FrameStruct.frame_id.offset) or 0)
@@ -805,34 +843,56 @@ class _FrameTree:
     def by_label(self, label: str) -> "Frame":
         """Handle on the frame at a legacy alias label (native lookup).
 
-        Needs ``PyUIManager.UIManager.get_frame_id_by_label``, which is native ``GetFrameIDByLabel``
-        (``ui_methods.cpp:570-573``) → ``GetFrameByLabel`` (``:556-568``): hash the label with the client's
-        own ``CreateHashFromWChar`` (``:542-546``), then scan for that hash. Hashing a label the offline
-        table does not know is a call into the client with a wide string, and that call form is not in the
-        capability layer yet (``docs/TARGET_SIDE_WORK.md``). Unlike ``anchor_ids``, this member makes no
-        fallback, so it raises rather than returning a plausible id.
+        ``PyUIManager.UIManager.get_frame_id_by_label`` (``frame.py:583-585``), which is native
+        ``GetFrameIDByLabel`` (``ui_methods.cpp:570-573``) → ``GetFrameByLabel`` (``:556-568``):
+        hash the label with the client's own ``CreateHashFromWChar`` (``:542-546``, the call
+        `hash_for_label` makes), then scan the frame array for the first valid frame whose
+        ``relation.frame_hash_id`` matches — the same walk ``GetFrameIDByHash`` makes (``:575-588``)
+        and the one ``FrameArray.frame_id_by_hash`` performs for the button-action frame
+        (``py4gw/ui_manager.py``); native writes that loop twice, so this member keeps its own, exactly
+        as the source does. The hash-zero guard is native's own: ``if (!(hash && frame_array)) return
+        nullptr`` (``:559-561``), and a frame that is not found is the ``0`` the binding's ``or 0``
+        turns into ``Frame.from_id(0)`` — a handle that resolves to nothing, which is the source's
+        ``nullptr``.
         """
 
-        raise _unported(
-            "_FrameTree.by_label",
-            "PyUIManager.UIManager.get_frame_id_by_label — the client's CreateHashFromWChar over a wide "
-            "string (native ui_methods.cpp:542-573), i.e. the wide-string call form",
-        )
+        from ..client import require_client
+
+        frame_hash = self.hash_for_label(label)
+        found = 0
+        if frame_hash:
+            for candidate, record in require_client().frame_array.iter_frames():
+                if record is not None and int(getattr(record, "frame_hash", 0) or 0) == int(frame_hash):
+                    found = int(candidate)
+                    break
+        return Frame.from_id(int(found or 0))
 
     def hash_for_label(self, label: str) -> int:
         """The hash the client computes for `label` (``frame.py:587-588``).
 
         ``PyUIManager.UIManager.get_hash_by_label`` is native ``GetHashByLabel``
-        (``ui_methods.cpp:542-546``), whose whole body is the client's ``CreateHashFromWChar(label, -1)`` —
-        a call, not a read, and it needs the wide-string call form that is still outstanding
-        (``docs/TARGET_SIDE_WORK.md``). The port therefore names the work item instead of returning a
-        number; ``Frame.from_label`` is the source's own offline-table route and is ported.
+        (``ui_methods.cpp:542-546``), whose whole body is the client's ``CreateHashFromWChar(label,
+        -1)``. That call needs the label **in the client**, so it is placed in the block's data
+        region and its address passed — the shape ``UIManager.SetStringPreference`` and
+        ``UIManager.Keydown``'s button-action frame already use. Native answers ``0`` when the
+        function pointer or the label is missing (``:543-545``), which is the port's unresolvable or
+        empty case; the client's answer is the call's return register.
         """
 
-        raise _unported(
-            "_FrameTree.hash_for_label",
-            "PyUIManager.UIManager.get_hash_by_label — native GetHashByLabel (ui_methods.cpp:542-546), the "
-            "client's CreateHashFromWChar over a wide string, i.e. the wide-string call form",
+        from ..client import require_client
+        from ..game_thread.shared_block import CallForm
+
+        client = require_client()
+        if not client.resolves(_CREATE_HASH_FROM_WCHAR_FUNC):
+            return 0
+        address = client.bridge.write_data(_LABEL_OFFSET, _label_bytes(label))
+        return int(
+            client.call_function(
+                _CREATE_HASH_FROM_WCHAR_FUNC,
+                CallForm.U32_U32,
+                address,
+                _HASH_LABEL_LENGTH,
+            ).value
         )
 
     def coords_for_hash(self, frame_hash: int) -> list[tuple[int, int]]:
@@ -1672,7 +1732,7 @@ class Frame:
     # -- interaction ------------------------------------------------------
     # Each one refuses on an unusable frame rather than firing an action at a
     # frame that is not on screen - that check used to be the caller's job.
-    def click(self) -> None:
+    def click(self) -> bool:
         """``button_click`` (``frame.py:1260-1263``).
 
         The source asks ``is_usable`` and then calls the binding, which enqueues
@@ -1684,10 +1744,24 @@ class Frame:
         ``kMouseClick2``. Both structs are placed in the block's data region, because the client is handed
         pointers to them, and the send is the same five-word ``__thiscall`` call `send_message` makes —
         with the parent's ``frame_callbacks`` in ECX.
+
+        **It answers native's own bool, which is a recorded divergence from Reforged's wrapper.**
+        ``ui::ButtonClick`` ends in ``return SendFrameUIMessage(parent_frame, kMouseClick2, &action);``
+        (``:1273``), so it is ``false`` for a frame or parent that is not created and for a parent with
+        no callbacks (``SendFrameUIMessage``'s own guard, ``:1332-1335``) and ``true`` once the client
+        has been handed the action; native's binding *cannot* carry that value — its lambda answers
+        ``true`` unconditionally after enqueueing. Reforged's ``Frame.click`` is declared ``-> None``
+        (``FrameTree/frame.py:1260``) and every caller in this port discards the answer (``Map``,
+        ``Inventory``, ``UIManager.ClickDialogButton``), with **one** exception that is why the port
+        reports it: ``GW::party::return_to_outpost`` is ``return ui::ButtonClick(ui::GetChildFrame(
+        ui::GetFrameByLabel(L"DlgRedirect"), 0));`` (``party_methods.cpp:119-121``) and Reforged's
+        ``Party.ReturnToOutpost`` returns that bool (``Party.py:388``). An external port has no in-process
+        ``PyParty`` to reach, so the value has to come from the click; recorded in
+        ``docs/FRAME_TREE_PORT.md`` rather than left as a silent difference.
         """
 
         if not self.is_usable:
-            return
+            return False
 
         from ..client import require_client
         from ..context.gw_array import GWArray
@@ -1695,17 +1769,17 @@ class Frame:
 
         client = require_client()
         if not client.resolves(_SEND_FRAME_UI_MESSAGE_FUNC):
-            return
+            return False
         array = client.frame_array
         button = array.get(self.frame_id)
         if button is None or not int(button.frame_state) & _FRAME_STATE_CREATED:
-            return
+            return False
         parent_relation = int(button.relation.parent or 0)
         if not parent_relation:
-            return
+            return False
         parent_pointer = parent_relation - FrameStruct.relation.offset
         if not array.read_u32(parent_pointer + FrameStruct.frame_state.offset) & _FRAME_STATE_CREATED:
-            return
+            return False
         callbacks_size = int(
             array.read_u32(
                 parent_pointer
@@ -1714,7 +1788,7 @@ class Frame:
             )
         )
         if not callbacks_size:
-            return
+            return False
 
         button_param_address = client.bridge.write_data(
             _BUTTON_PARAM_OFFSET,
@@ -1740,6 +1814,7 @@ class Frame:
             action_address,
             0,
         )
+        return True
 
     def double_click(self) -> None:
         """``button_double_click`` (``frame.py:1265-1268``) — as `click`, through
@@ -2286,15 +2361,34 @@ class Frame:
     def child_native(self, code: int) -> "Frame":
         """Child by code via the native lookup rather than the snapshot.
 
-        ``get_child_frame_by_frame_id`` is native ``GetChildFrame(parent, child_offset)``
-        (``ui_methods.cpp:435-441``), which returns null unless the client's own
-        ``g_get_child_frame_id_func`` is resolved — a call into the client, not a read of the frame array.
+        ``PyUIManager.UIManager.get_child_frame_by_frame_id`` (``frame.py:1517-1521``) is the binding
+        ``[](uint32_t parent_frame_id, uint32_t child_offset) { Frame* child =
+        GW::ui::GetChildFrame(GW::ui::GetFrameById(parent_frame_id), child_offset); return child ?
+        child->frame_id : 0; }`` (``ui_bindings.cpp:707-710``). Both of its steps are here: native's
+        ``GetFrameById`` (``ui_methods.cpp:421-428``) is the port's own ``FrameArray.get`` — a slot
+        that is out of range, null or the deleted sentinel answers ``None``, which is native's
+        ``nullptr`` — and ``GetChildFrame`` (``:444-449``) refuses a null parent and otherwise calls
+        the client's own ``g_get_child_frame_id_func(parent->frame_id, child_offset)``, one ``U32_U32``
+        call whose return register is the child id.
         """
 
-        raise _unported(
-            "Frame.child_native",
-            "PyUIManager.UIManager.get_child_frame_by_frame_id — native GetChildFrame (ui_methods.cpp:435-441), "
-            "which calls the client's own g_get_child_frame_id_func",
+        from ..client import require_client
+        from ..game_thread.shared_block import CallForm
+
+        client = require_client()
+        if not client.resolves(_GET_CHILD_FRAME_ID_FUNC):
+            return Frame.from_id(0)
+        if client.frame_array.get(int(self.frame_id)) is None:
+            return Frame.from_id(0)
+        return Frame.from_id(
+            int(
+                client.call_function(
+                    _GET_CHILD_FRAME_ID_FUNC,
+                    CallForm.U32_U32,
+                    int(self.frame_id),
+                    int(code),
+                ).value
+            )
         )
 
     def child_path_native(self, codes: list[int]) -> "Frame":

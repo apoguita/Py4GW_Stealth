@@ -1,0 +1,753 @@
+{
+  "pid": 44052,
+  "module": {
+    "base": "0xa20000",
+    "size": "0xf49000"
+  },
+  "text": {
+    "start": "0xa21000",
+    "end": "0xf59600"
+  },
+  "functions": [
+    {
+      "resolver": "party.set_difficulty_func",
+      "declared": "void __cdecl(uint32_t flag)",
+      "source": "party_methods.cpp:20, 109-117",
+      "resolved": true,
+      "address": "0xe76b40",
+      "in_text": true,
+      "entry": "55 8b ec e8 18 8b c2 ff ff 75 08 8b 48 4c 83 c1",
+      "ret": {
+        "likely": {
+          "kind": "ret",
+          "pops": 0,
+          "at": 484,
+          "before": "01 00 00 00 5b 5d",
+          "after": "cc cc cc cc cc cc"
+        },
+        "candidates": [
+          {
+            "kind": "ret imm16",
+            "pops": 65535,
+            "at": 6,
+            "before": "55 8b ec e8 18 8b",
+            "after": "75 08 8b 48 4c 83"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 23,
+            "before": "e8 aa 1d 00 00 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 65535,
+            "at": 38,
+            "before": "55 8b ec e8 f8 8a",
+            "after": "75 08 8b 48 4c 83"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 55,
+            "before": "e8 5a 14 00 00 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 65535,
+            "at": 70,
+            "before": "55 8b ec e8 d8 8a",
+            "after": "75 08 8b 48 4c 83"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 87,
+            "before": "e8 fa 15 00 00 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 65535,
+            "at": 102,
+            "before": "55 8b ec e8 b8 8a",
+            "after": "75 08 8b 48 4c 83"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 119,
+            "before": "e8 1a 18 00 00 5d",
+            "after": "cc cc cc cc cc cc"
+          }
+        ],
+        "count": 24
+      },
+      "has_frame_pointer": true
+    },
+    {
+      "resolver": "party.set_ready_status_func",
+      "declared": "void __cdecl(uint32_t identifier)",
+      "source": "party_methods.cpp:21, 44-52",
+      "resolved": true,
+      "address": "0xe77bc0",
+      "in_text": true,
+      "entry": "55 8b ec e8 98 7a c2 ff ff 75 08 8b 48 4c 83 c1",
+      "ret": {
+        "likely": {
+          "kind": "ret",
+          "pops": 0,
+          "at": 480,
+          "before": "74 40 00 00 00 5e",
+          "after": "cc cc cc cc cc cc"
+        },
+        "candidates": [
+          {
+            "kind": "ret imm16",
+            "pops": 65535,
+            "at": 6,
+            "before": "55 8b ec e8 98 7a",
+            "after": "75 08 8b 48 4c 83"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 23,
+            "before": "e8 9a 35 00 00 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 65535,
+            "at": 38,
+            "before": "55 8b ec e8 78 7a",
+            "after": "75 0c ff 75 08 8b"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 58,
+            "before": "e8 c7 2d 00 00 5d",
+            "after": "cc cc cc cc cc 55"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 65535,
+            "at": 70,
+            "before": "55 8b ec e8 58 7a",
+            "after": "75 0c ff 75 08 8b"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 90,
+            "before": "e8 57 2f 00 00 5d",
+            "after": "cc cc cc cc cc e9"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 153,
+            "before": "f1 57 8d 5e 04 f6",
+            "after": "03 74 14 68 a0 00"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 35839,
+            "at": 175,
+            "before": "df f5 00 e8 4f ff",
+            "after": "fb 89 1b 83 e7 01"
+          }
+        ],
+        "count": 13
+      },
+      "has_frame_pointer": true
+    },
+    {
+      "resolver": "party.party_search_seek_func",
+      "declared": "void __cdecl(uint32_t search_type, const wchar_t* advertisement, uint32_t unk)",
+      "source": "party_methods.cpp:19, 467-472",
+      "resolved": true,
+      "address": "0xe779d0",
+      "in_text": true,
+      "entry": "55 8b ec 57 e8 87 7c c2 ff ff 75 10 8b 78 4c 8d",
+      "ret": {
+        "likely": {
+          "kind": "ret",
+          "pops": 0,
+          "at": 490,
+          "before": "e8 f7 0e 00 00 5d",
+          "after": "cc cc cc cc cc 55"
+        },
+        "candidates": [
+          {
+            "kind": "ret imm16",
+            "pops": 65535,
+            "at": 7,
+            "before": "8b ec 57 e8 87 7c",
+            "after": "75 10 8b 78 4c 8d"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 50,
+            "before": "e0 33 00 00 5f 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 35839,
+            "at": 67,
+            "before": "cc cc cc e8 4b 7c",
+            "after": "48 4c 8d 49 04 e9"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 65535,
+            "at": 86,
+            "before": "55 8b ec e8 38 7c",
+            "after": "75 08 8b 48 4c 81"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 106,
+            "before": "e8 47 3f 00 00 5d",
+            "after": "cc cc cc cc cc 55"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 65535,
+            "at": 118,
+            "before": "55 8b ec e8 18 7c",
+            "after": "75 08 8b 48 4c 81"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 138,
+            "before": "e8 87 3f 00 00 5d",
+            "after": "cc cc cc cc cc e8"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 35839,
+            "at": 147,
+            "before": "cc cc cc e8 fb 7b",
+            "after": "40 4c 8b 80 9c 00"
+          }
+        ],
+        "count": 31
+      },
+      "has_frame_pointer": true
+    },
+    {
+      "resolver": "party.party_search_button_callback_func",
+      "declared": "void __fastcall(void* context, uint32_t edx, uint32_t* wparam)",
+      "source": "party_methods.cpp:20, 213-279",
+      "resolved": true,
+      "address": "0xb832e0",
+      "in_text": true,
+      "entry": "55 8b ec 8b 45 08 83 ec 08 56 8b f1 8b 48 04 83",
+      "ret": {
+        "likely": null,
+        "candidates": [
+          {
+            "kind": "ret imm16",
+            "pops": 4,
+            "at": 109,
+            "before": "04 5f 5e 8b e5 5d",
+            "after": "83 78 08 07 0f 85"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 4,
+            "at": 189,
+            "before": "04 5f 5e 8b e5 5d",
+            "after": "83 78 08 07 0f 85"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 4,
+            "at": 269,
+            "before": "04 5f 5e 8b e5 5d",
+            "after": "83 78 08 07 0f 85"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 4,
+            "at": 349,
+            "before": "04 5f 5e 8b e5 5d",
+            "after": "83 78 08 07 0f 85"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 4,
+            "at": 378,
+            "before": "04 5f 5e 8b e5 5d",
+            "after": "83 78 08 07 0f 85"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 4,
+            "at": 475,
+            "before": "04 5f 5e 8b e5 5d",
+            "after": "83 78 08 07 0f 85"
+          }
+        ],
+        "count": 6
+      },
+      "has_frame_pointer": true
+    },
+    {
+      "resolver": "party.party_window_button_callback_func",
+      "declared": "void __fastcall(void* context, uint32_t edx, uint32_t* wparam)",
+      "source": "party_methods.cpp:30, 200-211",
+      "resolved": true,
+      "address": "0xb8ed30",
+      "in_text": true,
+      "entry": "55 8b ec 83 7d 08 00 57 8b f9 74 11 6a 00 6a 00",
+      "ret": {
+        "likely": {
+          "kind": "ret",
+          "pops": 0,
+          "at": 470,
+          "before": "d9 05 88 77 f6 00",
+          "after": "cc cc cc cc cc cc"
+        },
+        "candidates": [
+          {
+            "kind": "ret imm16",
+            "pops": 4,
+            "at": 85,
+            "before": "de ff ff 5e 5f 5d",
+            "after": "e8 d3 80 2e 00 6a"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 4,
+            "at": 105,
+            "before": "00 83 c4 04 5f 5d",
+            "after": "6a 00 6a 00 68 b3"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 4,
+            "at": 127,
+            "before": "00 83 c4 0c 5f 5d",
+            "after": "6a 00 6a 00 68 bd"
+          },
+          {
+            "kind": "ret imm16",
+            "pops": 4,
+            "at": 149,
+            "before": "00 83 c4 0c 5f 5d",
+            "after": "5c ed b8 00 88 ed"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 283,
+            "before": "40 08 d9 58 04 5d",
+            "after": "68 00 00 00 02 ff"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 329,
+            "before": "5f 5e d9 58 04 5d",
+            "after": "83 f8 60 75 34 68"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 386,
+            "before": "03 00 00 00 5e 5d",
+            "after": "83 f8 01 75 18 83"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 432,
+            "before": "83 c4 0c 5f 5e 5d",
+            "after": "cc cc cc cc cc cc"
+          }
+        ],
+        "count": 10
+      },
+      "has_frame_pointer": true
+    },
+    {
+      "resolver": "party.flag_hero_agent_func",
+      "declared": "void __cdecl(uint32_t agent_id, GamePos* pos)",
+      "source": "party_methods.cpp:22, 325-332",
+      "resolved": true,
+      "address": "0xe2e490",
+      "in_text": true,
+      "entry": "55 8b ec e8 68 fa 03 00 83 f8 01 75 06 5d e9 ad",
+      "ret": {
+        "likely": {
+          "kind": "ret",
+          "pops": 0,
+          "at": 449,
+          "before": "41 04 5e 8b e5 5d",
+          "after": "cc cc cc cc cc cc"
+        },
+        "candidates": [
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 20,
+            "before": "e9 ad 22 11 00 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 52,
+            "before": "e9 cd 22 11 00 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 96,
+            "before": "e8 a1 32 01 00 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 141,
+            "before": "e8 e4 35 01 00 5d",
+            "after": "cc cc 68 6f 01 00"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 210,
+            "before": "ff 83 c4 08 5e 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 314,
+            "before": "5f 5e 8b 04 88 5d",
+            "after": "5f 83 c8 ff 5e 5d"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 321,
+            "before": "5f 83 c8 ff 5e 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 428,
+            "before": "41 04 5e 8b e5 5d",
+            "after": "8b 4d 0c b8 34 d1"
+          }
+        ],
+        "count": 10
+      },
+      "has_frame_pointer": true
+    },
+    {
+      "resolver": "party.flag_all_func",
+      "declared": "void __cdecl(GamePos* pos)",
+      "source": "party_methods.cpp:23, 338-340",
+      "resolved": true,
+      "address": "0xe2e4b0",
+      "in_text": true,
+      "entry": "55 8b ec e8 48 fa 03 00 83 f8 01 75 06 5d e9 cd",
+      "ret": {
+        "likely": {
+          "kind": "ret",
+          "pops": 0,
+          "at": 509,
+          "before": "5f 8b 04 b0 5e 5d",
+          "after": "cc cc"
+        },
+        "candidates": [
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 20,
+            "before": "e9 cd 22 11 00 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 64,
+            "before": "e8 a1 32 01 00 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 109,
+            "before": "e8 e4 35 01 00 5d",
+            "after": "cc cc 68 6f 01 00"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 178,
+            "before": "ff 83 c4 08 5e 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 282,
+            "before": "5f 5e 8b 04 88 5d",
+            "after": "5f 83 c8 ff 5e 5d"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 289,
+            "before": "5f 83 c8 ff 5e 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 396,
+            "before": "41 04 5e 8b e5 5d",
+            "after": "8b 4d 0c b8 34 d1"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 417,
+            "before": "41 04 5e 8b e5 5d",
+            "after": "cc cc cc cc cc cc"
+          }
+        ],
+        "count": 10
+      },
+      "has_frame_pointer": true
+    },
+    {
+      "resolver": "party.set_hero_behavior_func",
+      "declared": "void __cdecl(uint32_t agent_id, HeroBehavior behavior)",
+      "source": "party_methods.cpp:24, 346-359",
+      "resolved": true,
+      "address": "0xe2e410",
+      "in_text": true,
+      "entry": "55 8b ec 83 7d 0c 03 7c 14 68 17 11 00 00 ba 2c",
+      "ret": {
+        "likely": {
+          "kind": "ret",
+          "pops": 0,
+          "at": 449,
+          "before": "5f 83 c8 ff 5e 5d",
+          "after": "cc cc cc cc cc cc"
+        },
+        "candidates": [
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 148,
+            "before": "e9 ad 22 11 00 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 180,
+            "before": "e9 cd 22 11 00 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 224,
+            "before": "e8 a1 32 01 00 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 269,
+            "before": "e8 e4 35 01 00 5d",
+            "after": "cc cc 68 6f 01 00"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 338,
+            "before": "ff 83 c4 08 5e 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 442,
+            "before": "5f 5e 8b 04 88 5d",
+            "after": "5f 83 c8 ff 5e 5d"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 449,
+            "before": "5f 83 c8 ff 5e 5d",
+            "after": "cc cc cc cc cc cc"
+          }
+        ],
+        "count": 7
+      },
+      "has_frame_pointer": true
+    },
+    {
+      "resolver": "party.lock_pet_target_func",
+      "declared": "bool __cdecl(uint32_t pet_agent_id, uint32_t target_id)",
+      "source": "party_methods.cpp:25, 391-413",
+      "resolved": true,
+      "address": "0xf40680",
+      "in_text": true,
+      "entry": "55 8b ec 83 ec 10 a1 80 74 21 01 33 c5 89 45 fc",
+      "ret": {
+        "likely": {
+          "kind": "ret",
+          "pops": 0,
+          "at": 506,
+          "before": "e3 c8 ff 8b e5 5d",
+          "after": "cc cc cc cc cc"
+        },
+        "candidates": [
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 68,
+            "before": "e5 c8 ff 8b e5 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 122,
+            "before": "83 c4 0c 8b e5 5d",
+            "after": "cc cc cc cc cc 55"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 196,
+            "before": "e4 c8 ff 8b e5 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 270,
+            "before": "83 c4 0c 8b e5 5d",
+            "after": "cc 55 8b ec 83 ec"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 328,
+            "before": "83 c4 0c 8b e5 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 416,
+            "before": "e3 c8 ff 8b e5 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 506,
+            "before": "e3 c8 ff 8b e5 5d",
+            "after": "cc cc cc cc cc"
+          }
+        ],
+        "count": 7
+      },
+      "has_frame_pointer": true
+    },
+    {
+      "resolver": "party.command_hotkey_disable_ai_func",
+      "declared": "void __cdecl(uint32_t hero_agent_id, uint32_t zero_based_skill_slot)",
+      "source": "party_methods.cpp:26, 361-389",
+      "resolved": true,
+      "address": "0xf40700",
+      "in_text": true,
+      "entry": "55 8b ec 83 ec 10 a1 80 74 21 01 33 c5 89 45 fc",
+      "ret": {
+        "likely": {
+          "kind": "ret",
+          "pops": 0,
+          "at": 474,
+          "before": "83 c4 0c 8b e5 5d",
+          "after": "cc cc cc cc cc 55"
+        },
+        "candidates": [
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 68,
+            "before": "e4 c8 ff 8b e5 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 142,
+            "before": "83 c4 0c 8b e5 5d",
+            "after": "cc 55 8b ec 83 ec"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 200,
+            "before": "83 c4 0c 8b e5 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 288,
+            "before": "e3 c8 ff 8b e5 5d",
+            "after": "cc cc cc cc cc cc"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 378,
+            "before": "e3 c8 ff 8b e5 5d",
+            "after": "cc cc cc cc cc 55"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 426,
+            "before": "83 c4 0c 8b e5 5d",
+            "after": "cc cc cc cc cc 55"
+          },
+          {
+            "kind": "ret",
+            "pops": 0,
+            "at": 474,
+            "before": "83 c4 0c 8b e5 5d",
+            "after": "cc cc cc cc cc 55"
+          }
+        ],
+        "count": 7
+      },
+      "has_frame_pointer": true
+    }
+  ],
+  "note": "read-only: nothing was called and nothing was written. 'ret' is the first 'ret imm16' (C2 xx xx) or bare 'ret' (C3) in the first 512 bytes; a C2 argues for a __fastcall/__thiscall callee that cleans its own stack, and C3 for one whose caller does."
+}

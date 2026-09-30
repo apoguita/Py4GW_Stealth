@@ -1,0 +1,76 @@
+{
+  "stage": "restore",
+  "pid": 44052,
+  "recorded": {
+    "1": {
+      "behavior": 1,
+      "disabled": 0
+    },
+    "2": {
+      "behavior": 1,
+      "disabled": 64
+    }
+  },
+  "SetHeroBehavior(1493, 1)": null,
+  "SetHeroBehavior(1493) settled": {
+    "settled": true,
+    "after": 1,
+    "waited_ms": 107.9
+  },
+  "SetSkillAIEnabled(1493, 1, True)": true,
+  "SetSkillAIEnabled(1493, 1) settled": {
+    "settled": true,
+    "after": false,
+    "waited_ms": 101.2
+  },
+  "checks": [
+    {
+      "position": 1,
+      "agent_id": 1493,
+      "wanted": {
+        "behavior": 1,
+        "disabled": 0
+      },
+      "read_back": {
+        "behavior": 1,
+        "disabled": 0
+      },
+      "matches": true
+    },
+    {
+      "position": 2,
+      "agent_id": 1494,
+      "wanted": {
+        "behavior": 1,
+        "disabled": 64
+      },
+      "read_back": {
+        "behavior": 1,
+        "disabled": 64
+      },
+      "matches": true
+    }
+  ],
+  "restored": true,
+  "difficulty_before": false,
+  "difficulty_unlocked": false,
+  "difficulty_SetHardMode": null,
+  "difficulty_flip": {
+    "settled": false,
+    "after": false,
+    "expected": true,
+    "waited_ms": 10003.2
+  },
+  "difficulty_unlocked_after": false,
+  "hooks_original_after_disconnect": true,
+  "state_after": {
+    "party_size": 0,
+    "hard_mode": false,
+    "all_flag": [
+      0.0,
+      0.0
+    ],
+    "heroes": [],
+    "pet": "AttributeError: 'str' object has no attribute 'pets'"
+  }
+}

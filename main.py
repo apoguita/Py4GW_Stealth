@@ -2612,7 +2612,7 @@ class MainWindow:
             )
         for index, player in enumerate(players[:32]):
             try:
-                player_name = player.name or "(unnamed)"
+                player_name = player.name_str or "(unnamed)"
             except OSError:
                 player_name = "(unreadable)"
             rows.append(
@@ -2647,13 +2647,13 @@ class MainWindow:
                     "field": f"hero_info[{index}]",
                     "value": (
                         f"hero_id={hero.hero_id}, agent_id={hero.agent_id}, "
-                        f"level={hero.level}, name={hero.name or '(unnamed)'}"
+                        f"level={hero.level}, name={hero.name_str or '(unnamed)'}"
                     ),
                 }
             )
         for index, pet in enumerate(pets[:32]):
             try:
-                pet_name = pet.name or "(unnamed)"
+                pet_name = pet.pet_name_str or "(unnamed)"
             except OSError:
                 pet_name = "(unreadable)"
             rows.append(
@@ -2674,7 +2674,7 @@ class MainWindow:
                     "value": (
                         f"agent_id={skillbar.agent_id}, "
                         f"valid={skillbar.is_valid}, "
-                        f"skills={skillbar.skill_ids}"
+                        f"skills={[int(skill.skill_id) for skill in skillbar.skills]}"
                     ),
                 }
             )

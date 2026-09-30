@@ -22,7 +22,7 @@ from py4gw.client import ConnectedClient
 from py4gw.context.agent_array import AgentStruct
 from py4gw.context.char_context import CharContextStruct
 from py4gw.context.friend_list_context import FriendListStruct
-from py4gw.context.party_context import PlayerPartyMemberStruct
+from py4gw.context.party_context import PlayerPartyMember
 from py4gw.context.world_context import PlayerStruct, WorldContextStruct
 from py4gw.player import Player, PlayerStatus, _pick_highest
 
@@ -225,7 +225,7 @@ class LivePlayerTests(unittest.TestCase):
         party = party_context.player_party
         self.assertIsNotNone(party)
         assert party is not None
-        members: list[PlayerPartyMemberStruct] = list(party.players or [])
+        members: list[PlayerPartyMember] = list(party.players or [])
         if not members:
             self.skipTest("The client is not in a party.")
 

@@ -1,0 +1,15 @@
+=== leave retry: started Tue 09/29/2026 15:36:26.10 === 
+party before:       {"size": 2, "players": 1, "heroes": 1, "henchmen": 0, "leader": 43, "hero_agent_ids": [26], "henchman_agent_ids": []}
+party window before: False
+opening the party window with ControlAction_OpenParty …
+party window after the control action: False (waited 5.0s)
+not pressed: the party window is not on screen, and the press asserted the client the last time it was made without one (Assertion: childId, FrApi.cpp(3916))
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\probe_party_leave.py", line 153, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "C:\Users\Apo\Py4GW_Stealth\tests\probe_party_leave.py", line 140, in main
+    report["changed"] = report["before"] != report["after"]
+                                            ~~~~~~^^^^^^^^^
+KeyError: 'after'
+=== leave retry: exit=1 === 

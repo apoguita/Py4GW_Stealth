@@ -1,0 +1,123 @@
+=== add: started Tue 09/29/2026 15:29:24.85 === 
+act: AddHeroByName('Norgu') -> None
+act: AddHeroByName('Norgu') landed -> {'settled': True, 'after': True, 'waited_ms': 100.6}
+act: AddHenchman(10) -> None
+act: AddHenchman(10) landed -> {'settled': True, 'after': True, 'waited_ms': 100.5}
+act: every change the client was sent is visible in its own records: True
+{
+  "stage": "act",
+  "options": {
+    "hero_name": "Norgu",
+    "henchman_id": 10
+  },
+  "pid": 44052,
+  "controller_elevated": true,
+  "game_thread": true,
+  "plan": [
+    {
+      "step": "flags",
+      "what": "FlagAllHeroes to the party's own flag position, then UnflagAllHeroes",
+      "allowed": false
+    },
+    {
+      "step": "flag-hero",
+      "what": "FlagHero for one hero, then UnflagHero",
+      "allowed": false
+    },
+    {
+      "step": "behaviour",
+      "what": "SetHeroBehavior with a different value for one hero, then back",
+      "allowed": false
+    },
+    {
+      "step": "skill-ai",
+      "what": "SetSkillAIEnabled on one slot, then back",
+      "allowed": false
+    },
+    {
+      "step": "difficulty",
+      "what": "SetHardMode/SetNormalMode, in an outpost, then back",
+      "allowed": false
+    },
+    {
+      "step": "search",
+      "what": "SearchParty with a short advertisement, then SearchPartyCancel",
+      "allowed": false
+    },
+    {
+      "step": "pet",
+      "what": "SetPetBehavior(Fight, current target) — needs a living enemy target — then back",
+      "allowed": false
+    },
+    {
+      "step": "use-skill",
+      "what": "Heroes.UseSkill on one hero number and slot (`--hero-number`, `--slot`)",
+      "allowed": false
+    },
+    {
+      "step": "party-add",
+      "what": "AddHeroByName (`--hero`), and AddHenchman when `--henchman <agent_id>` is given — **changes the party**, outposts only",
+      "allowed": true
+    },
+    {
+      "step": "party-kick",
+      "what": "KickHeroByName (`--hero`), and KickHenchman with `--henchman` — **changes the party**",
+      "allowed": false
+    },
+    {
+      "step": "leave",
+      "what": "LeaveParty — **changes the party**, and only with someone else in it",
+      "allowed": false
+    },
+    {
+      "step": "outpost",
+      "what": "ReturnToOutpost — **leaves the map**",
+      "allowed": false
+    }
+  ],
+  "before": {
+    "party_size": 1,
+    "hard_mode": false,
+    "all_flag": [
+      Infinity,
+      Infinity
+    ],
+    "heroes": [],
+    "pet": null
+  },
+  "acted": {
+    "AddHeroByName('Norgu')": null,
+    "AddHeroByName('Norgu') landed": {
+      "settled": true,
+      "after": true,
+      "waited_ms": 100.6
+    },
+    "AddHenchman(10)": null,
+    "AddHenchman(10) landed": {
+      "settled": true,
+      "after": true,
+      "waited_ms": 100.5
+    }
+  },
+  "settled": true,
+  "after": {
+    "party_size": 3,
+    "hard_mode": false,
+    "all_flag": [
+      Infinity,
+      Infinity
+    ],
+    "heroes": [
+      {
+        "position": 1,
+        "agent_id": 20,
+        "behavior": 1,
+        "disabled": 0
+      }
+    ],
+    "pet": null
+  },
+  "note": "act stage: only the named steps ran, and each reversible one was put back — after waiting, bounded, for the client to show the change it was sent ('settled'), because the client applies a party change when it processes the command and a restore computed before that lands replaces the value it meant to keep. The steps that change the party or leave the map are the owner's call, one at a time — and each refuses here when the client's own condition for it is not met (no such hero, a party of one, not an outpost).",
+  "hooks_original_after_disconnect": true
+}
+=== add: exit=0 === 

@@ -7,14 +7,14 @@ import unittest
 
 from py4gw import (
     GameContext,
-    HenchmanPartyMemberStruct,
-    HeroPartyMemberStruct,
+    HenchmanPartyMember,
+    HeroPartyMember,
     PartyContext,
     PartyContextStruct,
     PartyInfoStruct,
     PartySearchStruct,
     PatternCatalog,
-    PlayerPartyMemberStruct,
+    PlayerPartyMember,
     ProcessMemoryReader,
     RemoteScanner,
     Win32,
@@ -57,9 +57,9 @@ class LivePartyContextTests(unittest.TestCase):
     def test_layout_matches_native_party_context(self) -> None:
         """Keep the party root and nested records aligned with native source."""
 
-        self.assertEqual(ctypes.sizeof(PlayerPartyMemberStruct), 0x0C)
-        self.assertEqual(ctypes.sizeof(HeroPartyMemberStruct), 0x18)
-        self.assertEqual(ctypes.sizeof(HenchmanPartyMemberStruct), 0x34)
+        self.assertEqual(ctypes.sizeof(PlayerPartyMember), 0x0C)
+        self.assertEqual(ctypes.sizeof(HeroPartyMember), 0x18)
+        self.assertEqual(ctypes.sizeof(HenchmanPartyMember), 0x34)
         self.assertEqual(ctypes.sizeof(PartyInfoStruct), 0x84)
         self.assertEqual(ctypes.sizeof(PartySearchStruct), 0x94)
         self.assertEqual(ctypes.sizeof(PartyContextStruct), 0xD0)

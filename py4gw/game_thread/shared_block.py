@@ -391,6 +391,32 @@ class CallForm(IntEnum):
     #: records, written where the source builds its structures.
     STACK_WORDS = 10
 
+    #: ``void __fastcall(void* context, uint32_t edx, uint32_t* wparam)``: ``arg1`` in **ECX**,
+    #: ``arg2`` in **EDX**, and ``arg3`` pushed — two register words and **one** stack word. Native
+    #: declares this shape for the party's own button callbacks (``PartySearchButtonCallbackFn``,
+    #: ``party_methods.cpp:20``) and calls the client's handler with the caller's context array and
+    #: `wparam` array. **The callee releases the word**: measured on this build, the party-search
+    #: callback ends ``mov esp,ebp; pop ebp; ret 4`` twenty times through its body
+    #: (``tests/probe_party_abi.py``, ``live_reports/party_abi.json``), so nothing is released after
+    #: the call. The five-word ``FASTCALL_U32_U32_U32`` cannot stand in: it pushes three words, and
+    #: the callee would pop one.
+    FASTCALL_U32 = 11
+
+    #: The same shape with the **caller** releasing the pushed word, which is what the client's
+    #: *other* party callback does: ``party.party_window_button_callback_func`` ends with a bare
+    #: ``ret`` (measured, same probe), where native declares the same ``__fastcall`` typedef. That is
+    #: a disagreement between the sources' declaration and the client's own code — recorded in
+    #: ``docs/PARTY_PORT.md`` — and this form is the measurement's answer: two register words, one
+    #: pushed word, and an ``add esp, 4`` after the call.
+    FASTCALL_U32_CALLER_RELEASES = 12
+
+    #: ``void __cdecl(uint32_t agent_id, GamePos* pos)``: a word and a pointer to a ``GamePos`` the
+    #: payload builds in its own frame from ``arg2``, ``arg3`` and ``arg4`` — the same three floats
+    #: ``FLOAT_PTR`` builds, and the same reason: the callee takes the address of the source's own
+    #: stack record. ``party.flag_hero_agent_func`` is this shape (``party_methods.cpp:22``), and the
+    #: caller releases both words.
+    U32_FLOAT_PTR = 13
+
 
 def float_bits(value: float) -> int:
     """Return one ``float`` as the ``uint32`` a command word carries.

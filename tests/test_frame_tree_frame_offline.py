@@ -615,12 +615,20 @@ class RemainingSectionsTests(unittest.TestCase):
                 self.assertTrue(hasattr(frame_module.Frame, member))
 
     def test_the_anchor_lookups_are_here(self) -> None:
-        """The four lookups are declared: `anchor_ids` and `by_hash` answer from the frame array, while
-        `by_label` and `hash_for_label` name the client's own hash function (`frame.py:426-460`, `579-588`)."""
+        """The four lookups are declared, and all four answer (`frame.py:426-460`, `579-588`).
+
+        `hash_for_label` and `by_label` were the two that named the client's own hash function as
+        missing work until round 90; both are built, so the set of members here that raise is smaller
+        than it was and the assertions below say which.
+        """
 
         for member in ("anchor_ids", "by_hash", "by_label", "hash_for_label"):
             with self.subTest(present=member):
                 self.assertTrue(hasattr(frame_module._FrameTree, member))
+
+        with mock.patch("py4gw.client._current_client", _AnchorClient({})):
+            self.assertIsInstance(frame_module.FrameTree.by_label("DlgRedirect"), frame_module.Frame)
+            self.assertEqual(frame_module.FrameTree.hash_for_label("DlgRedirect"), 0)
     def test_all_is_the_sources_list_minus_those_two(self) -> None:
         """`__all__` names only what this file defines, so `import *` cannot fail."""
 
@@ -1003,12 +1011,17 @@ class _AnchorReader:
 class _CallRecord:
     """The `CommandRecord` a call answers with, as far as this fixture needs it.
 
-    `client.call_function` returns the record of the completed command, not the callee's value: the return
-    register is `record.result` (`py4gw/game_thread/shared_block.py`).
+    `client.call_function` returns the record of the **completed** command: the callee's return
+    register is `value`, and `result` is the command's own status code (`py4gw/game_thread/payload.py`,
+    `_capture_return`: *"Store the callee's `eax` in the command's `value` word"*). The fixture models
+    both words, because a member that reads the wrong one resolves to nothing and — with only one word
+    in the fixture — a test cannot tell the two apart. Round 90 is where that was found: `_FrameTree.root`
+    read `result`, i.e. the status, and this fixture agreed with it.
     """
 
-    def __init__(self, result: int) -> None:
-        self.result = result
+    def __init__(self, value: int, result: int = 0) -> None:
+        self.value = int(value)
+        self.result = int(result)
 
 
 class _AnchorClient:
@@ -1017,20 +1030,33 @@ class _AnchorClient:
     def __init__(self, records: dict) -> None:
         self.frame_array = _AnchorFrameArray(records)
         self.root_pointer = 0
+        self.root_status = 0
+        self.child_id = 0
+        self.resolvable = True
         self.calls: list = []
         self._bridge = _AnchorBridge()
+        self.bridge = _ClickBridge()
         self.reader = _AnchorReader()
+
+    def resolves(self, name: str) -> bool:
+        """The resolver question, answered from `self.resolvable` (`client.resolves`)."""
+
+        return self.resolvable
 
     def call_function(self, name, form, *args):
         """`client.call_function`, answered from this fixture.
 
         ``ui.get_root_frame_func`` is the one the port calls to read the UI root, and native's
-        ``GetRootFrame`` is exactly that pointer's call (`ui_methods.cpp:415-417`).
+        ``GetRootFrame`` is exactly that pointer's call (`ui_methods.cpp:415-417`). The record carries
+        the pointer as its `value` and the caller's status as its `result`, which are the two words the
+        real command fills in.
         """
 
         self.calls.append((name, form, *args))
         if name == "ui.get_root_frame_func":
-            return _CallRecord(self.root_pointer)
+            return _CallRecord(self.root_pointer, self.root_status)
+        if name == frame_module._GET_CHILD_FRAME_ID_FUNC:
+            return _CallRecord(self.child_id)
         return _CallRecord(0)
 
 
@@ -1099,12 +1125,13 @@ class TestFrameTreeAnchorsOffline(unittest.TestCase):
             self.assertEqual(tree.anchor_ids(0), [])
 
     def test_the_label_fallback_takes_the_sources_own_failure_path(self) -> None:
-        """A label the snapshot has not seen falls to the client's hash — not available here.
+        """A label the snapshot has not seen falls to the client's hash (`frame.py:449-459`).
 
-        The requirement is named in the code (`CreateHashFromWChar` over a wide string, the wide-string
-        call form) and in `docs/TARGET_SIDE_WORK.md`.  The source wraps that lookup in `except Exception`
-        and uses 0, so this is its own failure path: the hash lookup underneath then answers, and with no
-        frame carrying the hash the member returns an empty list rather than a plausible id.
+        The source wraps that lookup in ``except Exception`` and uses 0, so a client that cannot hash
+        the label is its own failure path: the hash lookup underneath then answers, and with no frame
+        carrying the hash the member returns an empty list rather than a plausible id. The client here
+        is `_AnchorClient`, whose call path answers the root pointer and 0 for everything else — so the
+        label hash comes back 0, which is the unresolvable case.
         """
 
         from unittest import mock
@@ -1131,16 +1158,101 @@ class TestFrameTreeAnchorsOffline(unittest.TestCase):
             self.assertIsInstance(f, frame_module.Frame)
             self.assertEqual(f._fid, 2)
 
-    def test_by_label_and_hash_for_label_name_what_they_need(self) -> None:
-        """Both need the client to hash a label; neither has a fallback, so both raise (`:583-588`)."""
+    def test_hash_for_label_hands_the_client_the_wide_label_and_its_length(self) -> None:
+        """`GetHashByLabel` is `g_create_hash_from_wchar_func(label, -1)` (`ui_methods.cpp:542-546`).
 
-        for member, call in (("by_label", lambda: frame_module.FrameTree.by_label("Xunlai Window")),
-                             ("hash_for_label", lambda: frame_module.FrameTree.hash_for_label("Xunlai Window"))):
-            with self.subTest(member=member):
-                with self.assertRaises(NotImplementedError) as caught:
-                    call()
-                self.assertIn("CreateHashFromWChar", str(caught.exception))
-                self.assertIn("wide-string call form", str(caught.exception))
+        The label goes into the block's data region — the port has no frame in the client to build it
+        in — as UTF-16 code units with the terminator `std::wstring::c_str()` adds, and the client's
+        answer is the call's **return register** (the record's `value`).
+        """
+
+        from unittest import mock
+
+        from py4gw.game_thread.shared_block import CallForm
+
+        class _LabelClient:
+            def __init__(self) -> None:
+                self.bridge = _ClickBridge()
+                self.calls: list = []
+
+            def resolves(self, name: str) -> bool:
+                return True
+
+            def call_function(self, name, form, *args):
+                self.calls.append((name, form, *args))
+                return _CallRecord(0xABCD1234)
+
+        client = _LabelClient()
+        with mock.patch("py4gw.client._current_client", client):
+            self.assertEqual(frame_module.FrameTree.hash_for_label("DlgRedirect"), 0xABCD1234)
+
+        self.assertEqual(
+            client.bridge.writes,
+            [
+                (
+                    frame_module._LABEL_OFFSET,
+                    "DlgRedirect".encode("utf-16-le") + b"\x00\x00",
+                    0x00D00E40,
+                )
+            ],
+        )
+        self.assertEqual(
+            client.calls,
+            [
+                (
+                    frame_module._CREATE_HASH_FROM_WCHAR_FUNC,
+                    int(CallForm.U32_U32),
+                    0x00D00E40,
+                    frame_module._HASH_LABEL_LENGTH,
+                )
+            ],
+        )
+
+    def test_a_client_that_cannot_hash_answers_zero(self) -> None:
+        """Native's own guard: `g_create_hash_from_wchar_func && frame_label` (`:543-545`)."""
+
+        from unittest import mock
+
+        class _NoHashClient(_AnchorClient):
+            def resolves(self, name: str) -> bool:
+                return False
+
+        client = _NoHashClient({})
+        with mock.patch("py4gw.client._current_client", client):
+            self.assertEqual(frame_module.FrameTree.hash_for_label("DlgRedirect"), 0)
+        self.assertEqual(client.bridge.writes, [], "nothing is placed when the call cannot be made")
+    def test_by_label_is_the_hash_then_the_arrays_scan(self) -> None:
+        """`GetFrameIDByLabel` → `GetFrameByLabel`: hash, then the first frame carrying it (`:556-573`)."""
+
+        from unittest import mock
+
+        class _LabelClient(_AnchorClient):
+            def call_function(self, name, form, *args):
+                self.calls.append((name, form, *args))
+                return _CallRecord(0xABCD)
+
+        client = _LabelClient({4: _AnchorRecord(frame_hash=0xABCD)})
+        with mock.patch("py4gw.client._current_client", client):
+            found = frame_module.FrameTree.by_label("DlgRedirect")
+
+        self.assertIsInstance(found, frame_module.Frame)
+        self.assertEqual(found._fid, 4)
+
+    def test_a_label_no_frame_carries_is_a_handle_that_resolves_to_nothing(self) -> None:
+        """The binding's `or 0` — a hash with no frame is `Frame.from_id(0)` (`frame.py:583-585`)."""
+
+        from unittest import mock
+
+        class _LabelClient(_AnchorClient):
+            def call_function(self, name, form, *args):
+                self.calls.append((name, form, *args))
+                return _CallRecord(0xABCD)
+
+        client = _LabelClient({4: _AnchorRecord(frame_hash=0x1234)})
+        with mock.patch("py4gw.client._current_client", client):
+            found = frame_module.FrameTree.by_label("DlgRedirect")
+            self.assertEqual(found._fid, 0)
+            self.assertFalse(found.exists)
 
     def test_resolve_walks_the_anchor_and_its_codes(self) -> None:
         """`_resolve` is the funnel: snapshot anchor, then one `child_of` per code (`frame.py:893-917`)."""
@@ -1870,14 +1982,13 @@ class TestFrameNativeNavigationOffline(unittest.TestCase):
             self.assertFalse(two.is_ancestor_of(one))
 
     def test_the_client_call_walkers_name_what_they_need(self) -> None:
-        """`child_native`/`child_path_native`/`item`/`tab`/`io_events` (`ui_methods.cpp:435-441`, `:589-607`)."""
+        """`child_path_native`/`item`/`tab`/`io_events` (`ui_methods.cpp:435-441`, `:589-607`)."""
 
         from unittest import mock
 
         with mock.patch("py4gw.client._current_client", self._client({1: _nav_record(0x1000)})):
             f = frame_module.Frame.from_id(1)
             for member, call, named in (
-                    ("child_native", lambda: f.child_native(7), "g_get_child_frame_id_func"),
                     ("child_path_native", lambda: f.child_path_native([1, 2]),
                      "g_get_child_frame_id_func"),
                     ("item", lambda: f.item(0), "GetOrderedChildFrameId"),
@@ -1887,6 +1998,67 @@ class TestFrameNativeNavigationOffline(unittest.TestCase):
                     with self.assertRaises(NotImplementedError) as caught:
                         call()
                     self.assertIn(named, str(caught.exception))
+
+    def test_child_native_is_the_bindings_two_steps(self) -> None:
+        """`get_child_frame_by_frame_id` (`ui_bindings.cpp:707-710`) = `GetFrameById` + one call.
+
+        The binding is ``GetChildFrame(GetFrameById(parent_frame_id), child_offset)``: the port reads
+        the array slot for validity first — with no call made when it is empty, which is native's
+        ``GetChildFrame(nullptr, ...)`` — and otherwise calls the client's own
+        ``g_get_child_frame_id_func(parent_frame_id, child_offset)``, whose return register is the
+        child's id.
+        """
+
+        from unittest import mock
+
+        client = self._client({1: _nav_record(0x1000)})
+        client.child_id = 9
+        with mock.patch("py4gw.client._current_client", client):
+            child = frame_module.Frame.from_id(1).child_native(6)
+
+        self.assertIsInstance(child, frame_module.Frame)
+        self.assertEqual(child._fid, 9)
+        self.assertEqual(
+            client.calls,
+            [
+                (
+                    frame_module._GET_CHILD_FRAME_ID_FUNC,
+                    CallForm.U32_U32,
+                    1,
+                    6,
+                )
+            ],
+        )
+
+    def test_child_native_refuses_a_slot_the_array_does_not_hold(self) -> None:
+        """`GetFrameById` answers null (`ui_methods.cpp:421-428`), so `GetChildFrame` never calls.
+
+        The id is handed in as the binding's own plain word — Reforged passes ``self.frame_id``, which
+        is the strict accessor, so this stands in for a handle whose slot has gone stale between the
+        resolution and the call, which is exactly the case native's second read exists for.
+        """
+
+        from unittest import mock
+
+        client = self._client({})
+        with mock.patch("py4gw.client._current_client", client), mock.patch.object(
+            frame_module.Frame, "frame_id", property(lambda self: 7)
+        ):
+            child = frame_module.Frame.from_id(7).child_native(0)
+
+        self.assertEqual(child._fid, 0)
+        self.assertEqual(client.calls, [], "native's own `if (!(func && parent)) return nullptr`")
+
+    def test_child_native_refuses_without_the_client_function(self) -> None:
+        """`g_get_child_frame_id_func` is the whole body: unresolved means null (`:445-447`)."""
+
+        from unittest import mock
+
+        client = self._client({1: _nav_record(0x1000)})
+        client.resolvable = False
+        with mock.patch("py4gw.client._current_client", client):
+            self.assertEqual(frame_module.Frame.from_id(1).child_native(0)._fid, 0)
+        self.assertEqual(client.calls, [])
 
 
 class TestFrameRecordReadsOffline(unittest.TestCase):
@@ -2199,7 +2371,12 @@ class TestFrameTreeClientWalkersOffline(unittest.TestCase):
             self.assertEqual(tree.coords_for_hash(0), [], "hash 0 answers nothing, as in native")
 
     def test_root_calls_the_clients_own_function_and_reads_the_id(self) -> None:
-        """`GetRootFrame` is the client's pointer; the id is the word at `+0xBC` (`ui_methods.cpp:415-417`)."""
+        """`GetRootFrame` is the client's pointer; the id is the word at `+0xBC` (`ui_methods.cpp:415-417`).
+
+        The pointer comes from the call's **return register** — the record's `value`, not its `result`
+        status — which is the defect round 90 fixed in this member; the fixture now carries both words
+        so a member reading the wrong one cannot pass.
+        """
 
         from unittest import mock
 
@@ -2217,6 +2394,26 @@ class TestFrameTreeClientWalkersOffline(unittest.TestCase):
             # the source's cache: a transient zero from the engine keeps the last good id
             client.root_pointer = 0
             self.assertEqual(tree.root()._fid, root_id, "the last good root id is held")
+
+    def test_a_nonzero_status_does_not_replace_the_return_it_carries(self) -> None:
+        """The status word is not the pointer: a refused command still carries its own return.
+
+        `payload` writes the completion's status into the record's `result` and the callee's `eax` into
+        its `value`, so a member that resolves the root out of `result` would answer the status — here
+        `RESULT_BAD_ARGUMENTS` — as if it were an address.
+        """
+
+        from unittest import mock
+
+        from py4gw.game_thread.shared_block import RESULT_BAD_ARGUMENTS
+
+        pointer, root_id = 0x00A00000, 0x1234
+        client = _AnchorClient({root_id: _nav_record(0x1000)})
+        client.root_pointer = pointer
+        client.root_status = RESULT_BAD_ARGUMENTS
+        client.frame_array.words = {pointer + 0xBC: root_id}
+        with mock.patch("py4gw.client._current_client", client):
+            self.assertEqual(frame_module._FrameTree().root()._fid, root_id)
 
     def test_a_null_root_pointer_answers_the_cached_zero(self) -> None:
         """No root pointer and no cache is `Frame.from_id(0)`, not an exception."""
@@ -2561,7 +2758,9 @@ class TestFrameClickOffline(unittest.TestCase):
 
         client = self._client()
         with mock.patch("py4gw.client._current_client", client):
-            frame_module.Frame.from_id(1).click()
+            answered = frame_module.Frame.from_id(1).click()
+
+        self.assertIs(answered, True, "native's `ButtonClick` answers `SendFrameUIMessage`'s true")
 
         self.assertEqual(
             client.bridge.writes,
@@ -2601,7 +2800,8 @@ class TestFrameClickOffline(unittest.TestCase):
 
         client = self._client(callbacks_size=0)
         with mock.patch("py4gw.client._current_client", client):
-            frame_module.Frame.from_id(1).click()
+            answered = frame_module.Frame.from_id(1).click()
+        self.assertIs(answered, False, "the source's other answer for this guard")
         self.assertEqual(client.calls, [])
         self.assertEqual(client.bridge.writes, [])
 
@@ -2610,7 +2810,7 @@ class TestFrameClickOffline(unittest.TestCase):
 
         client = self._client(parent_state=0x0)
         with mock.patch("py4gw.client._current_client", client):
-            frame_module.Frame.from_id(1).click()
+            self.assertIs(frame_module.Frame.from_id(1).click(), False)
         self.assertEqual(client.calls, [])
 
     def test_a_button_without_a_parent_is_refused(self) -> None:
@@ -2618,7 +2818,7 @@ class TestFrameClickOffline(unittest.TestCase):
 
         client = self._client(with_parent=False)
         with mock.patch("py4gw.client._current_client", client):
-            frame_module.Frame.from_id(1).click()
+            self.assertIs(frame_module.Frame.from_id(1).click(), False)
         self.assertEqual(client.calls, [])
 
     def test_a_missing_sender_means_no_call(self) -> None:
@@ -2626,7 +2826,7 @@ class TestFrameClickOffline(unittest.TestCase):
 
         client = self._client(resolvable=False)
         with mock.patch("py4gw.client._current_client", client):
-            frame_module.Frame.from_id(1).click()
+            self.assertIs(frame_module.Frame.from_id(1).click(), False)
         self.assertEqual(client.calls, [])
         self.assertEqual(client.bridge.writes, [])
 

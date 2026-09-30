@@ -119,16 +119,13 @@ from .available_character_context import (
 )
 from .party_context import (
     HenchmanPartyMember,
-    HenchmanPartyMemberStruct,
     HeroPartyMember,
-    HeroPartyMemberStruct,
     PartyContext,
     PartyContextStruct,
     PartyInfoStruct,
     PartySearchStruct,
     PartySearchType,
     PlayerPartyMember,
-    PlayerPartyMemberStruct,
 )
 from .guild_context import (
     CapeDesign,
@@ -369,11 +366,8 @@ __all__ = [
     "PartyInfoStruct",
     "PartySearchStruct",
     "PartySearchType",
-    "PlayerPartyMemberStruct",
     "PlayerPartyMember",
-    "HeroPartyMemberStruct",
     "HeroPartyMember",
-    "HenchmanPartyMemberStruct",
     "HenchmanPartyMember",
     "PreGameContext",
     "PreGameContextStruct",
