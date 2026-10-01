@@ -1,0 +1,230 @@
+=== map layout probe: started Thu 10/01/2026 10:22:02.21 === 
+pid 11432  module 0x00f50000 + 0xf4c000
+context.base_ptr (global address) -> 0x017591f0
+  deref -> context pointer array    0x07944678
+
+=== context pointer array ===
+  [0x00] +0x000  0x07944678  <- plausible
+  [0x01] +0x004  0x07944679  <- plausible
+  [0x02] +0x008  0x00000000
+  [0x03] +0x00c  0x07944684  <- plausible
+  [0x04] +0x010  0x07944685  <- plausible
+  [0x05] +0x014  0x00000241
+  [0x06] +0x018  0x021d84a0  <- plausible
+  [0x07] +0x01c  0x0000000c
+  [0x08] +0x020  0x021eed04  <- plausible
+  [0x09] +0x024  0x021eecf8  <- plausible
+  [0x0a] +0x028  0x0000000c
+  [0x0b] +0x02c  0x0ae660fc  <- plausible
+  [0x0c] +0x030  0x021eead8  <- plausible
+  [0x0d] +0x034  0x0000000c
+  [0x0e] +0x038  0x06f9f784  <- plausible
+  [0x0f] +0x03c  0x0ae65f90  <- plausible
+  [0x10] +0x040  0x0000000c
+  [0x11] +0x044  0x0ae6615c  <- plausible
+  [0x12] +0x048  0x0ae66150  <- plausible
+  [0x13] +0x04c  0x0000000c
+  [0x14] +0x050  0x0221626c  <- plausible
+  [0x15] +0x054  0x02216260  <- plausible
+  [0x16] +0x058  0x0000000c
+  [0x17] +0x05c  0x0ae65fbc  <- plausible
+  [0x18] +0x060  0x0ae65fb0  <- plausible
+  [0x19] +0x064  0x0000000c
+  [0x1a] +0x068  0x0af6be34  <- plausible
+  [0x1b] +0x06c  0x021eebd8  <- plausible
+  [0x1c] +0x070  0x0000000c
+  [0x1d] +0x074  0x079446ec  <- plausible
+  [0x1e] +0x078  0x079446e1  <- plausible
+  [0x1f] +0x07c  0x0000000c
+
+GameContext = array[0x6] = 0x021d84a0
+  +0x14 MapContext  = 0x275ca1b0  <- plausible
+  +0x44 CharContext = 0x07945bb8  <- plausible
+
+=== MapContext @ 0x275ca1b0 ===
+  (f = same dword read as a float, to tell boundaries from pointers)
+  +0x000  0x00000000  f= 0   [source:map_boundaries]
+  +0x004  0xc6900000  f=-18432
+  +0x008  0xc6900000  f=-18432
+  +0x00c  0x46900000  f= 18432  <- ptr
+  +0x010  0x46900000  f= 18432  <- ptr
+  +0x014  0x01000000  f= 2.351e-38  <- ptr   [source:h0014]
+  +0x018  0x223292f5  f= 2.4201e-18  <- ptr
+  +0x01c  0x7fffc657  f= nan
+  +0x020  0x0fc0a16d  f= 1.8995e-29  <- ptr
+  +0x024  0xca427224  f=-3.1858e+06
+  +0x028  0x2623ea50  f= 5.687e-16  <- ptr
+  +0x02c  0x27638770  f= 3.1576e-15  <- ptr   [source:spawns1]
+  +0x030  0x00000001  f= 1.4013e-45
+  +0x034  0x00000001  f= 1.4013e-45
+  +0x038  0x00000010  f= 2.2421e-44
+  +0x03c  0x27b27cc8  f= 4.954e-15  <- ptr   [source:spawns2]
+  +0x040  0x0000000a  f= 1.4013e-44
+  +0x044  0x0000000a  f= 1.4013e-44
+  +0x048  0x00000010  f= 2.2421e-44
+  +0x04c  0x26fa6098  f= 1.7373e-15  <- ptr   [source:spawns3]
+  +0x050  0x00000020  f= 4.4842e-44
+  +0x054  0x00000011  f= 2.3822e-44
+  +0x058  0x00000010  f= 2.2421e-44
+  +0x05c  0x00000000  f= 0   [source:h005C]
+  +0x060  0xc5400000  f=-3072
+  +0x064  0xc5dac000  f=-7000
+  +0x068  0x00000000  f= 0
+  +0x06c  0xc53ff000  f=-3071
+  +0x070  0x00000000  f= 0
+  +0x074  0x29d75718  f= 9.563e-14  <- ptr   [source:sub1,reforged:path_ptr]
+  +0x078  0x2622e158  f= 5.651e-16  <- ptr   [reforged:path_engine_ptr]
+  +0x07c  0x29f72ff0  f= 1.0977e-13  <- ptr   [source:props,reforged:props_ptr]
+  +0x080  0x2623e898  f= 5.6867e-16  <- ptr   [source:h0080]
+  +0x084  0x261aabb8  f= 5.3662e-16  <- ptr   [source:terrain]
+  +0x088  0x26239e88  f= 5.6767e-16  <- ptr
+  +0x08c  0x00000037  f= 7.7071e-44   [reforged:map_id]
+  +0x090  0x00000000  f= 0
+  +0x094  0x00000000  f= 0
+  +0x098  0x00000000  f= 0
+  +0x09c  0x00000010  f= 2.2421e-44
+  +0x0a0  0x00000000  f= 0
+  +0x0a4  0x00000000  f= 0
+  +0x0a8  0x00000000  f= 0
+  +0x0ac  0x00000010  f= 2.2421e-44
+  +0x0b0  0x0000036e  f= 1.2303e-42
+  +0x0b4  0x45869295  f= 4306.3  <- ptr
+  +0x0b8  0x45895225  f= 4394.3  <- ptr
+  +0x0bc  0xc39db16a  f=-315.39
+  +0x0c0  0x458fc1a8  f= 4600.2  <- ptr
+  +0x0c4  0x45814f00  f= 4137.9  <- ptr
+  +0x0c8  0xc3628892  f=-226.53
+  +0x0cc  0x00000000  f= 0
+  +0x0d0  0x00000000  f= 0
+  +0x0d4  0xbf800000  f=-1
+  +0x0d8  0x00000000  f= 0
+  +0x0dc  0x00000003  f= 4.2039e-45
+  +0x0e0  0x2622e278  f= 5.6512e-16  <- ptr
+  +0x0e4  0x00000000  f= 0
+  +0x0e8  0x277afc08  f= 3.4831e-15  <- ptr
+  +0x0ec  0x2623eb18  f= 5.6871e-16  <- ptr
+  +0x0f0  0xbfc00000  f=-1.5
+  +0x0f4  0x402b3e33  f= 2.6757  <- ptr
+  +0x0f8  0x00000064  f= 1.4013e-43
+  +0x0fc  0x4c0e7efc  f= 3.7354e+07  <- ptr
+  +0x100  0x4c0e7f10  f= 3.7355e+07  <- ptr
+  +0x104  0x00000000  f= 0
+  +0x108  0xffffffff  f= nan
+  +0x10c  0x4c0ce978  f= 3.6939e+07  <- ptr
+  +0x110  0x00000004  f= 5.6052e-45
+  +0x114  0x00000000  f= 0
+  +0x118  0x00000040  f= 8.9683e-44
+  +0x11c  0x26af7098  f= 1.2174e-15  <- ptr
+  +0x120  0x2735daa0  f= 2.5237e-15  <- ptr
+  +0x124  0x29ce3a68  f= 9.1584e-14  <- ptr
+  +0x128  0x2622e018  f= 5.6509e-16  <- ptr
+  +0x12c  0x29c95468  f= 8.9408e-14  <- ptr
+  +0x130  0x2690d6c0  f= 1.005e-15  <- ptr   [source:zones]
+  +0x134  0x00000000  f= 0
+  +0x138  0x3b800000  f= 0.0039062  <- ptr
+  +0x13c  0x3c800000  f= 0.015625  <- ptr
+  +0x140  0x53e292b7  f= 1.9462e+12  <- ptr
+  +0x144  0x8e001414  f=-1.5787e-30
+  +0x148  0x6c657328  f= 1.1096e+27  <- ptr
+  +0x14c  0x50203a66  f= 1.0753e+10  <- ptr
+  +0x150  0x72654d79  f= 4.5418e+30  <- ptr
+  +0x154  0x6e616863  f= 1.744e+28  <- ptr
+  +0x158  0x79502e74  f= 6.7559e+34  <- ptr
+  +0x15c  0x6372654d  f= 4.4714e+21  <- ptr
+  +0x160  0x746e6168  f= 7.5546e+31  <- ptr
+  +0x164  0x7469202c  f= 7.388e+31  <- ptr
+  +0x168  0x695f6d65  f= 1.6882e+25  <- ptr
+  +0x16c  0x74203a64  f= 5.0778e+31  <- ptr
+  +0x170  0x6e697079  f= 1.8061e+28  <- ptr
+  +0x174  0x75532e67  f= 2.677e+32  <- ptr
+  +0x178  0x726f7070  f= 4.7426e+30  <- ptr
+  +0x17c  0x6e497374  f= 1.5587e+28  <- ptr
+
+=== pathing shape (X[0] -> sub2, sub2+0x18 -> GWArray<PathingMap>) ===
+  HIT MapContext+0x074 -> sub1 0x29d75718 -> sub2 0x2735e220 -> pmaps buf 0x2633b378 cap 50 size 50 trapezoids 2836   (matches declared 0x74)
+  HIT MapContext+0x080 -> sub1 0x2623e898 -> sub2 0x29c8efe8 -> pmaps buf 0x2758c3e0 cap 3384 size 3384 trapezoids 122   *** SOURCE SAYS 0x74 ***
+
+=== PathingMap[0] @ 0x2633b378  (declared size 0x54) ===
+  +0x000  0xffffffff  [zplane]
+  +0x014  0x000008ed  [trapezoid_count]
+  +0x018  0x285cc058  [trapezoids]
+  +0x01c  0x000008ed  [sink_node_count]
+  +0x020  0x28641cf0  [sink_nodes]
+  +0x024  0x0000237d  [x_node_count]
+  +0x028  0x285e6cc8  [x_nodes]
+  +0x02c  0x00000d5b  [y_node_count]
+  +0x030  0x2862dc68  [y_nodes]
+  +0x03c  0x000000a9  [portal_count]
+  +0x040  0x28648c28  [portals]
+  +0x044  0x2862dc68  [root_node]
+  hex: ff ff ff ff ff ff ff ff d0 bf 5c 28 11 00 00 00 d0 bf 5c 28 ed 08 00 00 58 c0 5c 28 ed 08 00 00 f0 1c 64 28 7d 23 00 00 c8 6c 5e 28 5b 0d 00 00 68 dc 62 28 07 01 00 00 0c 88 64 28 a9 00 00 00 28 8c 64 28 68 dc 62 28 00 00 00 00 00 00 00 00 00 00 00 00
+
+=== PathingTrapezoid[0..3] @ 0x285cc058  (declared size 0x30) ===
+  [0] id=0 portalL=65535 portalR=65535
+      XTL=-7488.00 XTR=-6672.00 YT=-2352.00 XBL=-7488.00 XBR=-6720.00 YB=-2400.00
+      adjacent=['0x285cff88', '0x0', '0x285d0a68', '0x0']
+      hex: 00 00 00 00 88 ff 5c 28 00 00 00 00 68 0a 5d 28 00 00 00 00 ff ff ff ff 00 00 ea c5 00 80 d0 c5 00 00 13 c5 00 00 ea c5 00 00 d2 c5 00 00 16 c5
+  [1] id=1 portalL=65535 portalR=65535
+      XTL=8640.00 XTR=9772.80 YT=-864.00 XBL=8688.00 XBR=9792.00 YB=-960.00
+      adjacent=['0x285d0b28', '0x0', '0x285d0618', '0x0']
+      hex: 01 00 00 00 28 0b 5d 28 00 00 00 00 18 06 5d 28 00 00 00 00 ff ff ff ff 00 00 07 46 33 b3 18 46 00 00 58 c4 00 c0 07 46 00 00 19 46 00 00 70 c4
+  [2] id=2 portalL=65535 portalR=65535
+      XTL=-14688.00 XTR=-13440.00 YT=3552.00 XBL=-14688.00 XBR=-13248.00 YB=3456.00
+      adjacent=['0x285cd318', '0x0', '0x285d18a8', '0x0']
+      hex: 02 00 00 00 18 d3 5c 28 00 00 00 00 a8 18 5d 28 00 00 00 00 ff ff ff ff 00 80 65 c6 00 00 52 c6 00 00 5e 45 00 80 65 c6 00 00 4f c6 00 00 58 45
+  [3] id=3 portalL=65535 portalR=65535
+      XTL=3072.00 XTR=4608.00 YT=10752.00 XBL=3072.00 XBR=4640.00 YB=10656.00
+      adjacent=['0x285cdc48', '0x0', '0x285cc178', '0x0']
+      hex: 03 00 00 00 48 dc 5c 28 00 00 00 00 78 c1 5c 28 00 00 00 00 ff ff ff ff 00 00 40 45 00 00 90 45 00 00 28 46 00 00 40 45 00 00 91 45 00 80 26 46
+
+  VERDICT: trapezoid coords inside map_boundaries x[-18432.0, 18432.0] y[-18432.0, 18432.0]: True
+  (False means the PathingTrapezoid record shape is WRONG on this build - that is what breaks pathing while the array header still looks sane.)
+
+=== CharContext @ 0x07945bb8 ===
+  wide email-looking string at +0x3d0: 'apoguita@gmail.com'
+  district_number  0x228(old)=0          0x22C(new)=1
+  language         0x22C(old)=1          0x230(new)=0
+  observe_map_id   0x230(old)=0          0x234(new)=55
+  current_map_id   0x234(old)=55         0x238(new)=55
+  progress_bar     0x350(old)=0x00000000  0x360(new)=0x07945ee9
+  (a MapID is a small number; the correct pair should be small and equal to the map the client is actually in)
+
+  --- pointer candidates for progress_bar (a heap pointer is 4-byte aligned) ---
+    +0x350 0x00000000  plausible=False aligned4=True
+    +0x354 0x00000040  plausible=False aligned4=True
+    +0x358 0x0000002c  plausible=False aligned4=True
+    +0x35c 0x07945f14  plausible=True aligned4=True
+    +0x360 0x07945ee9  plausible=True aligned4=False
+    +0x364 0x00000000  plausible=False aligned4=True
+    +0x368 0x00000000  plausible=False aligned4=True
+
+  --- wide-char view 0x390..0x460 ('.' = non-printable, '~' = 0x0000) ---
+    +0x390  . ~ . . ~ ~ ~ ~
+    +0x3a0  ~ ~ ~ ~ @ ~ P ~
+    +0x3b0  . . . . L ~ . .
+    +0x3c0  . ~ . ~ . ~ . ~
+    +0x3d0  a p o g u i t a
+    +0x3e0  @ g m a i l . c
+    +0x3f0  o m ~ ~ ~ ~ ~ ~
+    +0x400  ~ ~ ~ ~ ~ ~ ~ ~
+    +0x410  ~ ~ ~ ~ ~ ~ ~ ~
+    +0x420  ~ ~ ~ ~ ~ ~ ~ ~
+    +0x430  ~ ~ ~ ~ ~ ~ ~ ~
+    +0x440  ~ ~ ~ ~ ~ ~ ~ ~
+    +0x450  . . . .
+
+  --- every printable wide run in 0x380..0x460 ---
+    +0x3d0 len=18  'apoguita@gmail.com'
+
+  --- base anchors: declared +0x74 wchar_t player_name[0x14], +0x198 MapID ---
+    wchar run +0x074 len=18  'Fezzik The Untamed'
+    wchar run +0x3d0 len=18  'apoguita@gmail.com'
+    +world_flags_0x190 = 0x000000c8
+    +token1_0x194 = 0xe4481115
+    +map_id_0x198 = 0x00000037
+    +is_explorable_0x19C = 0x00000000
+    +player_uuid_0x64 = [781456876, 1217011721, 420757419, 3089944263]
+  no alphabetic name run found below 0x200; base not pinned by name.
+
+wrote live_reports\map_layout_probe.json
+=== map layout probe: exit=0 === 

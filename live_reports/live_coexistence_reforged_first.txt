@@ -1,0 +1,13 @@
+test_connecting_refuses_and_names_the_patched_function (tests.test_live_coexistence.ReforgedFirstTests.test_connecting_refuses_and_names_the_patched_function)
+The refusal is the supported answer for this order, and it has to be explicit. ... ok
+test_every_entry_is_byte_for_byte_what_it_was (tests.test_live_coexistence.ReforgedFirstTests.test_every_entry_is_byte_for_byte_what_it_was)
+The reason the refusal exists: an attempt must not disturb the other runtime's hooks. ... ok
+test_the_client_still_answers_after_the_refusal (tests.test_live_coexistence.ReforgedFirstTests.test_the_client_still_answers_after_the_refusal)
+A refusal that left the client worse off would be a worse bug than the one it prevents. ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 4.715s
+
+OK
+
+[coexistence] pid 47380: 2 of 4 entries are hooked by another runtime; connecting must refuse and write nothing.

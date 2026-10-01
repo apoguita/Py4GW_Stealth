@@ -1,0 +1,27 @@
+=== travel id sweep: started Thu 10/01/2026 11:29:06.69 === 
+connected to pid 23836   target map 55
+start: {'map_id': 55, 'region': 0, 'language': 0}
+
+--- placing the client in the guild hall first ---
+    TravelGH() -> True
+    now: {'map_id': 5, 'region': 0, 'language': 0}   (a guild hall is not 55)
+
+=== sending 0x10000183 with the travel payload (target 55) ===
+    before: map_id=5
+    send returned: True
+    VERDICT: map unchanged (this is where 'cannot travel to this map' appears)
+
+=== sending 0x10000185 with the travel payload (target 55) ===
+    before: map_id=5
+    send returned: True
+    VERDICT: map changed 5 -> 55 in 1.0s
+
+=== sending 0x10000186 with the travel payload (target 55) ===
+    before: map_id=55
+    send returned: True
+    VERDICT: map unchanged (this is where 'cannot travel to this map' appears)
+
+=== sending 0x10000187 with the travel payload (target 55) ===
+    before: map_id=55
+    send returned: True
+^C

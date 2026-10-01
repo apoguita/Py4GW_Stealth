@@ -1,0 +1,4 @@
+pid 47380: attempting a capability-layer connection (this writes nothing if it refuses)
+
+RuntimeError:
+pid 47380: game_thread.leave_game_thread_func: the first five bytes at 0x01185CD0 are another runtime's entry jump to 0x578FF407, and what it lands on is not this library's generated code. The bytes from offset five still match this catalog's declared entry, so 0x01185CD0 is that function. Patching it would overwrite that runtime's hook, so nothing was written. Unload that runtime (Reforged) and connect first, or connect this library before that runtime is injected.

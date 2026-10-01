@@ -155,6 +155,11 @@ class FakeBridge:
     def module_range(self) -> tuple[int, int]:
         return self.MODULE_RANGE
 
+    #: Every other module loaded in the client. Empty by default, so a pointer outside the client module is
+    #: memory no module covers — a controller's own stub — which is the refusal the tests below drive. A
+    #: test that wants the *other* answer — another runtime's compiled handler — sets this.
+    loaded_modules: tuple[tuple[int, int], ...] = ()
+
     def write_data(self, offset: int, payload: bytes) -> int:
         address = self.REGION_BASE + int(offset)
         self.access.write(address, payload)
@@ -420,12 +425,13 @@ class PacketHooksTests(unittest.TestCase):
         self.assertEqual(self.hooks.headers, ())
 
     def test_a_handler_outside_the_client_module_is_refused(self) -> None:
-        """This project's own recovery discipline: never chain to a pointer somebody else placed.
+        """This project's own recovery discipline: never chain to a pointer nobody owns.
 
         Native snapshots whatever the array holds, which is safe in a runtime that injected itself
         into a fresh process. A controller here can attach to a client that outlived one that died,
         and that pointer would be a jump into memory it no longer owns — on the client's own thread,
-        on the next packet of that header.
+        on the next packet of that header. What is refused here is memory **no loaded module covers**,
+        which is exactly where a dead controller's stubs are left.
         """
 
         entry = BUFFER + GAME_SMSG_ITEM_PRICE_QUOTE * ENTRY_SIZE + ENTRY_HANDLER_OFFSET
@@ -435,17 +441,50 @@ class PacketHooksTests(unittest.TestCase):
         with self.assertRaises(RuntimeError) as caught:
             self.install()
 
-        self.assertIn("outside the client module", str(caught.exception))
+        self.assertIn("no loaded module covers", str(caught.exception))
         self.assertIn(f"0x{outside:08X}", str(caught.exception))
         self.assertEqual(self.entry_handler(0), ORIGINAL_HANDLER, "nothing was replaced")
         self.assertEqual(self.hooks.headers, ())
         self.assertEqual(
             self.access.allocations, {}, "the stubs placed before the refusal went with it"
         )
+
+    def test_a_handler_inside_another_loaded_module_is_chained_to(self) -> None:
+        """The measured live shape: Reforged's own ``StoCHandler_Func`` lives in ``Py4GW.dll``.
+
+        Its packet sniffer registers **all 488** headers (``packet_sniffer.cpp:129-135``), so every header
+        this project wants is one of its handlers — and refusing those entries would make the merchant
+        listener impossible on the arrangement the owner needs, Reforged first and this library second.
+        A handler inside a *loaded module* is code that is still there; the stub chains to it exactly as it
+        chains to one of the client's own, and the restore puts the pointer back.
+        """
+
+        entry = BUFFER + GAME_SMSG_ITEM_PRICE_QUOTE * ENTRY_SIZE + ENTRY_HANDLER_OFFSET
+        theirs = FakeBridge.MODULE_RANGE[0] + FakeBridge.MODULE_RANGE[1] + 0x100
+        self.memory.put_u32(entry, theirs)
+        self.bridge.loaded_modules = ((theirs & 0xFFFF0000, 0x10000),)
+
+        placed = self.install()
+
+        self.assertEqual(len(placed), len(self.HEADERS))
+        chained = {stub.header: stub.original for stub in placed}
+        self.assertEqual(
+            chained[GAME_SMSG_ITEM_PRICE_QUOTE],
+            theirs,
+            "the other runtime's handler is what that header's stub chains to",
+        )
+        self.assertNotEqual(
+            self.entry_handler(GAME_SMSG_ITEM_PRICE_QUOTE),
+            theirs,
+            "and the entry holds this project's own stub now",
+        )
+
+        self.hooks.remove(free_code=False)
+
         self.assertEqual(
             self.entry_handler(GAME_SMSG_ITEM_PRICE_QUOTE),
-            outside,
-            "the foreign pointer is left where it was found, not overwritten",
+            theirs,
+            "which the restore puts back",
         )
         for header in self.HEADERS:
             if header == GAME_SMSG_ITEM_PRICE_QUOTE:

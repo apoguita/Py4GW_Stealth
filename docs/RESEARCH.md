@@ -3498,3 +3498,213 @@ back, and nothing was unmapped under a live instruction pointer.)
 call's own **two words** into the event — native's handler's own behaviour. Until it exists,
 `Effects.GetAlcoholLevel` keeps raising, now naming a missing shape instead of sitting behind a read that
 faults. Recorded also in `docs/PORTING_PROGRESS.md` (round 62) and `docs/TARGET_SIDE_WORK.md`.
+
+## Live observation: a second injected runtime in the same client — 2026-10-01
+
+**Observed.** With this project connected to a running client, injecting Reforged worked: the client
+stayed up and both runtimes' callbacks ran. That was measured, not predicted, and the next question was
+*why*, because the answer decides whether it can be relied on.
+
+**The answer is in Reforged's own resolver, and it is not symmetric.** Reforged Native hooks the client
+through MinHook, and `HookBase::CreateHook` resolves the target through a near branch **before** hooking
+it, with no check that the destination is inside the client's module:
+
+```c
+if (const auto nested = Scanner::FunctionFromNearCall(reinterpret_cast<uintptr_t>(*target), false))
+    *target = reinterpret_cast<void*>(nested);
+return static_cast<int>(MH_CreateHook(*target, detour, trampoline));   // base/hooker.cpp:78-80
+```
+
+`FunctionFromNearCall` follows `E8`/`E9`/`EB` recursively and validates the landing only when
+`check_valid_ptr` is true, which it is not here (`base/scanner.cpp:113-133`). The four functions both
+projects hook are the same four — `LeaveGameThread_Func` (`game_thread.cpp:76`), `GW::ui::SendUIMessage`
+(`ui.cpp:725`), the post-process effect function (`effects.cpp:142`) and the render `EndScene`
+(`render.cpp:136`) — so with this project connected, **the branch Reforged follows is this project's own
+entry jump**, and MinHook places its hook on this project's *generated stub*. Its five-byte jump lands on
+the stub's first bytes and its trampoline returns into the stub past them (`third_party/minhook/src/hook.c:355`,
+`trampoline.c:281-282`). Both runtimes' code runs on every client call, and neither entry patch is
+disturbed.
+
+**The two errors this exposed in this project, both found by reading rather than by a crash.**
+
+1. **The install would have deleted Reforged's hooks.** `ConnectedClient._prepare_target` treated an
+   entry `jmp rel32` whose destination is outside the client's module as this project's own stale patch
+   and wrote the client's original bytes over it. A live foreign hook leaves the module too — MinHook's
+   patch jumps into Reforged's own DLL — so connecting *after* Reforged silently un-hooked four of its
+   functions while Reforged still believed it was installed, and the next `MH_DisableHook`/`MH_EnableHook`
+   cycle then wrote bytes from Reforged's own backup, leaving this project believing it was patched when
+   it was not. The repair now asks what the jump **lands on**; every stub this project emits begins with
+   `pushdc`… `pushfd`, `pushad`, `mov eax, imm32` (`9C 60 B8`), a detour compiled into another module
+   never does, and anything else is refused by name (`client._is_our_stale_patch`).
+2. **The removal would have freed code Reforged runs in.** With Reforged hooked onto this project's stub,
+   MinHook's patch site and its trampoline's return address are inside that stub's allocation, and
+   `Hooker.remove(free_code=True)` — which `disconnect` asks for — freed it. Reforged would then have
+   written into, and jumped into, freed memory on the next client frame. The stub's head is now read back
+   and compared with what the hooker wrote; a mismatch is reported, nothing is freed, and the client's
+   function has already had its own bytes restored (`hooker.Hooker._require_generated_code_is_ours`).
+
+**What the reverse order would cost, which is why it is refused rather than supported.** MinHook restores
+a target with a blind `memcpy` of the bytes it captured at create time (`hook.c:383-385`) and
+`MH_Uninitialize` frees every trampoline block wholesale (`buffer.c:74-85`). A hook of this project's
+placed *on top of* Reforged's would therefore be erasable by any Reforged toggle, and could be left
+pointing into freed pages at Reforged's unload. MinHook keeps one `HOOK_ENTRY` per target with no chain
+(`hook.c:61-75`) and says nothing about foreign hooks anywhere in its source.
+
+**Order is therefore part of the arrangement:** this project connects first, Reforged is injected second,
+and teardown is reverse — Reforged unloads first, then this project disconnects. Offline evidence is
+`tests/test_coexistence_offline.py` (9 tests) and `tests/test_hooker_offline.py`'s
+`ForeignCodeInGeneratedCodeTests` (3 tests); the full record, including the packet-handler surface that
+is chain-safe but not protected against Reforged writing it from its own snapshot, is in
+[`NATIVE_EXECUTION_PLAN.md`](NATIVE_EXECUTION_PLAN.md) and
+[`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md).
+
+### What the live client actually showed (pid 47380, 2026-10-01)
+
+`tests/probe_two_runtimes_live.py` was run **read-only** against the client the owner had injected
+Reforged into — no elevation, no write, no call. It resolves the four shared entries, reads their bytes,
+names the module every jump lands in, searches `.text` for the declared entry bytes, walks the window
+ahead of each resolver answer for entry jumps, and finally asks the shipping decision
+(`ConnectedClient._is_our_stale_patch`) about the live bytes so what it prints is what a `connect()` would
+do. Result, module base `0x00F50000`:
+
+| entry | resolver answered | bytes there | jump lands in |
+| --- | --- | --- | --- |
+| `game_thread.leave_game_thread_func` | `0x01185CD0` | `E9 32 97 77 56` + declared tail `20 02 00 00` | `0x578FF407`, `Py4GW.dll` |
+| `effects.post_process_effect_func` | `0x01361630` | `E9 44 16 5A 56` + declared tail `08 8B 45 0C` | `0x57902C79`, `Py4GW.dll` |
+| `ui.send_ui_message_func` | `0x01184510` | `55 8B EC 83 EC 2C 53 …` — a plain prologue | — (hooked **0xE0 bytes ahead**) |
+| `render.end_scene_func` | `0x012202C0` | `55 8B EC 56 8B 75 08 …` — a plain prologue | — (hooked **0x90 bytes ahead**) |
+
+The injected runtime is `C:\Users\Apo\Py4GW_Reforged\Py4GW.dll`, and it held **all four** entries. The two
+the resolver answered directly carry its jump in place; the two it answered *wrongly* are hooked further
+on — `0x011845F0` begins `E9 36 A8 77 56` followed by `08 83 F8 56`, `0x01220350` begins
+`E9 68 95 6D 56` followed by `48 A1 00 A5 74 01`, both of which are the declared entries' own tails with
+five bytes covered by a jump.
+
+**The two wrong answers are the walk-back, not a stale pattern.** `Scanner::ToFunctionStart` looks for a
+`55 8B EC` prologue (`scanner.cpp:205-210`); Reforged's patch removed that prologue, so the walk answered
+the function before the target. That is the same effect this project's own stale patch has on the walk —
+which is why `_stale_patch_before` exists — and it means any runtime's entry patch makes a resolving
+context answer the wrong function, not just ours. Following one jump lands on a five-byte thunk in
+`Py4GW.dll` and then on the detour: `0x011845F0 → 0x578FEE2B → 0x57AE1240` (`55 8B EC 51 E8 …`). MinHook's
+separate relay is x64-only (`trampoline.c:307-313`), so on this 32-bit build the entry patch reaches the
+detour through the module's own thunk block.
+
+**What changed here because of it.** The refusal no longer reports the address the resolver answered as if
+it were the hooked function: `_entry_jump_ahead` walks the window ahead of the answer for an entry jump
+whose landing leaves the client's module, and `_foreign_patch_refusal` names the function that carries the
+patch, where it jumps to, and — when the bytes from offset five still match the catalog's declared entry —
+that the address *is* the declared function. On the client above, `connect()` refuses for all four and
+writes nothing; before this change, the two directly-answered entries would have had Reforged's hooks
+silently overwritten with the client's original bytes.
+
+**What is still owed** is the supported order, which needs a client without Reforged injected at start:
+`tests/test_live_coexistence.py` — `StealthFirstTests` connects first, waits for the owner to inject
+Reforged, and asserts this project's entry patches survived, its hooks still fire, the stub reads back
+with a foreign jump at its head, the disconnect refuses to free that stub, and the client's functions come
+back to their own bytes; `ReforgedFirstTests` runs against a client in the state measured above and
+asserts the refusal writes nothing and leaves Reforged's hooks byte-for-byte intact.
+
+### Verified live, before chaining existed: the refusal (pid 47380, 2026-10-01)
+
+**This was the interim behaviour, and it is superseded by the chaining section below** — it is kept because
+it is what the client did when the only safe answer this project had was "refuse", and because the same test
+now asserts the opposite. The owner's ruling of 2026-10-01 ("Reforged will always be injected before
+Stealth") is what turned the refusal into a placeholder for the chain.
+
+`tests/test_live_coexistence.ReforgedFirstTests` ran **elevated** against that client — three tests, all
+passing in 4.7 s (`live_reports/live_coexistence_reforged_first.txt`):
+
+- the connection **refuses**, and the refusal is this, word for word
+  (`live_reports/live_refusal_text.txt`):
+
+  > `pid 47380: game_thread.leave_game_thread_func: the first five bytes at 0x01185CD0 are another
+  > runtime's entry jump to 0x578FF407, and what it lands on is not this library's generated code. The
+  > bytes from offset five still match this catalog's declared entry, so 0x01185CD0 is that function.
+  > Patching it would overwrite that runtime's hook, so nothing was written. Unload that runtime
+  > (Reforged) and connect first, or connect this library before that runtime is injected.`
+
+- after the attempt, **all four entries read back byte-for-byte identical** to the snapshot taken before
+  it — the outcome the change exists for, since the previous behaviour wrote the client's original bytes
+  over Reforged's hook on the entries that carry one;
+- the client was still healthy afterwards (its image header intact and its own thread still burning CPU).
+
+**Still owed:** the supported order. `tests/test_live_coexistence.StealthFirstTests` needs a client that
+does *not* have Reforged injected when it starts; it connects first, prints a prompt, waits for the
+injection, and then checks the chain and the refused free.
+
+### Verified live: this project **chains on top of Reforged** (pid 47380, 2026-10-01)
+
+`tests/test_live_coexistence.ReforgedFirstTests` ran **elevated** against the client with Reforged injected —
+the arrangement the owner ruled for, and the one that happens in practice — **3/3 in 5.8 s**
+(`live_reports/live_coexistence_chain.txt`). What the run establishes, in order:
+
+- the four entries that carry Reforged's jump were found by the shipping helpers, two of them **behind the
+  resolver's walk-back** (`ui.send_ui_message_func`: answered `0x01184510`, jump at `0x011845F0`;
+  `render.end_scene_func`: answered `0x012202C0`, jump at `0x01220350`);
+- the connection **succeeded**, with `client.chained_hooks` reporting all four names, each placement's
+  `displaced` the five bytes of Reforged's own jump, and each entry then holding this project's patch landing
+  on this project's stub;
+- **this project's hooks fired** while Reforged's chain ran underneath, and the client stayed healthy;
+- after `disconnect`, every one of those entries read back **byte for byte** what it held before
+  (`e9 32 97 77 56 20 02 00 00 a1 00 a5 74 01 33 c5` at `0x01185CD0`, and its three siblings), and the
+  read-only probe run in the same elevated pass reports *"another runtime holds 4 of 4 entries: this project
+  chains on top of each of them, relocating the jump it displaces, and the restore puts those bytes back."*
+
+**What the first attempt found, and what it cost to fix.** The first live chaining run got as far as
+placing all four entry chains and then failed in the **packet handler table**: the merchant listener's
+install found header 132's entry holding `0x578F1ED3`, inside `Py4GW.dll` (`0x578F0000 + 0xF94000`), and
+refused it as "outside the client module" — Reforged's packet sniffer registers **all 488** headers
+(`packet_sniffer.cpp:129-135`), so every header this project wants is one of its handlers. That refusal was
+correct as a rule and wrong for this arrangement: what it exists to exclude is memory **no module covers**,
+which is where a controller that died leaves its stubs. The rule is now "the client's own module **or any
+loaded module**" (`packets.is_live_code`, with the ranges from `Win32.list_modules` through the bridge), and
+the second run connected. The failed first run also proved the failure path: all four entries read back as
+Reforged's jumps afterwards, because the connection takes down what it placed when its startup raises.
+
+## The repeated `ImGui initialized` line is the UAC prompt (2026-10-01)
+
+
+**The owner asked what it meant**, and then observed it appearing in bursts around connects. It is
+Reforged's own line, and it is **not** its runtime restarting and **not** a hook being re-installed:
+
+- `imgui::Initialize` logs it once per **successful** initialization and returns early while the flag is
+  set: `if (g_imgui_initialized) return true;` (`imgui_manager.cpp:370-372`), the log at `:423-424`.
+- The one thing that clears that flag during a run is the **device-lost branch** of `BeginFrame`:
+  `device->TestCooperativeLevel()` fails → `ImGui_ImplDX9_InvalidateDeviceObjects(); g_imgui_initialized =
+  false;` (`:449-456`). The next frame re-creates the device objects and logs again. `Shutdown()` also
+  clears it, but its only caller is the runtime's teardown, which logs `Shutting down ImGui.` first
+  (`Py4GW.cpp:489-490`) — and that line appears **0 times** in the log.
+- So each line is one frame in which the D3D9 device was not ready, plus the frame that recovered it.
+
+**What makes the device not ready is the UAC prompt, and it was measured rather than guessed**
+(`live_reports/suspend_experiment.txt`, pid 47380, one session, phase by phase, with the client's own log
+counted around each phase):
+
+| phase | device-lost lines |
+| --- | --- |
+| 30 s idle, nothing touching the client | **0** |
+| a **non-elevated** console window opened for 6 s (focus change, no UAC) | **0** |
+| the write handle opened and closed 5 times | **0** |
+| `ConnectedClient._count_suspended_threads` 5 sweeps — the real method, suspending and resuming **every** client thread | **0** |
+| a whole capability-layer connect attempt (which refuses on this client) | **0** |
+| **one UAC prompt** (`Start-Process -Verb RunAs`, a trivial elevated command) | **+12** |
+
+**So the mechanism is the secure desktop.** UAC switches the desktop to Winlogon's, a Direct3D9 device is
+not usable across that switch, the client's device goes lost, and the game recovers over the following
+frames — one log line per recovered frame, which is why a prompt costs 10-12 of them. The same is true of
+any desktop switch: a lock, a fast-user switch, and often alt-tab out of exclusive fullscreen.
+
+**It is not this project, and the phases above are the proof rather than an argument**: the write handle,
+the suspension sweeps and a full connect attempt each produced **zero** lines, while a prompt produced
+twelve. The correlation the owner saw is real and runs through **elevation**: connecting requires an
+elevated shell, so a Stealth session involves UAC prompts, and each one costs a burst. A session started
+from a shell that is already elevated has no prompt to pay for, and the log is quiet — which is also why
+this project's own instructions say to run from an elevated shell rather than elevate per script.
+
+**What it means here.** A device-lost burst is evidence about the *desktop*, not about a hook: it says
+nothing about whether a hook is installed, and nothing about who owns an entry. It does bear on this
+project's render capture, which writes **a slot** rather than an event per call — for exactly this kind of
+traffic (`bridge.py`, "a per-frame function would otherwise fill the event ring").
+
+
+

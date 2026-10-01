@@ -5,9 +5,9 @@ and for executing source-backed work on the game's own thread. Reforged source
 projects are research references, not runtime dependencies.
 The reads are read-only and **connecting is a write**. Every context, `Map`,
 `Player` and `Party` member only reads. `py4gw.connect()` installs the capability
-layer: hooks on two of the client's own functions, an emitted dispatcher that makes
+layer: entry-patch hooks on four of the client's own functions, an emitted dispatcher that makes
 typed calls on the game's thread, and a listener thread that delivers events to
-registered callbacks. `disconnect()` stops the listener, restores both functions'
+registered callbacks. `disconnect()` stops the listener, restores all four functions'
 own bytes and frees everything it placed. That modifies `Gw.exe` and is injection
 by this project's own definition, so the project is no longer pure external;
 `connect(..., game_thread=False)` is the read-only connection. The callback-owned map
@@ -34,7 +34,7 @@ The separate capability layer in `py4gw/game_thread/` can place code in the clie
 a shared block, a fail-closed patch sequence, entry hooks, a dispatcher emitted as
 machine code from Python that runs on the game's own thread, and an observer that
 reports the client's own messages. All three capabilities are live-verified against
-the running client, and the layer puts both functions' original bytes back when a
+the running client, and the layer puts every hooked function's original bytes back when a
 connection closes: **hooks**, **execution** (typed calls into the client's own
 functions, with the effect asserted from what the client itself reported), and
 **callbacks** (a registry keyed by event kind, plus a listener thread that delivers
@@ -437,8 +437,8 @@ the client, and **`py4gw.connect()` installs it**:
 
 The dispatcher is **emitted as machine code from Python** and executed by the
 client's own thread, so there is no compiler, no build step and no checked-in binary
-anywhere in it. `py4gw.disconnect()` stops the listener, restores both functions'
-own bytes, waits for the detour to drain and frees everything it placed; a controller
+anywhere in it. `py4gw.disconnect()` stops the listener, restores the hooked functions'
+own bytes, waits for the detours to drain and frees everything it placed; a controller
 that died mid-install is recovered from instead, by repairing a stale patch of ours
 and counting any client threads still suspended. Two full connect/disconnect cycles
 have been verified live: the block and the watch list were reused rather than
@@ -453,6 +453,32 @@ every other byte lives in memory the connection allocated, and the live tests ha
 the whole code section before and after to show it came back byte-identical. Windows
 denies the four rights this needs to an unelevated caller with error 5, so it runs
 from an elevated shell.
+
+**One client, two runtimes — and the order is part of the contract.** Reforged and
+Reforged Native are injected runtimes that hook the **same four client functions** this
+layer patches (`LeaveGameThread_Func`, `ui::SendUIMessage`, the post-process effect
+function and the render `EndScene`) through MinHook. **In practice Reforged is already
+injected when this library connects** — it comes with the client — so this library
+**chains on top of Reforged's entry jumps**, verified live on 2026-10-01
+(`tests/test_live_coexistence.py`, 3/3 elevated): the resolver finds each declared
+function even when its prologue is gone (two of the four were 0xE0 and 0x90 bytes ahead
+of the answer its walk-back gave), the patch replaces Reforged's own five-byte jump, and
+that jump is **relocated** into this library's trampoline so Reforged keeps running
+underneath. On disconnect the displaced bytes go back, and every entry reads back
+byte-for-byte — which is what keeps MinHook's own bookkeeping honest. The packet handler
+table is handled the same way: Reforged's handlers live in `Py4GW.dll`, so a handler
+inside **any loaded module** is chained to, while memory no module covers is still
+refused.
+
+The **other** arrangement — this library connects first, Reforged injected afterwards —
+also works: Reforged's `HookBase::CreateHook` resolves its target through a near branch
+with no module check, so it follows this library's entry jump and hooks **this library's
+generated stub**, and both runtimes' callbacks run on every call with neither entry patch
+disturbed. `tests/probe_two_runtimes_live.py` reports which state a client is in and what
+the install would do about each entry (read-only, unelevated);
+`tests/test_coexistence_offline.py` and `tests/test_hooker_offline.py`'s
+`ChainedEntryTests`/`RelocatedJumpExecutionTests` pin the decisions and execute the
+relocated jump.
 
 The UI frame-tree route below is read-only: it reads the client's
 frame array, the frame that registered a context's callback, and the context

@@ -1,0 +1,10 @@
+{
+  "literal_under_test": "0x10000186",
+  "target": 55,
+  "before": 5,
+  "after": 55,
+  "changed": true,
+  "seconds": 1.0,
+  "returned": true,
+  "wparam": "0x3ac13e0"
+}

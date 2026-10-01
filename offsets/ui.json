@@ -52,8 +52,8 @@
       "section": "text"
     },
     "load_settings": {
-      "pattern": "\\xE8\\x00\\x00\\x00\\x00\\xFF\\x75\\x0C\\xFF\\x75\\x08\\x6A\\x00",
-      "mask": "x????xxxxxxxx",
+      "pattern": "\\xE8\\x00\\x00\\x00\\x00\\xFF\\x75\\x0C\\xFF\\x75\\x08\\x6A\\x00\\xE8\\x00\\x00\\x00\\x00\\x83\\xC4\\x0C",
+      "mask": "x????xxxxxxxxx????xxx",
       "offset": "0x0",
       "section": "text"
     },
@@ -400,16 +400,6 @@
         { "name": "resolve_target", "op": "function_from_near_call", "in": "callsite", "out": "final" }
       ]
     },
-    "key_mappings_table": {
-      "log_level": "warning",
-      "on_fail": "continue",
-      "steps": [
-        { "name": "find_assertion_use", "op": "find_use_of_string", "literal": "count == arrsize(s_remapTable)", "out": "string_use" },
-        { "name": "table_immediate", "op": "add", "in": "string_use", "value": "0xD", "out": "table_immediate" },
-        { "name": "table_pointer", "op": "read_u32", "in": "table_immediate", "out": "candidate" },
-        { "name": "validate_data", "op": "validate_section", "in": "candidate", "section": "data", "out": "final" }
-      ]
-    },
     "get_child_frame_id_func": {
       "steps": [
         { "name": "scan_callsite", "op": "scan", "pattern": "get_child_frame_id_anchor", "out": "callsite" },
@@ -430,6 +420,16 @@
       "steps": [
         { "name": "scan_target", "op": "scan", "pattern": "send_ui_message", "out": "scan" },
         { "name": "to_function_start", "op": "to_function_start", "in": "scan", "out": "final" }
+      ]
+    },
+    "key_mappings_table": {
+      "log_level": "warning",
+      "on_fail": "continue",
+      "steps": [
+        { "name": "find_assertion_use", "op": "find_use_of_string", "literal": "count == arrsize(s_remapTable)", "out": "string_use" },
+        { "name": "table_immediate", "op": "add", "in": "string_use", "value": "0xD", "out": "table_immediate" },
+        { "name": "table_pointer", "op": "read_u32", "in": "table_immediate", "out": "candidate" },
+        { "name": "validate_data", "op": "validate_section", "in": "candidate", "section": "data", "out": "final" }
       ]
     },
     "load_settings_func": {

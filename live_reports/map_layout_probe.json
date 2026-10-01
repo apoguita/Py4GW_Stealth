@@ -1,0 +1,388 @@
+{
+  "pid": 11432,
+  "module": {
+    "base": "0xf50000",
+    "size": "0xf4c000"
+  },
+  "context_table": {
+    "address": "0x7944678",
+    "entries": {
+      "0x0": "0x7944678",
+      "0x4": "0x7944679",
+      "0x8": "0x0",
+      "0xc": "0x7944684",
+      "0x10": "0x7944685",
+      "0x14": "0x241",
+      "0x18": "0x21d84a0",
+      "0x1c": "0xc",
+      "0x20": "0x21eed04",
+      "0x24": "0x21eecf8",
+      "0x28": "0xc",
+      "0x2c": "0xae660fc",
+      "0x30": "0x21eead8",
+      "0x34": "0xc",
+      "0x38": "0x6f9f784",
+      "0x3c": "0xae65f90",
+      "0x40": "0xc",
+      "0x44": "0xae6615c",
+      "0x48": "0xae66150",
+      "0x4c": "0xc",
+      "0x50": "0x221626c",
+      "0x54": "0x2216260",
+      "0x58": "0xc",
+      "0x5c": "0xae65fbc",
+      "0x60": "0xae65fb0",
+      "0x64": "0xc",
+      "0x68": "0xaf6be34",
+      "0x6c": "0x21eebd8",
+      "0x70": "0xc",
+      "0x74": "0x79446ec",
+      "0x78": "0x79446e1",
+      "0x7c": "0xc"
+    }
+  },
+  "game_context": {
+    "address": "0x21d84a0",
+    "map_at_0x14": "0x275ca1b0",
+    "character_at_0x44": "0x7945bb8"
+  },
+  "map_context": {
+    "address": "0x275ca1b0",
+    "declared_offsets": {
+      "map_boundaries": 0,
+      "h0014": 20,
+      "spawns1": 44,
+      "spawns2": 60,
+      "spawns3": 76,
+      "h005C": 92,
+      "sub1": 116,
+      "props": 124,
+      "h0080": 128,
+      "terrain": 132,
+      "zones": 304
+    },
+    "reforged_view": {
+      "path_ptr": 116,
+      "path_engine_ptr": 120,
+      "props_ptr": 124,
+      "map_id": 140
+    },
+    "dwords": {
+      "0x0": "0x0",
+      "0x4": "0xc6900000",
+      "0x8": "0xc6900000",
+      "0xc": "0x46900000",
+      "0x10": "0x46900000",
+      "0x14": "0x1000000",
+      "0x18": "0x223292f5",
+      "0x1c": "0x7fffc657",
+      "0x20": "0xfc0a16d",
+      "0x24": "0xca427224",
+      "0x28": "0x2623ea50",
+      "0x2c": "0x27638770",
+      "0x30": "0x1",
+      "0x34": "0x1",
+      "0x38": "0x10",
+      "0x3c": "0x27b27cc8",
+      "0x40": "0xa",
+      "0x44": "0xa",
+      "0x48": "0x10",
+      "0x4c": "0x26fa6098",
+      "0x50": "0x20",
+      "0x54": "0x11",
+      "0x58": "0x10",
+      "0x5c": "0x0",
+      "0x60": "0xc5400000",
+      "0x64": "0xc5dac000",
+      "0x68": "0x0",
+      "0x6c": "0xc53ff000",
+      "0x70": "0x0",
+      "0x74": "0x29d75718",
+      "0x78": "0x2622e158",
+      "0x7c": "0x29f72ff0",
+      "0x80": "0x2623e898",
+      "0x84": "0x261aabb8",
+      "0x88": "0x26239e88",
+      "0x8c": "0x37",
+      "0x90": "0x0",
+      "0x94": "0x0",
+      "0x98": "0x0",
+      "0x9c": "0x10",
+      "0xa0": "0x0",
+      "0xa4": "0x0",
+      "0xa8": "0x0",
+      "0xac": "0x10",
+      "0xb0": "0x36e",
+      "0xb4": "0x45869295",
+      "0xb8": "0x45895225",
+      "0xbc": "0xc39db16a",
+      "0xc0": "0x458fc1a8",
+      "0xc4": "0x45814f00",
+      "0xc8": "0xc3628892",
+      "0xcc": "0x0",
+      "0xd0": "0x0",
+      "0xd4": "0xbf800000",
+      "0xd8": "0x0",
+      "0xdc": "0x3",
+      "0xe0": "0x2622e278",
+      "0xe4": "0x0",
+      "0xe8": "0x277afc08",
+      "0xec": "0x2623eb18",
+      "0xf0": "0xbfc00000",
+      "0xf4": "0x402b3e33",
+      "0xf8": "0x64",
+      "0xfc": "0x4c0e7efc",
+      "0x100": "0x4c0e7f10",
+      "0x104": "0x0",
+      "0x108": "0xffffffff",
+      "0x10c": "0x4c0ce978",
+      "0x110": "0x4",
+      "0x114": "0x0",
+      "0x118": "0x40",
+      "0x11c": "0x26af7098",
+      "0x120": "0x2735daa0",
+      "0x124": "0x29ce3a68",
+      "0x128": "0x2622e018",
+      "0x12c": "0x29c95468",
+      "0x130": "0x2690d6c0",
+      "0x134": "0x0",
+      "0x138": "0x3b800000",
+      "0x13c": "0x3c800000",
+      "0x140": "0x53e292b7",
+      "0x144": "0x8e001414",
+      "0x148": "0x6c657328",
+      "0x14c": "0x50203a66",
+      "0x150": "0x72654d79",
+      "0x154": "0x6e616863",
+      "0x158": "0x79502e74",
+      "0x15c": "0x6372654d",
+      "0x160": "0x746e6168",
+      "0x164": "0x7469202c",
+      "0x168": "0x695f6d65",
+      "0x16c": "0x74203a64",
+      "0x170": "0x6e697079",
+      "0x174": "0x75532e67",
+      "0x178": "0x726f7070",
+      "0x17c": "0x6e497374"
+    },
+    "floats_first_0x20": [
+      0.0,
+      -18432.0,
+      -18432.0,
+      18432.0,
+      18432.0,
+      2.350988701644575e-38,
+      2.4201296742364617e-18,
+      NaN
+    ]
+  },
+  "pathing_hits": [
+    {
+      "map_context_offset": "0x74",
+      "sub1": "0x29d75718",
+      "sub2": "0x2735e220",
+      "pmaps_buffer": "0x2633b378",
+      "pmaps_capacity": 50,
+      "pmaps_size": 50,
+      "sub1_total_trapezoid_count": 2836,
+      "is_declared_0x74": true
+    },
+    {
+      "map_context_offset": "0x80",
+      "sub1": "0x2623e898",
+      "sub2": "0x29c8efe8",
+      "pmaps_buffer": "0x2758c3e0",
+      "pmaps_capacity": 3384,
+      "pmaps_size": 3384,
+      "sub1_total_trapezoid_count": 122,
+      "is_declared_0x74": false
+    }
+  ],
+  "pathing_map0": {
+    "zplane": "0xffffffff",
+    "trapezoid_count": "0x8ed",
+    "trapezoids": "0x285cc058",
+    "sink_node_count": "0x8ed",
+    "sink_nodes": "0x28641cf0",
+    "x_node_count": "0x237d",
+    "x_nodes": "0x285e6cc8",
+    "y_node_count": "0xd5b",
+    "y_nodes": "0x2862dc68",
+    "portal_count": "0xa9",
+    "portals": "0x28648c28",
+    "root_node": "0x2862dc68"
+  },
+  "pathing_trapezoids": [
+    {
+      "index": 0,
+      "id": 0,
+      "adjacent": [
+        "0x285cff88",
+        "0x0",
+        "0x285d0a68",
+        "0x0"
+      ],
+      "portal_left": 65535,
+      "portal_right": 65535,
+      "XTL": -7488.0,
+      "XTR": -6672.0,
+      "YT": -2352.0,
+      "XBL": -7488.0,
+      "XBR": -6720.0,
+      "YB": -2400.0
+    },
+    {
+      "index": 1,
+      "id": 1,
+      "adjacent": [
+        "0x285d0b28",
+        "0x0",
+        "0x285d0618",
+        "0x0"
+      ],
+      "portal_left": 65535,
+      "portal_right": 65535,
+      "XTL": 8640.0,
+      "XTR": 9772.7998046875,
+      "YT": -864.0,
+      "XBL": 8688.0,
+      "XBR": 9792.0,
+      "YB": -960.0
+    },
+    {
+      "index": 2,
+      "id": 2,
+      "adjacent": [
+        "0x285cd318",
+        "0x0",
+        "0x285d18a8",
+        "0x0"
+      ],
+      "portal_left": 65535,
+      "portal_right": 65535,
+      "XTL": -14688.0,
+      "XTR": -13440.0,
+      "YT": 3552.0,
+      "XBL": -14688.0,
+      "XBR": -13248.0,
+      "YB": 3456.0
+    },
+    {
+      "index": 3,
+      "id": 3,
+      "adjacent": [
+        "0x285cdc48",
+        "0x0",
+        "0x285cc178",
+        "0x0"
+      ],
+      "portal_left": 65535,
+      "portal_right": 65535,
+      "XTL": 3072.0,
+      "XTR": 4608.0,
+      "YT": 10752.0,
+      "XBL": 3072.0,
+      "XBR": 4640.0,
+      "YB": 10656.0
+    }
+  ],
+  "trapezoid_inside_map_boundaries": true,
+  "char_context": {
+    "email_guess_offset": "0x3d0",
+    "email_guess_text": "apoguita@gmail.com",
+    "address": "0x7945bb8",
+    "district_number_at_0x228_OLD": 0,
+    "district_number_at_0x22C_NEW": 1,
+    "language_at_0x22C_OLD": 1,
+    "language_at_0x230_NEW": 0,
+    "current_map_id_at_0x234_OLD": 55,
+    "current_map_id_at_0x238_NEW": 55,
+    "observe_map_id_at_0x230_OLD": 0,
+    "observe_map_id_at_0x234_NEW": 55,
+    "progress_bar_at_0x350_OLD": "0x0",
+    "progress_bar_at_0x360_NEW": "0x7945ee9"
+  },
+  "progress_bar_candidates": {
+    "0x350": {
+      "value": "0x0",
+      "plausible": false,
+      "aligned4": true
+    },
+    "0x354": {
+      "value": "0x40",
+      "plausible": false,
+      "aligned4": true
+    },
+    "0x358": {
+      "value": "0x2c",
+      "plausible": false,
+      "aligned4": true
+    },
+    "0x35c": {
+      "value": "0x7945f14",
+      "plausible": true,
+      "aligned4": true
+    },
+    "0x360": {
+      "value": "0x7945ee9",
+      "plausible": true,
+      "aligned4": false
+    },
+    "0x364": {
+      "value": "0x0",
+      "plausible": false,
+      "aligned4": true
+    },
+    "0x368": {
+      "value": "0x0",
+      "plausible": false,
+      "aligned4": true
+    }
+  },
+  "wide_view_0x390_0x460": {
+    "0x390": ".~..~~~~",
+    "0x3a0": "~~~~@~P~",
+    "0x3b0": "....L~..",
+    "0x3c0": ".~.~.~.~",
+    "0x3d0": "apoguita",
+    "0x3e0": "@gmail.c",
+    "0x3f0": "om~~~~~~",
+    "0x400": "~~~~~~~~",
+    "0x410": "~~~~~~~~",
+    "0x420": "~~~~~~~~",
+    "0x430": "~~~~~~~~",
+    "0x440": "~~~~~~~~",
+    "0x450": "...."
+  },
+  "printable_runs_0x380_0x460": [
+    {
+      "offset": "0x3d0",
+      "length": 18,
+      "text": "apoguita@gmail.com"
+    }
+  ],
+  "char_context_wchar_runs": [
+    {
+      "offset": "0x74",
+      "length": 18,
+      "text": "Fezzik The Untamed"
+    },
+    {
+      "offset": "0x3d0",
+      "length": 18,
+      "text": "apoguita@gmail.com"
+    }
+  ],
+  "char_context_anchors": {
+    "world_flags_0x190": 200,
+    "token1_0x194": 3829928213,
+    "map_id_0x198": 55,
+    "is_explorable_0x19C": 0,
+    "player_uuid_0x64": [
+      781456876,
+      1217011721,
+      420757419,
+      3089944263
+    ]
+  }
+}

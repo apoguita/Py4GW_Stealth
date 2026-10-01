@@ -1,0 +1,81 @@
+{
+  "pid": 23836,
+  "lions_arch": 55,
+  "steps": [
+    {
+      "label": "TravelGH",
+      "message": "kGuildHall",
+      "returned": true,
+      "raised": null,
+      "before": {
+        "map_id": 55,
+        "region": 0,
+        "language": 0,
+        "map_ready": true
+      },
+      "after": {
+        "map_id": 5,
+        "region": 0,
+        "language": 0,
+        "map_ready": true
+      },
+      "map_changed": true,
+      "seconds_to_change": 1.0,
+      "verdict": "map changed 55 -> 5 in 1.0s"
+    },
+    {
+      "label": "LeaveGH",
+      "message": "kLeaveGuildHall",
+      "returned": true,
+      "raised": null,
+      "before": {
+        "map_id": 5,
+        "region": 0,
+        "language": 0,
+        "map_ready": true
+      },
+      "after": {
+        "map_id": 55,
+        "region": 0,
+        "language": 0,
+        "map_ready": true
+      },
+      "map_changed": true,
+      "seconds_to_change": 1.0,
+      "verdict": "map changed 5 -> 55 in 1.0s"
+    },
+    {
+      "label": "Travel(55)",
+      "message": "kTravel",
+      "returned": true,
+      "raised": null,
+      "before": {
+        "map_id": 55,
+        "region": 0,
+        "language": 0,
+        "map_ready": true
+      },
+      "after": {
+        "map_id": 55,
+        "region": 0,
+        "language": 0,
+        "map_ready": true
+      },
+      "map_changed": false,
+      "seconds_to_change": 30.05,
+      "verdict": "map did NOT change"
+    }
+  ],
+  "start": {
+    "map_id": 55,
+    "region": 0,
+    "language": 0,
+    "map_ready": true
+  },
+  "end": {
+    "map_id": 55,
+    "region": 0,
+    "language": 0,
+    "map_ready": true
+  }
+}

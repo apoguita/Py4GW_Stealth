@@ -1,0 +1,53 @@
+=== single action leave_gh: started Thu 10/01/2026 11:32:54.28 === 
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\live_reports\_single_action.py", line 169, in <module>
+    sys.exit(main(sys.argv[1:]))
+             ~~~~^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\live_reports\_single_action.py", line 93, in main
+    with py4gw.connect(clients[0], game_thread=True) as client:  # type: ignore[misc]
+         ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\client.py", line 1595, in connect
+    _current_client = ConnectedClient(process, game_thread=game_thread)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\client.py", line 390, in __init__
+    self._install_game_thread()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\client.py", line 437, in _install_game_thread
+    bridge.install(
+    ~~~~~~~~~~~~~~^
+        hook_target,
+        ^^^^^^^^^^^^
+    ...<8 lines>...
+        capturing=(render_target, _RENDER_HOOK_BYTES),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\bridge.py", line 470, in install
+    observer_hooker.install(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        OBSERVER_NAME,
+        ^^^^^^^^^^^^^^
+    ...<3 lines>...
+        after=OBSERVER_AFTER,
+        ^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\hooker.py", line 696, in install
+    self._patcher.patch(
+    ~~~~~~~~~~~~~~~~~~~^
+        target,
+        ^^^^^^^
+        displaced,
+        ^^^^^^^^^^
+        build_entry_patch(target, stub_address, len(displaced)),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\patcher.py", line 128, in patch
+    self._verify(address, expected, "before the patch")
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\game_thread\patcher.py", line 197, in _verify
+    raise RuntimeError(
+    ...<3 lines>...
+    )
+RuntimeError: code at 0x01184510 before the patch is not what this installer expected in pid 23836: expected 55 8b ec 8b 45 08 83 f8 56, observed 55 8b ec 83 ec 2c 53 8b 5d. Nothing was written.
+=== single action: exit=1 === 

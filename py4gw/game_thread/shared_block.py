@@ -132,7 +132,13 @@ EVENT_REGION_OFFSET = COMMAND_REGION_OFFSET + COMMAND_DEPTH * COMMAND_SIZE
 #: result into. The source's own callers keep those in their stack frames; this project has
 #: no frame in the client, so it keeps them here, in the client's own address space.
 DATA_REGION_OFFSET = EVENT_REGION_OFFSET + EVENT_DEPTH * EVENT_SIZE
-DATA_SIZE = 4096
+#: 8192 rather than the 4096 it started as: the client's own path finder
+#: (``pathing.find_path_func``) writes up to thirty 0x10-byte ``PathPoint`` records into a buffer the
+#: caller supplies -- native keeps that array in its own stack frame (``pathing.cpp:31``) -- and no
+#: 516-byte span below 0x1000 was unclaimed. The region is this port's own mechanism rather than a
+#: source layout, so it grew; everything inside it is region-relative and bounds-checked
+#: (:func:`data_offset`), and the decode region that follows is derived from this constant.
+DATA_SIZE = 8192
 
 #: The decode region: one slot per string being decoded asynchronously, holding the string the
 #: client is handed and the text it writes back.

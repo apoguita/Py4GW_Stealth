@@ -1,0 +1,13 @@
+=== kTravel test: started Thu 10/01/2026 11:36:12.68 === 
+  enum says UIMessage.kTravel = 0x10000186
+  this test sends the LITERAL 0x10000186
+  payload <Iiii> = map_id=55 region=0 language=0 district=0
+  wparam 0x03ac13e0  (a POINTER to that struct, as Map::Travel does)
+  map before: 5
+
+--- ONE send: SendUIMessageRaw(0x10000186, 0x03ac13e0, 0) ---
+    returned: True
+    map after 1.0s: 55
+
+RESULT: 0x10000186 IS a working travel message (5 -> 55, the requested target, in 1.0s).
+=== exit=0 === 

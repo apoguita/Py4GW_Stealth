@@ -1,0 +1,27 @@
+=== travel actions: started Thu 10/01/2026 11:27:42.39 === 
+connected to pid 23836 with the game thread
+  start : {'map_id': 55, 'region': 0, 'language': 0, 'map_ready': True}
+  (Lion's Arch is map 55; a guild hall is not 55)
+
+--- TravelGH: travel to the guild hall   (kGuildHall) ---
+    before: map_id=55 ready=True
+    send returned: True
+    after 1.0s: map_id=5 ready=True
+    VERDICT: map changed 55 -> 5 in 1.0s
+
+--- LeaveGH: leave the guild hall   (kLeaveGuildHall) ---
+    before: map_id=5 ready=True
+    send returned: True
+    after 1.0s: map_id=55 ready=True
+    VERDICT: map changed 5 -> 55 in 1.0s
+
+--- Travel(55): travel to Lion's Arch   (kTravel) ---
+    before: map_id=55 ready=True
+    send returned: True
+    after 30.0s: map_id=55 ready=True
+    VERDICT: map did NOT change
+
+end: {'map_id': 55, 'region': 0, 'language': 0, 'map_ready': True}
+
+wrote C:\Users\Apo\Py4GW_Stealth\live_reports\travel_actions_test.json
+=== travel actions: exit=0 === 

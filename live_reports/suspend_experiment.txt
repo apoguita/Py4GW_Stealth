@@ -1,0 +1,19 @@
+pid 47380; every phase below counts Reforged's own device-lost line around it
+
+phase 0: idle 10 s, nothing touching the client
+phase 0: +1 line(s)  (total 121)
+
+phase 1: open and close the write handle 5 times (no thread is suspended)
+phase 1: +0 line(s)  (total 121)
+
+phase 2: the real _count_suspended_threads, 5 sweeps
+    sweep 1: 0 thread(s) were already suspended
+    sweep 2: 0 thread(s) were already suspended
+    sweep 3: 0 thread(s) were already suspended
+    sweep 4: 0 thread(s) were already suspended
+    sweep 5: 0 thread(s) were already suspended
+phase 2: +0 line(s)  (total 121)
+
+phase 3: one whole capability-layer connect attempt (refuses on this client)
+    refused: RuntimeError: pid 47380: game_thread.leave_game_thread_func: the first five bytes at 0x01185CD0 are another runtime's entry jump to 0x578FF407, and what it lands on is not th
+phase 3: +0 line(s)  (total 121)

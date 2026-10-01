@@ -1,0 +1,18 @@
+=== travel ui-message test: started Thu 10/01/2026 11:12:04.77 === 
+connecting to pid 23836 with the game thread (this is a write) ...
+
+==============================================================================
+  watching BOTH candidates for each feature. Nothing is being sent.
+  PLEASE DO THIS NOW, by hand, in the game:
+    1. add a hero to the party
+    2. open the guild hall, then leave it
+    3. travel to another map / outpost
+==============================================================================
+
+  MSG EventRecord(kind=63, sequence=268435743, arg0=0, arg1=1164092152, arg2=117830224, arg3=20609929, tick=0, text_state=0, text=(), words=())
+  MSG EventRecord(kind=63, sequence=268435843, arg0=2673152358, arg1=1182707619, arg2=2537733011, arg3=1292244530, tick=0, text_state=0, text=(), words=())
+  ... 165s left, 2 ui message(s) observed
+  ... 165s left, 2 ui message(s) observed
+  ... 165s left, 2 ui message(s) observed
+  ... 165s left, 2 ui message(s) observed
+  MSG EventRecord(kind=63, sequence=268435846, arg0=55, arg1=0, arg2=0, arg3=0, tick=0, text_state=0, text=(), words=())

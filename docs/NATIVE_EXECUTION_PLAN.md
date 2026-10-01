@@ -24,8 +24,9 @@ the target is unmodified or that the payload is undetectable.
 **Read this together with the component plan below and the Phase 5 status.** The
 component plan is built and part of the library, not a standalone package:
 `py4gw.connect()` installs the hooks, the block, the emitted dispatcher and the
-callback listener on the game thread's own function and on the client's message
-sender, and `py4gw.disconnect()` restores both functions' own bytes and frees
+callback listener on the game thread's own function, the client's message sender, the
+post-process effect function and the render `EndScene`, and `py4gw.disconnect()`
+restores all four functions' own bytes and frees
 everything it placed. The reference implementations stay under the gitignored
 `external/` tree as the worked design they were.
 
@@ -533,6 +534,172 @@ Two deliberate follow-ups, not yet done:
 - [ ] Port crash-handler stack handling last of all: it is present in the source, it is
   not a Guild Wars feature surface, and nothing above waits on it.
 
+## Coexisting with the injected Reforged runtime (live 2026-10-01)
+
+**Measured live: injecting Reforged into a client this library is already connected to works, and
+both runtimes' callbacks run.** That was not designed — it is an accident of two pieces of code, and
+the accident is the reason this section exists. What follows is read from both sources' own code, and
+it names the one install order that can be supported, the two hazards that had to be removed from
+this project's side, and what is still owed.
+
+**The surface they share.** Both projects patch the entry of the same four client functions:
+
+| client function | this library (catalog name, entry bytes) | Reforged Native (MinHook through `HookBase`) |
+| --- | --- | --- |
+| `LeaveGameThread_Func` | `game_thread.leave_game_thread_func`, `55 8B EC 81 EC 20 02 00 00` | `game_thread.cpp:76` |
+| `GW::ui::SendUIMessage` | `ui.send_ui_message_func`, `55 8B EC 8B 45 08 83 F8 56` | `ui.cpp:725` |
+| the post-process effect function | `effects.post_process_effect_func`, `55 8B EC 83 EC 08` | `effects.cpp:142` |
+| the render `EndScene` | `render.end_scene_func`, `55 8B EC 83 EC 48` | `render.cpp:136` |
+
+Reforged's three other unconditional writes are the render `Reset` and screen-capture hooks
+(`render.cpp:140-144`) and six mid-function byte patches (camera fog and camera update, map bypass,
+chat timestamps, gold confirm, cast-bar minimum — `src/GW/camera/camera_patterns.cpp:32,45,50`,
+`map_patterns.cpp:65`, `chat_patterns.cpp:95`, `listeners/memory_patch_listeners.cpp:39-58`). Only the
+row of four is an entry-patch collision; the byte patches are handled below.
+
+**Why it works, and only in one order.** Reforged's `HookBase::CreateHook` resolves its target through
+a near branch before hooking it:
+
+```c
+if (const auto nested = Scanner::FunctionFromNearCall(reinterpret_cast<uintptr_t>(*target), false))
+    *target = reinterpret_cast<void*>(nested);
+return static_cast<int>(MH_CreateHook(*target, detour, trampoline));   // base/hooker.cpp:78-80
+```
+
+and that walk follows `E8`/`E9`/`EB` recursively **without checking that the destination is inside the
+client's module** (`base/scanner.cpp:113-133`, `check_valid_ptr` is `false`). So when this library's
+entry patch is already in place, the branch Reforged follows is *ours*: MinHook hooks **this library's
+generated stub**, not the client's function. Its own five-byte jump lands on the stub's first bytes and
+its trampoline jumps back into the stub past them (`third_party/minhook/src/hook.c:355`,
+`trampoline.c:281-282`), so every client call runs both runtimes' code and neither entry patch is
+touched. That is the observation of 2026-10-01, and the mechanism agrees with it.
+
+**The arrangement that matters is this one, and the owner settled it (2026-10-01).** In practice Reforged
+is **always injected first** — it comes with the client — and this library connects to a client that already
+has it. So the work is not "get in first"; it is **chain on top of Reforged's entry jump**, and that is now
+built. All four pieces exist:
+
+1. **Resolution that survives a patched prologue.** `_resolve_placement` keeps the address the resolver's
+   pattern matched when its steps end in `to_function_start` — the address is *inside* the declared function,
+   so it bounds where the entry can be — and `_entry_jump_ahead` finds the patch the walk-back hid.
+2. **Displacing a foreign jump, and relocating it.** `hooker.build_trampoline` re-encodes a displaced
+   `jmp rel32` to the same absolute destination instead of replaying it verbatim, which is what MinHook's own
+   trampoline generator does (`third_party/minhook/src/trampoline.c:180-209`). `hooker.is_relative_jump`
+   recognises the shape (five bytes, leading `E9`) and nothing else is guessed at.
+3. **Restoring what was displaced.** `Patcher` writes back exactly the bytes it displaced, so Reforged's jump
+   returns to the entry.
+4. **Not freeing code a foreign patch lives in.** `Hooker._require_generated_code_is_ours`.
+
+**The packet handler table is the same question, and it is now answered the same way.** Reforged registers
+**all 488** StoC headers (`packet_sniffer.cpp:129-135`), and the first live chaining run proved it holds the
+five headers the merchant listener wants: header 132's entry held `0x578F1ED3`, inside `Py4GW.dll`
+(`0x578F0000 + 0xF94000`), and the install refused it as "outside the client module" — which made the whole
+connection fail on the arrangement the owner needs. The rule is now "inside the client's module **or inside
+any loaded module**" (`packets.is_live_code`, fed by `Win32.list_modules` through the bridge): a loaded
+module's image is code that is still there, another runtime's compiled handler is chained to exactly as the
+client's own is, and memory **no module covers** is still refused, because that is where a controller that
+died leaves its stubs.
+
+**What that arrangement costs, stated rather than hidden.** MinHook restores a target with a blind `memcpy`
+of the bytes it captured (`hook.c:381-386`) and frees its trampolines wholesale when the runtime unloads
+(`buffer.c:74-85`). Chained under it, this library accepts two conditions:
+
+- a Reforged **toggle** of its own hooks would write the pre-existing bytes over this library's patch. It
+  does not happen mid-session: Reforged enables its hooks at init and disables them only on shutdown
+  (`render.cpp:155-181`, `game_thread.cpp:83-103`, `ui.cpp:787-823`), and the toggles that do run while
+  playing are `MemoryPatcher` **byte patches** — camera, chat timestamps, map tolerance
+  (`GuildWars.cpp:116,125`) — not MinHook hooks. If it ever happened, this library's restore would
+  **refuse** (the bytes there are no longer its own) and report rather than restore over Reforged's work;
+- **unloading `Py4GW.dll`** while this library is chained under it would free the code this library's
+  trampoline relocates into. The owner's own constraint is that the runtime is injected at startup and
+  practically never unloaded, and that is the condition this arrangement is stated under.
+
+**The other arrangement still stands** — this library connects first, and Reforged injected afterwards
+follows this library's entry jump and hooks its generated stub — and it stays the cleaner of the two
+(Reforged then hooks *this library's* code, so nothing of this library's hangs off Reforged's). It is
+simply not the one that happens. Both hazards that made the **first** arrangement unsafe were removed from
+this project's side on 2026-10-01:
+
+1. **The install no longer erases a foreign entry hook.** It used to treat a `jmp rel32` that leaves
+   the client's module as its own stale patch and write the client's original bytes over it
+   (`client.ConnectedClient._prepare_target`). A live foreign hook leaves the module too, so connecting
+   after Reforged silently deleted Reforged's hooks on all four functions — Reforged's callbacks
+   stopped while it still believed it was installed, and the next toggle wrote bytes from its own
+   backup, leaving this library believing it was patched when it was not. The repair now asks what the
+   jump *lands on* (`_is_our_stale_patch`): every stub this library emits begins with
+   `pushfd; pushad; mov eax, imm32` (`hooker.STUB_PROLOGUE`), which a detour compiled into another
+   module does not. A landing that is not this library's code is refused by name, and the connection
+   says which runtime has to come out first. `tests/test_coexistence_offline.py` covers both
+   directions of that decision, including the walk that finds a patch the resolver's walk-back hid
+   *ahead* of its answer — which is the shape the live client of 2026-10-01 actually had.
+2. **The removal no longer frees code a foreign patch lives in.** When Reforged has hooked this
+   library's stub, MinHook's patch site *and* its trampoline's return address are inside that stub's
+   allocation. `Hooker.remove(free_code=True)` used to free it on disconnect, which would have left
+   Reforged writing into, and jumping into, freed memory on the next client frame. The stub's head is
+   now read back and compared with the bytes the hooker wrote
+   (`hooker.Hooker._require_generated_code_is_ours`); a mismatch is reported, nothing is freed, and the
+   hooked function's own bytes are already back, so the client is not left patched.
+   `tests/test_hooker_offline.py` drives that state and also drives the clean case — Reforged's own
+   disable writes the stub's real head straight back, after which the disconnect frees normally, which
+   is why "Reforged out first" is a clean teardown rather than a leak.
+
+**What the two surfaces that are *not* entry patches need.** The camera patches are already
+chain-safe: both runtimes write the same source-derived bytes, and each keeps the bytes it found and
+writes those back, so the bytes never diverge — the only conflict is state, where one side's *off*
+puts back the pre-patch bytes for a feature the other wanted on. The client's StoC handler array is
+chain-safe in the same way on this side (`packets.PacketHooks` saves whatever the entry held — which
+may be Reforged's own `StoCHandler_Func` — and restores it), but it is **not** safe against Reforged
+writing entries from its own snapshot while this library's stubs are in them: Reforged's packet
+sniffer registers **all 488** headers (`packet_sniffer.cpp:129-135,207-209`) and `StoC::DisableHooks`
+puts every entry back from `g_original_functions` (`stoc.cpp:118-140`). A stubbed entry can therefore
+be replaced underneath this library, silently. That is recorded as work in
+[`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md) rather than solved here: the entries have to be read back
+and the mismatch reported, which is the same discipline the install already uses once, at install time.
+
+**Measured on a live client, 2026-10-01 (pid 47380, `F:\GW\GW1\Gw.exe`, module base `0x00F50000`).**
+`tests/probe_two_runtimes_live.py` reads the four entries, names the module every jump lands in and asks
+the shipping decision on the live bytes. What it found:
+
+| entry | resolver answered | what is there | lands at |
+| --- | --- | --- | --- |
+| `game_thread.leave_game_thread_func` | `0x01185CD0` | `E9 32 97 77 56` then the declared entry's own tail `20 02 00 00` | `0x578FF407`, `Py4GW.dll` |
+| `effects.post_process_effect_func` | `0x01361630` | `E9 44 16 5A 56` then the declared tail `08 8B 45 0C` | `0x57902C79`, `Py4GW.dll` |
+| `ui.send_ui_message_func` | `0x01184510` ← **the function before** | `55 8B EC 83 EC 2C 53 …`, a plain prologue | — |
+| `render.end_scene_func` | `0x012202C0` ← **the function before** | `55 8B EC 56 8B 75 08 …`, a plain prologue | — |
+
+The injected runtime is `C:\Users\Apo\Py4GW_Reforged\Py4GW.dll`, and it holds **all four** entries: the
+two the resolver answered directly are hooked in place, and the two it answered *wrongly* are hooked
+0xE0 and 0x90 bytes further on — `0x011845F0` begins `E9 36 A8 77 56` followed by `08 83 F8 56`, and
+`0x01220350` begins `E9 68 95 6D 56` followed by `48 A1 00 A5 74 01`, which are the tails of the declared
+entries with five bytes covered by a jump. **The wrong answers are not a resolver defect**: Reforged's
+patch removed the `55 8B EC` prologue that `Scanner::ToFunctionStart` walks back to
+(`scanner.cpp:205-210`), so the walk answered the function before the target — the same effect this
+project's own stale patch has on it, which is why `_stale_patch_before` exists. Following each jump once
+lands on a five-byte thunk in `Py4GW.dll` (`0x011845F0 → 0x578FEE2B → 0x57AE1240`, a compiled
+`55 8B EC 51 E8 …`), so the entry patch reaches Reforged's detour through its module's own thunk block;
+MinHook's separate relay is x64-only (`trampoline.c:307-313`), which is what a 32-bit build expects.
+
+**What the install does about a client in that state is now precise.** `_prepare_target` refuses, and it
+names the function that actually carries the patch rather than the address the resolver answered:
+`_entry_jump_ahead` walks the window ahead of the answer for an entry jump whose landing leaves the
+client's module, and `_foreign_patch_refusal` reports the patch address, its landing, and — when the bytes
+from offset five still match the catalog's declared entry — that the address *is* the declared function.
+Before this change the same client would have had Reforged's hooks on the two directly-answered entries
+**silently overwritten** with the client's original bytes.
+
+**Verified live, elevated, against that client (2026-10-01).**
+`tests/test_live_coexistence.ReforgedFirstTests` is 3/3: the connection refuses with a message naming
+`0x01185CD0` as the function that carries Reforged's jump and `0x578FF407` where it lands; all four entries
+read back **byte-for-byte identical** to a snapshot taken before the attempt; and the client is still
+healthy afterwards. That is the direction that used to be silent damage, so it is the one worth having a
+live test for. (`live_reports/live_coexistence_reforged_first.txt`, `live_reports/live_refusal_text.txt`.)
+
+**What is still owed.** The live run of the supported order, which needs a client that does **not** have
+Reforged injected yet: `tests/test_live_coexistence.py`'s `StealthFirstTests` connects first, waits for
+Reforged to be injected, then asserts that this project's four entry patches survived, that its hooks
+still fire, that the stub reads back with a foreign jump at its head, and that the disconnect refuses to
+free that stub while restoring the client's own bytes.
+
 ## Resume record
 
 **Resume point: the call vocabulary's remaining forms.** The objective's three legs
@@ -683,18 +850,22 @@ holds, and the member has not been ported onto either route.
 `py4gw.connect()` now installs the whole capability layer and `disconnect()` removes
 it, so the pieces above are not something a caller assembles by hand:
 
-- connect resolves `game_thread.leave_game_thread_func` and
-  `ui.send_ui_message_func` from the catalog, **checks both entry byte sequences
-  before writing anything**, opens the write transport, installs the bridge (command
-  hook, observer hook, module bounds, empty call table and watch list), creates the
+- connect resolves `game_thread.leave_game_thread_func`, `ui.send_ui_message_func`,
+  `effects.post_process_effect_func` and `render.end_scene_func` from the catalog,
+  **checks all four entry byte sequences before writing anything**, opens the write
+  transport, installs the bridge (command hook, observer hook, effects observer, render
+  capture, module bounds, empty call table and watch list), creates the
   registry and **starts the listener thread**;
 - `client.callbacks` registers handlers, `client.watch(message_id)` and
   `client.unwatch(message_id)` change what the observer records at runtime — the
   list lives in the client and is re-read on every call, so no reinstall is needed;
 - `client.bridge` is the queue and the hooks, for anything deeper;
 - `disconnect()` stops the listener first (it is the only reader of the event
-  region), restores both functions, **frees every allocation it placed**, and closes
-  the handle — a handler that raised is re-raised last, after the client is back.
+  region), restores all four hooked functions' own bytes, **frees every allocation it
+  placed**, and closes the handle — a handler that raised is re-raised last, after the
+  client is back. **One refusal is deliberate**: a stub another runtime has placed its own
+  patch inside is reported and *not* freed (see "Coexisting with the injected Reforged
+  runtime" above); the hooked function's own bytes are back either way.
 
 **Two recoveries for a controller that died**, because a crash-resistant install
 that cannot clean up after a crash is half a feature:

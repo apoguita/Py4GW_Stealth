@@ -268,6 +268,16 @@ class Bridge:
         return self._module_base, self._module_size
 
     @property
+    def loaded_modules(self) -> tuple[tuple[int, int], ...]:
+        """Return every module loaded in the client, as ``(base, size)``.
+
+        The packet hooks ask it about a handler pointer: inside a loaded module is another runtime's
+        compiled code, and outside every module is memory nobody owns any more.
+        """
+
+        return self._loaded_modules
+
+    @property
     def call_table_address(self) -> int:
         """Return where the call table is, or zero before it is placed."""
 
@@ -370,6 +380,7 @@ class Bridge:
         effects_observing: tuple[int, bytes] | None = None,
         effects_watch: Sequence[tuple[int, int]] = (),
         capturing: tuple[int, bytes] | None = None,
+        loaded_modules: Sequence[tuple[int, int]] = (),
     ) -> None:
         """Place the block, the call table, the dispatcher and the hook.
 
@@ -406,6 +417,10 @@ class Bridge:
         #: code, and chaining to one is how a dead controller takes the client down later.
         self._module_base = module_base
         self._module_size = module_size
+        #: Every module loaded in the client, as ``(base, size)``: what tells another runtime's compiled
+        #: handler from a dead controller's stub, both of which are outside the client's own module. The
+        #: packet hooks are the ones that need it (``packets.is_live_code``).
+        self._loaded_modules = tuple(loaded_modules)
         table_address = 0
         watch_address = 0
         observer_address = 0

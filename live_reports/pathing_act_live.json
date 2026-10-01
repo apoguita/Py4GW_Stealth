@@ -1,0 +1,65 @@
+{
+  "stage": "act",
+  "pid": 29504,
+  "controller_elevated": true,
+  "game_thread": true,
+  "before": {
+    "agent_id": 41,
+    "xy": [
+      -2202.12109375,
+      1759.824951171875
+    ],
+    "map_id": 642
+  },
+  "plan_call": null,
+  "plan_seconds": 0.2074,
+  "plan_status": "3",
+  "plan_is_ready": false,
+  "plan_was_successful": false,
+  "plan_points": 0,
+  "expected_status_ready": "2",
+  "compute_immediate_points": 0,
+  "get_path_seconds": 0.279,
+  "get_path": {
+    "type": "list",
+    "points": 2
+  },
+  "get_path_ends": [
+    [
+      -2202.12109375,
+      1759.824951171875,
+      0.0
+    ],
+    [
+      -1902.12109375,
+      1759.824951171875,
+      0.0
+    ]
+  ],
+  "get_path_z_is_start_z": true,
+  "get_path_to": {
+    "type": "list",
+    "points": 1
+  },
+  "get_path_to_ends": [
+    [
+      -1902.12109375,
+      1759.824951171875
+    ],
+    [
+      -1902.12109375,
+      1759.824951171875
+    ]
+  ],
+  "after": {
+    "agent_id": 41,
+    "xy": [
+      -2202.12109375,
+      1759.824951171875
+    ],
+    "map_id": 642
+  },
+  "player_did_not_move": true,
+  "note": "act stage: the client's own find_path_func, called through the port's PathPlanner and AutoPathing. A path is computed, not walked, so the player's position must be identical afterwards; anything else is a defect.",
+  "hooks_original_after_disconnect": true
+}

@@ -1349,6 +1349,7 @@ class ItemFormulaStruct(TargetStruct):
         ("skill_point_cost", c_uint32),
         ("material_cost_count", c_uint32),
         ("material_cost_buffer", c_uint32),
+        ("h0014", c_uint32),
     ]
 
     @property
@@ -1625,7 +1626,7 @@ assert ctypes.sizeof(DyeInfoStruct) == 0x03
 assert ctypes.sizeof(ItemStruct) == 0x54
 assert ctypes.sizeof(BagStruct) == 0x28
 assert ctypes.sizeof(InventoryStruct) == 0x98
-assert ctypes.sizeof(ItemFormulaStruct) == 0x14
+assert ctypes.sizeof(ItemFormulaStruct) == 0x18
 assert ctypes.sizeof(PvPItemUpgradeInfoStruct) == 0x28
 assert ctypes.sizeof(PvPItemInfoStruct) == 0x24
 assert ctypes.sizeof(CompositeModelInfoStruct) == 0x30

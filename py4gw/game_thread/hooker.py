@@ -117,6 +117,39 @@ def post_state_size(forwarded_arguments: int) -> int:
 #: The smallest patch that can hold ``jmp rel32``.
 MINIMUM_PATCH = 5
 
+#: The three bytes **every stub this module emits begins with**: ``pushfd``, ``pushad``, and the
+#: ``mov eax, imm32`` whose immediate is the stub's own state address. Both forms the module builds
+#: start with it — the entry form (:func:`build_stub`) and the post-call form
+#: (:func:`_build_post_call_stub`) — because both save the client's flags and registers first and
+#: then load the state address the same way.
+#:
+#: It is used as **evidence about who owns a piece of code**, in the two places that have to answer
+#: that question and cannot guess:
+#:
+#: - a jump found at a hooked function's entry, which may be this library's own patch left by a
+#:   controller that died, or another tool's entry hook (``client.ConnectedClient._prepare_target``);
+#: - the head of this module's own stub at removal time, which says whether anything has been placed
+#:   *inside* the generated code since it was written (:meth:`Hooker.remove`).
+STUB_PROLOGUE = bytes((_PUSHFD, _PUSHAD, _MOV_EAX_IMM32))
+
+#: How much of a stub is read back to tell whether it is still the code this hooker wrote. It covers
+#: the prologue and the first byte of the state address, and a foreign entry patch — five bytes of
+#: ``jmp rel32`` — lands inside it.
+STUB_HEAD_SIZE = 8
+
+
+def is_generated_stub(head: bytes) -> bool:
+    """Whether ``head`` begins the way every stub this module emits begins.
+
+    Evidence, not proof, and it is used as evidence in exactly two decisions: whether a jump at a
+    hooked function's entry is this library's own stale patch, and whether the code this hooker placed
+    is still its own to free. The bytes are the ones :data:`STUB_PROLOGUE` names, and a detour
+    compiled into another tool's DLL does not begin with them — MinHook's own entry patch is a bare
+    ``jmp rel32`` to a relay, so the byte a foreign patch starts with is ``E9``.
+    """
+
+    return head[: len(STUB_PROLOGUE)] == STUB_PROLOGUE
+
 #: How long to wait between reads of the hit counter.
 HIT_POLL_SECONDS = 0.005
 
@@ -284,14 +317,55 @@ def build_entry_patch(address: int, stub_address: int, length: int) -> bytes:
 def build_trampoline(
     trampoline_address: int, displaced: bytes, resume_address: int
 ) -> bytes:
-    """Return the displaced bytes followed by a jump back into the target."""
+    """Return the displaced bytes followed by a jump back into the target, or a relocated jump.
+
+    **A displaced ``jmp rel32`` is re-encoded, not replayed.** Everything else in a displaced span keeps its
+    meaning wherever it is copied — which is why replaying the bytes verbatim is this module's rule — but a
+    *relative* jump does not: the same bytes at another address land somewhere else, so a trampoline that
+    copied an entry patch's own jump would send the client to whatever sits at that offset from the
+    trampoline instead. That is the shape this function must not get wrong, because it is the shape another
+    runtime's entry patch has: MinHook writes exactly five bytes, ``jmp rel32``, at an entry
+    (``third_party/minhook/src/hook.c:355``), and hooking a function that already carries one is the
+    arrangement this project has to support — Reforged is injected before this library, not after.
+
+    So a span that **is** one ``jmp rel32`` is emitted as a jump to the same absolute destination and
+    nothing else: the original instruction transferred control unconditionally, so there is no following
+    instruction to resume at and no jump back. MinHook's trampoline generator does the same and stops for
+    the same reason (``third_party/minhook/src/trampoline.c:180-209``: a direct relative jump's destination
+    is recomputed against the new buffer, and the loop finishes). This is a shape check, not a decoder: the
+    span is five bytes beginning ``E9``, or it is replayed verbatim.
+
+    ``trampoline_address`` is needed because both jumps are relative.
+    """
 
     if not displaced:
         raise ValueError("displaced bytes must not be empty.")
+    if is_relative_jump(displaced):
+        # ``resume_address`` is where the target resumes — the entry plus the displaced span — so the
+        # displaced span's own address is ``resume_address - len(displaced)`` and the destination the
+        # original instruction reached is ``resume_address + displacement``.
+        destination = (
+            resume_address + struct.unpack_from("<i", displaced, 1)[0]
+        ) & _UINT32_MAX
+        return bytes((_JMP_REL32,)) + _rel32(
+            trampoline_address + MINIMUM_PATCH, destination
+        )
     body = bytearray(displaced)
     body.append(_JMP_REL32)
     body += _rel32(trampoline_address + len(body) + 4, resume_address)
     return bytes(body)
+
+
+def is_relative_jump(displaced: bytes) -> bool:
+    """Whether a displaced span is exactly one ``jmp rel32`` — another runtime's entry patch.
+
+    Five bytes with a leading ``E9`` is what MinHook writes at an entry (``hook.c:355``,
+    ``trampoline.h:43-47``), and one instruction is a whole number of instructions, which is what a
+    displaced span has to be. A shape check rather than a decode: a span of another length, or with another
+    first byte, is not this, whatever it contains.
+    """
+
+    return len(displaced) == MINIMUM_PATCH and displaced[:1] == bytes((_JMP_REL32,))
 
 
 def build_stub(
@@ -569,6 +643,10 @@ class _InstalledHook:
     state_address: int
     stub_address: int
     trampoline_address: int
+    #: The first :data:`STUB_HEAD_SIZE` bytes this hooker wrote at ``stub_address``, kept so
+    #: :meth:`Hooker.remove` can tell whether the generated code is still its own before it frees
+    #: anything. See :meth:`Hooker.remove` for why that question has to be asked.
+    stub_head: bytes
 
 
 class Hooker:
@@ -680,18 +758,16 @@ class Hooker:
             stub_address = self._access.allocate(
                 stub_size(forwarded_arguments, after)
             )
-            self._make_executable(
-                stub_address,
-                build_stub(
-                    stub_address=stub_address,
-                    state_address=state_address,
-                    block_address=self._block_address,
-                    dispatcher_address=self._dispatcher_address,
-                    trampoline_address=trampoline_address,
-                    forwarded_arguments=forwarded_arguments,
-                    post_payload=after,
-                ),
+            stub_code = build_stub(
+                stub_address=stub_address,
+                state_address=state_address,
+                block_address=self._block_address,
+                dispatcher_address=self._dispatcher_address,
+                trampoline_address=trampoline_address,
+                forwarded_arguments=forwarded_arguments,
+                post_payload=after,
             )
+            self._make_executable(stub_address, stub_code)
 
             self._patcher.patch(
                 target,
@@ -713,6 +789,7 @@ class Hooker:
             state_address=state_address,
             stub_address=stub_address,
             trampoline_address=trampoline_address,
+            stub_head=stub_code[:STUB_HEAD_SIZE],
         )
 
     def enable(self, name: str) -> None:
@@ -801,7 +878,15 @@ class Hooker:
         it by jumping *after* it has already decremented. A dozen bytes left mapped is survivable; freed code
         under a live instruction pointer is not.
 
-        A count that does not drain is **reported rather than slept off**, and nothing is freed.
+        **The stub is freed only while it is still this hooker's own code**, which the in-flight count
+        cannot establish on its own: an injected runtime can place a hook *inside* the stub, and this
+        hooker's count knows nothing about that runtime's traffic. The stub's head is therefore read
+        back and compared with what was written before anything is freed — the second refusal below, and
+        the injected Reforged runtime (MinHook) is what makes it necessary. See
+        :meth:`_require_generated_code_is_ours`.
+
+        A count that does not drain, or a stub a foreign runtime has patched, is **reported rather than
+        slept off**, and nothing is freed. Either way the hooked function's own bytes are already back.
         """
 
         hook = self._require(name)
@@ -823,6 +908,10 @@ class Hooker:
                         "pointer is how a client is taken down."
                     )
                 time.sleep(HIT_POLL_SECONDS)
+            # The stub is checked for foreign code *after* the entry has been restored, so a refusal
+            # here leaves the client's function holding its own bytes and only leaks this hook's
+            # allocation. See the method for why the check exists at all.
+            self._require_generated_code_is_ours(hook)
             for address in (
                 hook.stub_address,
                 hook.state_address,
@@ -838,6 +927,48 @@ class Hooker:
             self.remove(name)
 
     # -- internals ---------------------------------------------------------
+
+    def _require_generated_code_is_ours(self, hook: _InstalledHook) -> None:
+        """Refuse to free a stub another engine has placed its own patch inside.
+
+        **This is the one hazard the injected Reforged runtime makes real.** Reforged Native hooks
+        the client through MinHook, and its ``HookBase::CreateHook`` resolves the target through a near
+        branch first: ``Scanner::FunctionFromNearCall(*target, false)`` follows an ``E8``/``E9``/``EB``
+        chain to its end (``base/scanner.cpp:113-133``) without checking that the destination is inside
+        the client's module (``check_valid_ptr`` is ``false``, ``base/hooker.cpp:78-80``). So when this
+        hooker's entry patch is already in place, MinHook does not hook the client's function — it hooks
+        **this stub**, writes its own five-byte jump over the stub's first bytes, and its trampoline
+        jumps back into the stub past them (``third_party/minhook/src/hook.c:355``,
+        ``trampoline.c:281-282``). Both hooks then run on every call, which is the coexistence that was
+        measured live on 2026-10-01.
+
+        What that costs is exactly this check. MinHook keeps a ``backup`` of the bytes it displaced and
+        writes them back with a blind ``memcpy`` whenever the hook is disabled, removed or the runtime
+        unloads (``hook.c:381-386``, ``hook.c:504``), and it frees its trampolines wholesale through
+        ``VirtualFree`` (``buffer.c:74-85``). Its patch site and its trampoline's return therefore both
+        live **inside this stub**: unmapping the stub while Reforged is still loaded leaves Reforged
+        writing into, and jumping into, freed memory on the next client frame. A count of this
+        project's own in-flight calls cannot see that, because the hazard is another runtime's code.
+
+        So the stub's own head is read back and compared with what this hooker wrote. A mismatch is a
+        foreign patch, nothing is freed, and the caller is told which runtime has to come out first —
+        the same two-step order this project's own ``docs/NATIVE_EXECUTION_PLAN.md`` records. When
+        Reforged unloads first it restores the stub's head bytes, this check passes again, and the
+        disconnect frees everything it placed.
+        """
+
+        observed = self._access.read(hook.stub_address, len(hook.stub_head))
+        if observed == hook.stub_head:
+            return
+        raise RuntimeError(
+            f"pid {self._pid}: the code this hooker generated for {hook.name!r} at "
+            f"0x{hook.stub_address:08X} no longer begins with its own head: expected "
+            f"{hook.stub_head.hex(' ')}, observed {observed.hex(' ')}. Another runtime has placed "
+            "its own entry patch inside this stub and its trampoline returns into it, so freeing the "
+            "stub would leave that runtime jumping into freed memory. Nothing was freed. The hooked "
+            "function's own bytes are already back, so the client is not left patched. Unload the "
+            "other runtime (Reforged) before removing this hook."
+        )
 
     def _require(self, name: str) -> _InstalledHook:
         hook = self._hooks.get(name)

@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import struct
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -70,6 +70,9 @@ class PacketBridge(Protocol):
 
     @property
     def module_range(self) -> tuple[int, int]: ...
+
+    @property
+    def loaded_modules(self) -> Sequence[tuple[int, int]]: ...
 
     def write_data(self, offset: int, payload: bytes) -> int: ...
 
@@ -114,6 +117,28 @@ ENTRY_SIZE = 0xC
 #: count of stubs running right now, which is what :meth:`PacketHooks.remove` waits on.
 PACKET_POINTER_OFFSET = 0xF50
 PACKET_INFLIGHT_OFFSET = 0xF54
+
+
+def is_live_code(
+    address: int,
+    module_base: int,
+    module_size: int,
+    loaded_modules: Sequence[tuple[int, int]] = (),
+) -> bool:
+    """Whether a pointer is inside code that is loaded **right now**.
+
+    The client's own module is the ordinary answer. Another runtime's compiled handler is the other one: it
+    lives inside that runtime's own module image, which is what a loaded module's range covers — measured
+    live on 2026-10-01, header 132's handler was ``0x578F1ED3`` inside ``Py4GW.dll``.
+
+    What is **not** live is memory no module covers: that is where a controller that has died leaves its
+    own generated stub, and chaining to one means jumping into memory nobody owns, on the client's own
+    thread. The two are told apart by asking the module list, not by guessing from the address.
+    """
+
+    if module_base <= address < module_base + module_size:
+        return True
+    return any(base <= address < base + size for base, size in loaded_modules)
 
 
 def _read_uint32(access: WritableTarget, address: int) -> int:
@@ -332,17 +357,24 @@ class PacketHooks:
         because a replacement that did not land would leave the client running its own handler while
         this side believes it is watching.
 
-        **A handler that is not the client's own code is refused — or recovered, if it is this
-        project's own.** Native snapshots whatever the array holds and chains to it, which is safe in a
-        runtime that injected itself into a fresh process; a controller here can connect to a client
-        that outlived a previous controller, and a handler pointer left outside the client module by one
-        that died is a jump into freed memory — taken on the client's own thread, on the next packet of
-        that header. So each wanted header's handler is checked against the client's module before
-        anything is placed. A pointer that is **one of this project's own orphaned stubs** is repaired
-        instead: the original is read back out of the stub's own chained-original immediate
-        (:func:`original_from_stub`), the entry is put back, and the install carries on — which is the
-        same recovery ``ConnectedClient._prepare_target`` performs on a stale entry patch, applied to
-        the other kind of pointer this project replaces. Anything else is refused by name.
+        **A handler has to be live code — the client's own, or another runtime's inside a loaded module —
+        and anything else is refused, or recovered when it is this project's own.** Native snapshots
+        whatever the array holds and chains to it, which is safe in a runtime that injected itself into a
+        fresh process; a controller here can connect to a client that outlived a previous controller, and a
+        handler pointer left in memory no module covers is a jump into freed memory — taken on the client's
+        own thread, on the next packet of that header. So each wanted header's handler is checked before
+        anything is placed: inside the client's module is the ordinary case, and inside **a loaded module**
+        is another runtime's compiled handler, which is chaining the same way the entry hooks chain.
+
+        Measured live on 2026-10-01 with Reforged injected: header 132's entry held ``0x578F1ED3``, inside
+        ``Py4GW.dll`` (``0x578F0000 + 0xF94000``). Reforged's packet sniffer registers **all 488** headers
+        (``packet_sniffer.cpp:129-135``), so every header this project wants is one of its callbacks, and
+        refusing those entries would have made the merchant listener impossible on the very arrangement the
+        owner needs. A pointer that is **one of this project's own orphaned stubs** is repaired instead: the
+        original is read back out of the stub's own chained-original immediate
+        (:func:`original_from_stub`), the entry is put back, and the install carries on — which is the same
+        recovery ``ConnectedClient._prepare_target`` performs on a stale entry patch, applied to the other
+        kind of pointer this project replaces. Anything else is refused by name.
         """
 
         if self._stubs:
@@ -359,6 +391,7 @@ class PacketHooks:
 
         bridge = self._require_bridge()
         module_base, module_size = bridge.module_range
+        loaded_modules = bridge.loaded_modules
         self._pointer_address = bridge.write_data(PACKET_POINTER_OFFSET, bytes(4))
         self._inflight_address = bridge.write_data(PACKET_INFLIGHT_OFFSET, bytes(4))
         self._table = table
@@ -373,19 +406,19 @@ class PacketHooks:
                     raise RuntimeError(
                         f"header {header}'s entry at 0x{entry:08X} has no handler to chain to."
                     )
-                if not module_base <= original < module_base + module_size:
+                if not is_live_code(original, module_base, module_size, loaded_modules):
                     recovered = original_from_stub(access, original, module_base, module_size)
                     if not recovered:
                         raise RuntimeError(
                             f"header {header}'s entry at 0x{entry:08X} holds the handler "
-                            f"0x{original:08X}, which is outside the client module "
-                            f"(0x{module_base:08X}..0x{module_base + module_size:08X}), and it is not "
-                            "one of this project's own stubs, so the handler it replaced cannot be "
-                            "read back out of it. The client's own handlers are inside the module, so "
-                            "this is a pointer something else placed — and chaining to a controller "
-                            "that died would jump into memory it no longer owns. Nothing was "
-                            "replaced. `tools/restore_stoc_handlers.py` reports what it can prove "
-                            "about those entries; restarting the client is the other way."
+                            f"0x{original:08X}, which is in memory no loaded module covers "
+                            f"(the client is 0x{module_base:08X}..0x{module_base + module_size:08X}, and "
+                            f"{len(loaded_modules)} other module(s) were checked), and it is not one of "
+                            "this project's own stubs either, so the handler it replaced cannot be read "
+                            "back out of it. A controller that died leaves its stubs in exactly that "
+                            "memory, and chaining to one would jump into memory it no longer owns. "
+                            "Nothing was replaced. `tools/restore_stoc_handlers.py` reports what it can "
+                            "prove about those entries; restarting the client is the other way."
                         )
                     repaired_from = original
                     self._write_handler(

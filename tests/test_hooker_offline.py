@@ -38,12 +38,16 @@ from py4gw.game_thread.hooker import (
     POST_SLOTS_OFFSET,
     STATE_ENABLED_OFFSET,
     STATE_HITS_OFFSET,
+    STUB_HEAD_SIZE,
+    STUB_PROLOGUE,
     STATE_INFLIGHT_OFFSET,
     STATE_SIZE,
     Hooker,
     build_entry_patch,
     build_stub,
     build_trampoline,
+    is_generated_stub,
+    is_relative_jump,
     post_frame_size,
     post_state_size,
     stub_size,
@@ -627,6 +631,244 @@ class InFlightTests(unittest.TestCase):
         hooker.remove("entry", free_code=True)
 
         self.assertEqual(len(target.freed), 2, "the stub and the state; the trampoline stays mapped")
+
+
+class ChainedEntryTests(unittest.TestCase):
+    """Sitting on top of another runtime's entry jump: the arrangement that happens in practice.
+
+    Reforged is injected before this library, so the entry of each shared function already carries its
+    five-byte ``jmp rel32`` when this library connects (MinHook's own shape, ``hook.c:355``). Hooking
+    there means displacing **that** jump — one whole instruction, so a legal displaced span — and a
+    trampoline that replays the displaced bytes verbatim would re-encode nothing and land wherever that
+    offset happens to fall from the trampoline. So the jump is relocated to the same absolute destination
+    (``build_trampoline``, mirroring ``third_party/minhook/src/trampoline.c:180-209``), and the restore
+    writes the five bytes back so the other runtime keeps working.
+    """
+
+    #: Where the other runtime's jump goes. Any address will do: the hooker only encodes it, and the
+    #: execution test below gives it a real one.
+    FOREIGN_DESTINATION = 0x30000000
+
+    @classmethod
+    def foreign_jump(cls) -> bytes:
+        """Return the five bytes another runtime's entry patch has at ``TARGET``."""
+
+        return bytes((0xE9,)) + struct.pack(
+            "<I", (cls.FOREIGN_DESTINATION - (TARGET + 5)) & 0xFFFFFFFF
+        )
+
+    def test_a_displaced_jump_is_recognised_by_its_shape(self) -> None:
+        """Five bytes and a leading ``E9``; anything else is not this, whatever it contains."""
+
+        self.assertTrue(is_relative_jump(self.foreign_jump()))
+        self.assertFalse(is_relative_jump(ORIGINAL), "a prologue is replayed, not relocated")
+        self.assertFalse(is_relative_jump(self.foreign_jump() + b"\x90"))
+        self.assertFalse(
+            is_relative_jump(bytes((0xEB, 0x10))), "a short jump is not five bytes nor an E9"
+        )
+
+    def test_the_trampoline_jumps_to_the_same_absolute_destination(self) -> None:
+        """The relocated copy reaches where the original reached, from wherever it is put."""
+
+        first = build_trampoline(ALLOC_BASE, self.foreign_jump(), TARGET + 5)
+        second = build_trampoline(ALLOC_BASE + 0x1000, self.foreign_jump(), TARGET + 5)
+
+        self.assertEqual(len(first), 5, "an unconditional jump leaves nothing to resume at")
+        self.assertEqual(first[0], 0xE9)
+        for trampoline, address in ((first, ALLOC_BASE), (second, ALLOC_BASE + 0x1000)):
+            destination = (address + 5 + struct.unpack("<i", trampoline[1:5])[0]) & 0xFFFFFFFF
+            self.assertEqual(destination, self.FOREIGN_DESTINATION)
+        self.assertNotEqual(first, second, "the same target from two addresses is two encodings")
+
+    def test_a_prologue_without_a_jump_is_still_replayed_verbatim(self) -> None:
+        """The ordinary case is untouched: the displaced bytes, then a jump back."""
+
+        trampoline = build_trampoline(ALLOC_BASE, ORIGINAL, TARGET + len(ORIGINAL))
+
+        self.assertEqual(trampoline[: len(ORIGINAL)], ORIGINAL)
+        self.assertEqual(trampoline[len(ORIGINAL)], 0xE9)
+
+    def test_the_entry_gets_this_projects_patch_and_the_jump_comes_back(self) -> None:
+        """The round trip that leaves the other runtime exactly as it was."""
+
+        target = FakeTarget()
+        foreign = self.foreign_jump()
+        target.write(TARGET, foreign)
+        hooker = new_hooker(target)
+
+        hooker.install("entry", TARGET, foreign)
+
+        placed = target.entry()
+        self.assertEqual(placed[0], 0xE9)
+        self.assertNotEqual(placed[:5], foreign, "this library's own jump is at the entry now")
+        stub = sorted(target.allocated)[-1]
+        self.assertEqual(
+            (TARGET + 5 + struct.unpack("<i", placed[1:5])[0]) & 0xFFFFFFFF,
+            stub,
+            "and it lands on this library's stub",
+        )
+
+        hooker.remove("entry")
+
+        self.assertEqual(
+            target.at(TARGET, len(foreign)),
+            foreign,
+            "the other runtime's jump is back at the entry, byte for byte",
+        )
+        self.assertEqual(
+            target.at(TARGET + len(foreign), 4),
+            ORIGINAL[len(foreign) :],
+            "and the bytes the patch never covered are untouched",
+        )
+
+
+class RelocatedJumpExecutionTests(unittest.TestCase):
+    """The relocated jump is **executed**, because bytes that look right can still land wrong.
+
+    A trampoline holding the foreign entry patch's five bytes verbatim would be a valid-looking jump that
+    reaches ``destination - (trampoline_address - entry_address)`` — off by exactly the distance between
+    the two buffers, which on a real client is hundreds of megabytes away from anything. This test gives
+    the destination a real function and calls the trampoline, so "reaches the same code" is measured
+    rather than argued. It needs a 32-bit interpreter, like the rig above: the addresses have to fit the
+    four bytes a ``jmp rel32`` encodes.
+    """
+
+    MARKER = 0x1234ABCD
+
+    def setUp(self) -> None:
+        self.allocations: list[int] = []
+        self.addCleanup(self._release_all)
+
+    def _allocate(self, code: bytes) -> int:
+        address = kernel32.VirtualAlloc(
+            None, 0x1000, MEM_COMMIT_RESERVE, PAGE_EXECUTE_READWRITE
+        )
+        if not address or address > 0xFFFFFFFF:
+            self.skipTest("this test needs the 32-bit interpreter the project is run with")
+        ctypes.memmove(address, code, len(code))
+        self.allocations.append(int(address))
+        return int(address)
+
+    def _release_all(self) -> None:
+        for address in self.allocations:
+            kernel32.VirtualFree(ctypes.c_void_p(address), 0, MEM_RELEASE)
+
+    def test_the_trampoline_reaches_the_code_the_entry_jump_named(self) -> None:
+        """``mov eax, MARKER; ret`` at the destination, reached through the relocated jump."""
+
+        destination = self._allocate(
+            struct.pack("<BI", 0xB8, self.MARKER) + b"\xc3"
+        )
+        entry = destination + 0x200
+        foreign = bytes((0xE9,)) + struct.pack(
+            "<I", (destination - (entry + 5)) & 0xFFFFFFFF
+        )
+        trampoline_code = build_trampoline(0, foreign, entry + len(foreign))
+        trampoline = self._allocate(trampoline_code)
+        # The trampoline's own address is what its jump was encoded against, so it is built once more
+        # now that the address is known.
+        ctypes.memmove(trampoline, build_trampoline(trampoline, foreign, entry + len(foreign)), 5)
+
+        result = ctypes.CFUNCTYPE(ctypes.c_uint32)(trampoline)()
+
+        self.assertEqual(result, self.MARKER)
+
+    def test_the_verbatim_bytes_would_not_have_reached_it(self) -> None:
+        """Which is the whole reason for relocating: the copied jump lands elsewhere."""
+
+        destination = self._allocate(struct.pack("<BI", 0xB8, self.MARKER) + b"\xc3")
+        entry = destination + 0x200
+        foreign = bytes((0xE9,)) + struct.pack(
+            "<I", (destination - (entry + 5)) & 0xFFFFFFFF
+        )
+        trampoline = self._allocate(foreign + b"\x00")
+
+        reached = (trampoline + 5 + struct.unpack("<i", foreign[1:5])[0]) & 0xFFFFFFFF
+
+        self.assertNotEqual(
+            reached, destination, "the copied displacement names a different address entirely"
+        )
+        self.assertNotEqual(reached, entry)
+
+
+class ForeignCodeInGeneratedCodeTests(unittest.TestCase):
+    """A runtime that hooks *this project's stub*: what the removal does about it.
+
+    Reforged Native hooks the client through MinHook, and ``HookBase::CreateHook`` resolves a target
+    through a near branch before hooking it (``base/hooker.cpp:78-80`` follows ``base/scanner.cpp``'s
+    ``FunctionFromNearCall``). When this library's entry patch is already at the client function, that
+    branch is this library's own ``jmp``, so MinHook places its hook on **this stub** — its own
+    five-byte jump at the stub's first byte, and a trampoline that jumps back into the stub past them
+    (``third_party/minhook/src/hook.c:355``, ``trampoline.c:281-282``). Both hooks then run on every
+    call, which is what was measured live on 2026-10-01.
+
+    What the stub must not do is get freed underneath that: MinHook writes its saved bytes back with a
+    blind ``memcpy`` and frees its trampolines wholesale (``hook.c:381-386``, ``buffer.c:74-85``), so
+    the stub it patched and its trampoline's return address are both inside this library's allocation.
+    The tests below drive exactly that state — a foreign jump written over the stub's head — and check
+    that the removal reports it and frees nothing, and that it goes back to freeing normally once the
+    foreign patch is gone.
+    """
+
+    @staticmethod
+    def stub_address(target: FakeTarget) -> int:
+        """Return where the hooker put the stub: the allocation that begins with its prologue."""
+
+        for address in sorted(target.allocated):
+            if is_generated_stub(target.at(address, len(STUB_PROLOGUE))):
+                return address
+        raise AssertionError("no allocation begins with the generated stub's prologue")
+
+    def test_the_stub_begins_with_the_prologue_the_projects_own_code_is_recognised_by(self) -> None:
+        """``pushfd``, ``pushad``, ``mov eax, imm32`` — both stub forms, one signature."""
+
+        target = FakeTarget()
+        hooker = new_hooker(target)
+        hooker.install("entry", TARGET, ORIGINAL)
+
+        head = target.at(self.stub_address(target), len(STUB_PROLOGUE))
+
+        self.assertEqual(head, STUB_PROLOGUE)
+        self.assertEqual(head, bytes.fromhex("9C 60 B8"))
+        self.assertTrue(is_generated_stub(head))
+        self.assertFalse(is_generated_stub(bytes.fromhex("E9 00 00 00 00")), "a foreign entry patch")
+
+    def test_a_foreign_patch_inside_the_stub_is_reported_and_nothing_is_freed(self) -> None:
+        """The refusal names the stub, restores the entry, and leaves every allocation mapped."""
+
+        target = FakeTarget()
+        hooker = new_hooker(target)
+        hooker.install("entry", TARGET, ORIGINAL)
+        stub = self.stub_address(target)
+        # What MinHook writes there: a five-byte jump to its relay, in its own module.
+        foreign = bytes((0xE9,)) + struct.pack("<I", 0x70000000 - (stub + 5))
+        target.write(stub, foreign)
+
+        with self.assertRaises(RuntimeError) as caught:
+            hooker.remove("entry", free_code=True)
+
+        self.assertIn(f"0x{stub:08X}", str(caught.exception))
+        self.assertIn("Nothing was freed", str(caught.exception))
+        self.assertIn("Unload the other runtime", str(caught.exception))
+        self.assertEqual(target.freed, [], "the stub the foreign patch lives in stays mapped")
+        self.assertEqual(target.entry(), ORIGINAL, "and the client's function has its own bytes back")
+
+    def test_the_stub_is_freed_again_once_the_foreign_patch_is_gone(self) -> None:
+        """Which is what makes "the other runtime comes out first" a clean teardown and not a leak."""
+
+        target = FakeTarget()
+        hooker = new_hooker(target)
+        hooker.install("entry", TARGET, ORIGINAL)
+        stub = self.stub_address(target)
+        head = target.at(stub, STUB_HEAD_SIZE)
+
+        # MinHook's own disable writes its backup — the stub's real head — straight back.
+        target.write(stub, bytes((0xE9,)) + struct.pack("<I", 0x70000000 - (stub + 5)))
+        target.write(stub, head)
+
+        hooker.remove("entry", free_code=True)
+
+        self.assertEqual(len(target.freed), 2, "nothing is left behind once the stub is ours again")
 
 
 class _PostCallRig:

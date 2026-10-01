@@ -1,0 +1,21 @@
+=== resolve check: started Thu 10/01/2026 11:27:25.86 === 
+pid 23836   module base 0x00f50000 + 0xf4c000
+
+=== resolved names, LIVE ===
+  ui.send_ui_message_func            ok   0x011845f0 (rva 0x2345f0) live 55 8b ec 8b 45 08 83 f8 56 73 16 68 3d 0f 00 00
+        on-disk 55 8b ec 8b 45 08 83 f8 56 73 16 68 3d 0f 00 00   (same)
+        >>> matches the expected send_ui_message entry
+  ui.send_frame_ui_message_func      ok   0x0119d190 (rva 0x24d190) live 55 8b ec 56 8b 75 08 57 8b f9 83 fe 09 75 0c 68
+        on-disk 55 8b ec 56 8b 75 08 57 8b f9 83 fe 09 75 0c 68   (same)
+        >>> NOT the expected entry (expected 55 8b ec 8b 45 08 83 f8 56)
+  ui.load_settings_func              ok   0x00febd60 (rva 0x9bd60) live 55 8b ec 83 7d 08 00 75 1a 83 7d 0c 00 74 14 68
+        on-disk 55 8b ec 83 7d 08 00 75 1a 83 7d 0c 00 74 14 68   (same)
+        >>> NOT the expected entry (expected 55 8b ec 8b 45 08 83 f8 56)
+  ui.frame_array_addr                ok   0x0174b9ec (rva 0x7fb9ec) live 48 5e 72 2c 00 05 00 00 c5 04 00 00 80 00 00 00
+        >>> NOT the expected entry (expected 55 8b ec 8b 45 08 83 f8 56)
+
+=== pattern 'ui.send_ui_message' ===
+  literal Pattern(data=b'\xb9\x00\x00\x00\x00\xe8\x00\x00\x00\x00]\xc3\x89E\x08', mask='x????x????xxxxx', offset=0)  offset 0x0  section .text
+  1 match site(s), in scan order (find() takes the FIRST):
+    match 0x01184605 -> to_function_start 0x011845f0  55 8b ec 8b 45 08 83 f8 56 73 16 68 3d 0f 00 00
+=== resolve check: exit=0 === 

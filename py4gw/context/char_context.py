@@ -179,20 +179,21 @@ class CharContextStruct(TargetStruct):
         ("host", c_uint8 * 0x18),
         ("token2", c_uint32),
         ("h01BC", c_uint32 * 27),
+        ("h0228", c_uint32),
         ("district_number", c_int32),
         ("language", c_uint32),
         ("observe_map_id", c_uint32),
         ("current_map_id", c_uint32),
         ("observe_map_type", c_uint32),
         ("current_map_type", c_uint32),
-        ("h0240", c_uint32 * 5),
+        ("h0244", c_uint32 * 5),
         ("observer_matches_array", GWArray),
-        ("h0264", c_uint32 * 17),
+        ("h0268", c_uint32 * 17),
         ("player_flags", c_uint32),
         ("player_number", c_uint32),
-        ("h02B0", c_uint32 * 40),
+        ("h02B4", c_uint32 * 42),
         ("progress_bar_ptr", c_uint32),
-        ("h0354", c_uint32 * 29),
+        ("h0360", c_uint32 * 28),
         ("player_email_ptr", c_uint16 * 0x40),
     ]
 
@@ -306,7 +307,7 @@ class CharContextStruct(TargetStruct):
 
 
 assert ctypes.sizeof(ProgressBar) == 0x2C
-assert ctypes.sizeof(CharContextStruct) == 0x448
+assert ctypes.sizeof(CharContextStruct) == 0x450
 
 
 class CharContext:

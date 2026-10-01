@@ -38,6 +38,7 @@ from typing import Any
 from py4gw.context.acc_agent_context import AccAgentContext
 from py4gw.context.agent_array import AgentArray
 from py4gw.context.char_context import CharContext
+from py4gw.context.cinematic_context import Cinematic
 from py4gw.context.game_context import GameContext
 from py4gw.context.gadget_context import GadgetContext
 from py4gw.context.instance_info_context import InstanceInfo
@@ -208,6 +209,10 @@ class _LiveClient:
         self._player_agent_id.initialize()
         self._server_region = ServerRegion(reader, scanner, patterns)
         self._server_region.initialize()
+        # ``Map.IsInCinematic`` reads this facade (``Checks.Map.MapValid`` calls it), and the pathing
+        # probe's navmesh build goes through that check — so the stand-in offers what
+        # ``ConnectedClient`` offers, under the same name.
+        self._cinematic = Cinematic(reader, self._game_context)
 
     def resolves(self, name: str) -> bool:
         return self._patterns.resolve(name, self._scanner).ok
@@ -222,6 +227,16 @@ class _LiveClient:
 
     def read_party_context(self) -> Any:
         return self._party_context.read()
+
+    def read_map_context(
+        self,
+        max_spawn_entries: int = 2048,
+        max_pathing_maps: int = 32,
+    ) -> Any:
+        """The map context read, which the pathing cache inputs reach for — same arguments as
+        ``ConnectedClient.read_map_context``."""
+
+        return self._map_context.read(max_spawn_entries, max_pathing_maps)
 
     def read_world_context(self) -> Any:
         return self._world_context.read()
@@ -243,6 +258,12 @@ class _LiveClient:
         """The map context facade, which ``Map.IsMapReady`` reaches for."""
 
         return self._map_context
+
+    @property
+    def cinematic(self) -> Any:
+        """The cinematic facade, which ``Map.IsInCinematic`` reaches for."""
+
+        return self._cinematic
 
     @property
     def context(self) -> Any:

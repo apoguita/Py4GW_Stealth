@@ -1,0 +1,11 @@
+=== travel-to-GH test: started Thu 10/01/2026 11:35:50.81 === 
+  enum says UIMessage.kGuildHall = 0x10000183
+  this test sends the LITERAL 0x10000183  (wparam 0x021b3f84)
+  map before: 55
+
+--- ONE send: SendUIMessageRaw(0x10000183, 0x021b3f84, 0) ---
+    returned: True
+    map after 1.0s: 5
+
+RESULT: 0x10000183 IS the travel-to-guild-hall message (55 -> 5 in 1.0s).
+=== exit=0 === 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import struct
+from dataclasses import dataclass
 from typing import Any
 
 from .context import (
@@ -79,6 +80,12 @@ from .win32 import Win32
 from .win32.write_access import WriteAccess
 from .game_thread.bridge import Bridge
 from .game_thread.callbacks import Callbacks, EventListener
+from .game_thread.hooker import (
+    MINIMUM_PATCH,
+    STUB_PROLOGUE,
+    is_generated_stub,
+    is_relative_jump,
+)
 from .game_thread.patcher import Patcher
 from . import chat
 from . import dialog
@@ -130,6 +137,29 @@ _RENDER_HOOK_BYTES = bytes.fromhex("55 8B EC 83 EC 48")
 
 #: ``jmp rel32``, the first byte of an entry patch.
 _JMP_REL32 = 0xE9
+
+#: How far ahead of a resolver's answer the install looks for an entry jump another runtime placed on
+#: the function the resolver walked past. The two measured on 2026-10-01 were 0xE0 and 0x90 bytes ahead
+#: of the answer, and a client function is far shorter than this window (``_entry_jump_ahead``).
+_ENTRY_WINDOW = 0x1000
+
+
+@dataclass(frozen=True)
+class _Placement:
+    """Where one hooked function is patched, and what the patch replaces.
+
+    ``displaced`` is the span the entry patch overwrites, and the restore writes exactly those bytes back.
+    That is what lets this library sit **on top of another runtime's entry jump** without taking it away:
+    the other runtime's five-byte jump *is* the displaced span, so it returns to the entry when this
+    library disconnects, and the trampoline carries a relocated copy of it for as long as this library is
+    connected (``hooker.build_trampoline``).
+    """
+
+    name: str
+    target: int
+    displaced: bytes
+    #: Whether this patch went on top of another runtime's entry jump rather than on the client's own bytes.
+    chained: bool
 
 #: ``UIMessage::kDialogBody`` (``constants/ui.h:75``) and ``kDialogButton``
 #: (``constants/ui.h:74``): the two messages the dialog module's state comes from.
@@ -214,6 +244,10 @@ class ConnectedClient:
         #: ``to_function_start`` would walk back past the patched prologue to the function before it
         #: (``docs/RESEARCH.md``, 2026-09-26).
         self._ui_message_address = 0
+        #: What the install found at each hooked function: where it patched, what it replaced, and whether
+        #: that was another runtime's entry jump. Read back by :attr:`chained_hooks`.
+        self._placements: dict[str, _Placement] = {}
+        self._chained_hooks: tuple[str, ...] = ()
 
         # Elevation is asserted here, once, rather than left to surface later as a
         # bare "Windows error 5" from the first operation that needs it. The pid is
@@ -414,41 +448,68 @@ class ConnectedClient:
         # dialog's state, so its watch list — the levels native's handler stores — comes from there.
         from . import effect as effect_module
 
-        hook_target = self._resolve(_GAME_THREAD_HOOK)
-        observe_target = self._resolve(_GAME_THREAD_OBSERVE)
-        effects_target = self._resolve(_EFFECTS_HOOK)
-        render_target = self._resolve(_RENDER_HOOK)
-        # Held from here on: this is the address resolved *before* the entry is patched, which is
-        # what a caller of :meth:`send_ui_message` must use afterwards.
-        self._ui_message_address = observe_target
+        hook_target, hook_anchor = self._resolve_placement(_GAME_THREAD_HOOK)
+        observe_target, observe_anchor = self._resolve_placement(_GAME_THREAD_OBSERVE)
+        effects_target, effects_anchor = self._resolve_placement(_EFFECTS_HOOK)
+        render_target, render_anchor = self._resolve_placement(_RENDER_HOOK)
 
         access = WriteAccess(self._pid)
         try:
             self._suspended_threads = self._count_suspended_threads(access)
-            for name, address, expected in (
-                (_GAME_THREAD_HOOK, hook_target, _GAME_THREAD_HOOK_BYTES),
-                (_GAME_THREAD_OBSERVE, observe_target, _GAME_THREAD_OBSERVE_BYTES),
-                (_EFFECTS_HOOK, effects_target, _EFFECTS_HOOK_BYTES),
-                (_RENDER_HOOK, render_target, _RENDER_HOOK_BYTES),
-            ):
-                self._prepare_target(access, name, address, expected)
+            # One placement per hooked function: where the patch goes, and what it replaces. On a client
+            # that already has Reforged injected, three of the four answers are not the resolver's
+            # address — and the bytes they replace are Reforged's own entry jump, which the restore puts
+            # back. See :meth:`_prepare_target`.
+            placements = {
+                name: self._prepare_target(access, name, address, expected, anchor)
+                for name, address, expected, anchor in (
+                    (_GAME_THREAD_HOOK, hook_target, _GAME_THREAD_HOOK_BYTES, hook_anchor),
+                    (
+                        _GAME_THREAD_OBSERVE,
+                        observe_target,
+                        _GAME_THREAD_OBSERVE_BYTES,
+                        observe_anchor,
+                    ),
+                    (_EFFECTS_HOOK, effects_target, _EFFECTS_HOOK_BYTES, effects_anchor),
+                    (_RENDER_HOOK, render_target, _RENDER_HOOK_BYTES, render_anchor),
+                )
+            }
+            # Held from here on: this is the address resolved *before* the entry is patched, which is
+            # what a caller of :meth:`send_ui_message` must use afterwards. A chained placement moves the
+            # target, so it is taken from the placement rather than from the resolver's answer.
+            self._ui_message_address = placements[_GAME_THREAD_OBSERVE].target
 
             bridge = Bridge(access, self._pid)
             bridge.install(
-                hook_target,
-                _GAME_THREAD_HOOK_BYTES,
+                placements[_GAME_THREAD_HOOK].target,
+                placements[_GAME_THREAD_HOOK].displaced,
                 calls={},
                 module_base=self._module_base,
                 module_size=self._module_size,
+                loaded_modules=self._loaded_module_ranges(),
                 watch=_WATCHED_MESSAGES,
-                observing=(observe_target, _GAME_THREAD_OBSERVE_BYTES),
-                effects_observing=(effects_target, _EFFECTS_HOOK_BYTES),
+                observing=(
+                    placements[_GAME_THREAD_OBSERVE].target,
+                    placements[_GAME_THREAD_OBSERVE].displaced,
+                ),
+                effects_observing=(
+                    placements[_EFFECTS_HOOK].target,
+                    placements[_EFFECTS_HOOK].displaced,
+                ),
                 effects_watch=effect_module._WATCHED_INTENSITIES,
-                capturing=(render_target, _RENDER_HOOK_BYTES),
+                capturing=(
+                    placements[_RENDER_HOOK].target,
+                    placements[_RENDER_HOOK].displaced,
+                ),
             )
         except BaseException:
             access.close()
             raise
+
+        self._chained_hooks = tuple(
+            name for name, placement in placements.items() if placement.chained
+        )
+        self._placements = placements
 
         self._access = access
         self._bridge = bridge
@@ -532,6 +593,26 @@ class ConnectedClient:
             _current_client = None
             raise
 
+    def _loaded_module_ranges(self) -> tuple[tuple[int, int], ...]:
+        """Return every module loaded in the client, as ``(base, size)``.
+
+        The bridge hands these to the packet hooks, which have to tell another runtime's compiled handler
+        from a controller's own generated stub — both sit outside the client's module, and only one of them
+        is code that is still there. A client whose modules cannot be enumerated answers an empty tuple,
+        which makes the packet hooks refuse a foreign handler rather than chain to it, so the failure falls
+        on the safe side of that question.
+        """
+
+        try:
+            modules = self._win32.list_modules(self._pid)
+        except OSError:
+            return ()
+        return tuple(
+            (int(module["base_address"]), int(module["size"]))
+            for module in modules
+            if module["base_address"] and module["size"]
+        )
+
     def _capture_target(self, event: EventRecord) -> None:
         """Note the last target the client announced.
 
@@ -571,66 +652,288 @@ class ConnectedClient:
         return self._patterns.resolve(name, self._scanner).ok
 
     def _prepare_target(
-        self, access: WriteAccess, name: str, address: int, expected: bytes
-    ) -> None:
-        """Check a target's entry bytes, repairing this library's own stale patch.
+        self,
+        access: WriteAccess,
+        name: str,
+        address: int,
+        expected: bytes,
+        anchor: int | None = None,
+    ) -> _Placement:
+        """Return where this hooked function is patched, and what the patch replaces.
 
-        The patch is a relative jump; if the bytes at the address are one whose destination is
-        outside the client's module, it is ours from a controller that died, and the known original
-        bytes go back. Anything else is refused: this does not guess at another tool's patch.
+        Four answers, in this order, and the first one that applies is the answer:
 
-        **The second case is this project's recovery, and it used to live in the resolver.**
-        ``Scanner::ToFunctionStart`` walks back to a prologue (``scanner.cpp:205-210``), so an entry
-        this library patched is *invisible* to it: the prologue is gone, and the walk answers the
-        function before it. The port used to paper over that inside ``to_function_start`` by also
-        treating a ``jmp`` that leaves the module as an entry — an inference that cannot be checked
-        without decoding, and that answered an address in the middle of an instruction for
-        ``chat.send_chat_func`` on this build, which is the crash of 2026-09-25
-        (``tools/resolve_offline.py``). The walk is the source's again; the recovery is here, where
-        the address's expected bytes are known, so the restore can be *verified* rather than
-        guessed.
+        1. **The entry holds the bytes this catalog declares** — the ordinary case. The placement is the
+           address the resolver gave, and the patch replaces those bytes, which the caller then restores.
+        2. **The entry holds this library's own stale patch**, from a controller that died: the jump lands
+           on code that begins with the stub prologue (:func:`hooker.is_generated_stub`). The client's own
+           bytes go back through the patcher, and the placement is the ordinary one.
+        3. **The entry holds another runtime's entry patch, and it is verifiably the declared function** —
+           a five-byte ``jmp rel32`` (MinHook's own shape, ``hook.c:355``). The placement is **on top of
+           that jump**: the patch replaces the five bytes, and the trampoline *relocates* the jump it
+           displaced (``hooker.build_trampoline``) so the other runtime keeps running underneath. This is
+           the arrangement that matters, because Reforged is injected before this library, not after. The
+           other runtime's jump goes back on disconnect, byte for byte, because
+           :class:`~py4gw.game_thread.patcher.Patcher` restores exactly what it displaced.
+        4. **The resolver answered the function *before* the declared one**, because another runtime's
+           patch removed the ``55 8B EC`` prologue that ``to_function_start`` looks for. The window ahead
+           is walked for an entry jump, bounded by ``anchor`` — the address the pattern matched, which is
+           *inside* the declared function — and the candidate has to carry the declared entry's tail.
+
+        **What makes a jump "verifiably the declared function" differs by how the address was obtained, and
+        the resolver's own steps decide it** (:meth:`_resolve_placement`):
+
+        - ``game_thread``'s and ``effects``' resolvers are one ``scan`` with a fixed offset and no
+          walk-back, so their answer is the catalog's own answer: a jump *at* it is on the declared
+          function by construction, and no tail is needed.
+        - ``ui``'s and ``render``'s end in ``to_function_start``, so their answer may be the function
+          before; there the walk supplies the address, the anchor bounds it, and the tail from offset five
+          is the second fact — four bytes for the nine-byte entries, one for the six-byte ones, which is
+          why the bound matters as much as the tail.
+
+        **It refuses rather than guesses**, and a refusal writes nothing: a jump with no tail in a walked
+        answer, a jump outside the anchor, or a foreign patch of another shape (relocating it needs a
+        decoder this module deliberately does not have).
+
+        **The resolver's recovery is this project's own, and it used to live in the resolver.**
+        ``Scanner::ToFunctionStart`` walks back to a prologue (``scanner.cpp:205-210``), so an entry this
+        library patched is *invisible* to it: the prologue is gone, and the walk answers the function
+        before it. The port used to paper over that inside ``to_function_start`` by also treating a ``jmp``
+        that leaves the module as an entry — an inference that cannot be checked without decoding, and that
+        answered an address in the middle of an instruction for ``chat.send_chat_func`` on this build,
+        which is the crash of 2026-09-25 (``tools/resolve_offline.py``). The walk is the source's again;
+        the recovery is here, where the address's expected bytes are known, so the restore can be
+        *verified* rather than guessed.
         """
 
         current = access.read(address, len(expected))
         if current == expected:
-            return
+            return _Placement(name, address, expected, chained=False)
 
-        if current[0] == _JMP_REL32 and self._leaves_the_module(address, current):
+        if current[0] == _JMP_REL32 and self._is_our_stale_patch(access, address, current):
             Patcher(access, self._pid).patch(address, current, expected)
-            return
+            return _Placement(name, address, expected, chained=False)
 
-        stale = self._stale_patch_before(access, address, len(expected))
-        if stale is not None:
-            Patcher(access, self._pid).patch(stale, access.read(stale, len(expected)), expected)
-            return
+        if self._is_foreign_patch_on_the_declared_function(
+            current, expected, anchor, found_by_the_walk=False
+        ):
+            return _Placement(name, address, current[:MINIMUM_PATCH], chained=True)
+
+        # The resolver may have answered the function *before* the one this catalog declares, because its
+        # walk-back looks for a prologue another runtime's patch has replaced. The window ahead is walked
+        # for an entry jump, bounded by the address the pattern matched, and the landing says whose it is.
+        ahead = self._entry_jump_ahead(
+            access, address, len(expected), limit=anchor or 0
+        )
+        if ahead is not None:
+            patch_address, is_ours = ahead
+            patch_head = access.read(patch_address, len(expected))
+            if is_ours:
+                Patcher(access, self._pid).patch(patch_address, patch_head, expected)
+                return _Placement(name, patch_address, expected, chained=False)
+            if self._is_foreign_patch_on_the_declared_function(
+                patch_head, expected, anchor, found_by_the_walk=True
+            ):
+                return _Placement(
+                    name, patch_address, patch_head[:MINIMUM_PATCH], chained=True
+                )
+            raise RuntimeError(
+                self._foreign_patch_refusal(
+                    name, patch_address, patch_head, expected, resolved_at=address
+                )
+            )
+
+        if current[0] == _JMP_REL32:
+            raise RuntimeError(
+                self._foreign_patch_refusal(name, address, current, expected)
+            )
 
         raise RuntimeError(
-            f"pid {self._pid}: {name} at 0x{address:08X} starts with "
-            f"{current.hex(' ')}, not {expected.hex(' ')}, and that is not a jump "
-            "out of the module. Refusing to patch it."
+            f"pid {self._pid}: {name} at 0x{address:08X} starts with {current.hex(' ')}, not "
+            f"{expected.hex(' ')}, and no entry jump was found in the {_ENTRY_WINDOW:#x} bytes "
+            "ahead of it either, so this address does not hold the function this build's catalog "
+            "declares and the resolver's walk-back did not answer one either. Nothing was written."
         )
 
+    def _resolve_placement(self, name: str) -> tuple[int, int | None]:
+        """Return an address a name resolves to, and the address its resolver walked back from.
+
+        The second value is ``None`` when the resolver's steps do **not** end in ``to_function_start`` —
+        then the address is the catalog's own answer, computed from a pattern's own offset. When they do,
+        the pattern's matched address is *inside* the declared function and the answer is somewhere before
+        it, which is exactly what makes the returned address a bound on where the entry can be.
+
+        Why this matters live: with Reforged injected, ``ui.send_ui_message_func`` resolved to
+        ``0x01184510`` and ``render.end_scene_func`` to ``0x012202C0``, while the declared functions are
+        ``0x011845F0`` and ``0x01220350`` — the walk-back had answered the function before each, because
+        the prologue it looks for was replaced by Reforged's own entry patch.
+        """
+
+        result = self._patterns.resolve(name, self._scanner)
+        if not result.ok:
+            raise RuntimeError(
+                f"pid {self._pid}: {name} did not resolve: {result.message}"
+            )
+        walked_back_from: int | None = None
+        for step in result.trace:
+            if step.operation == "to_function_start":
+                # The last such step wins: its input is what the pattern matched, and its output is the
+                # answer this project is being handed.
+                walked_back_from = int(step.input_value)
+        return int(result.value), walked_back_from
+
+    def _is_foreign_patch_on_the_declared_function(
+        self,
+        head: bytes,
+        expected: bytes,
+        anchor: int | None,
+        found_by_the_walk: bool,
+    ) -> bool:
+        """Whether a jump at an entry is another runtime's patch **on the function this catalog declares**.
+
+        The address's provenance decides how much the bytes have to say:
+
+        - found in place, with no walk-back in the resolver (``anchor is None``): the address is the
+          catalog's own answer, so a five-byte ``jmp rel32`` there is a hook on the declared function and
+          the tail adds nothing — ``game_thread`` and ``effects`` are this shape, and both of them resolve
+          to their patched entry on the measured client;
+        - found in place with a walk-back, or found ahead of the answer by the walk: the tail from offset
+          five has to be the declared entry's own tail, which is what rules out a jump that happens to sit
+          at an address the walk reached. With ``anchor`` set the walk also never looks past the address
+          the pattern matched, so a one-byte tail (a six-byte entry) is a second fact rather than the only
+          one.
+        """
+
+        if not is_relative_jump(head[:MINIMUM_PATCH]):
+            return False
+        if anchor is None and not found_by_the_walk:
+            return True
+        return self._jump_covers_part_of_declared_entry(head, expected)
+
+    def _foreign_patch_refusal(
+        self,
+        name: str,
+        patch_address: int,
+        head: bytes,
+        expected: bytes,
+        resolved_at: int = 0,
+    ) -> str:
+        """Describe a patch this library will not place itself on, and refuse to write over it.
+
+        Everything in the message is read from the client, so it says what was observed rather than what
+        was assumed: the address that carries the patch, where its jump lands, and — when the resolver
+        answered some other address — that the walk-back is why. It is reached only when the placement
+        rules above do not apply: the bytes after the jump do not match the catalog's entry, so this
+        library cannot tell which function it would be patching, or the patch is not a shape whose
+        relocation it can do.
+        """
+
+        landing = (patch_address + 5 + struct.unpack_from("<i", head, 1)[0]) & 0xFFFFFFFF
+        where = ""
+        if resolved_at and resolved_at != patch_address:
+            where = (
+                f" (the resolver answered 0x{resolved_at:08X}, the function before it, because the "
+                "prologue its walk-back looks for is gone)"
+            )
+        return (
+            f"pid {self._pid}: {name}: the first bytes at 0x{patch_address:08X}{where} are another "
+            f"runtime's entry jump to 0x{landing:08X}, and the bytes that follow it do not match this "
+            "catalog's declared entry, so this library cannot tell which function that jump is on and "
+            "will not write over it. Nothing was written. Unload the other runtime (Reforged) before "
+            "connecting, or check this build's catalog against the client."
+        )
+
+    def _jump_covers_part_of_declared_entry(self, head: bytes, expected: bytes) -> bool:
+        """Whether ``head`` is a jump followed by the rest of the entry this catalog declares.
+
+        MinHook writes exactly five bytes at an entry (``third_party/minhook/src/hook.c:355``, its
+        ``sizeof(JMP_REL)``), so a function hooked that way still shows the declared entry's own bytes
+        from offset five on. That is checkable without decoding an instruction, and it is evidence about
+        *which* function carries the patch.
+        """
+
+        return (
+            len(expected) > 5
+            and head[:1] == bytes((_JMP_REL32,))
+            and head[5 : len(expected)] == expected[5:]
+        )
+
+    def _is_our_stale_patch(self, access: WriteAccess, address: int, head: bytes) -> bool:
+        """Whether the ``jmp rel32`` at ``address`` is this library's own, from a controller that died.
+
+        **"It leaves the module" was never proof, and the injected Reforged runtime is the
+        counterexample.** Reforged Native is a DLL that hooks the same client functions this library
+        hooks, through MinHook; its detour and the relay its entry patch jumps to live in *its* module,
+        which is outside ``Gw.exe``'s — so by the old test a live foreign hook and a stale patch of
+        ours looked identical, and the repair below would write the client's original bytes over the
+        other runtime's hook. It would not crash anything, it would silently stop that runtime's
+        callbacks while it still believed it was installed, which is the failure this method exists to
+        prevent. See ``docs/NATIVE_EXECUTION_PLAN.md``, "Coexisting with the injected Reforged
+        runtime".
+
+        What *is* evidence is where the jump lands. Every stub this library places at a client
+        function's entry is emitted by :mod:`py4gw.game_thread.hooker` and begins with the same three
+        bytes — ``pushfd``, ``pushad``, ``mov eax, imm32`` (``hooker.STUB_PROLOGUE``) — because both
+        stub forms do. A detour compiled into another module does not begin that way, and MinHook's own
+        entry patch begins with a bare ``jmp rel32``, so the byte at the destination is not the first
+        byte of one of our stubs either. A destination that does not read back as this library's code
+        is refused by the caller rather than repaired.
+        """
+
+        destination = (address + 5 + struct.unpack_from("<i", head, 1)[0]) & 0xFFFFFFFF
+        try:
+            found = access.read(destination, len(STUB_PROLOGUE))
+        except OSError:
+            return False
+        return is_generated_stub(found)
+
     def _leaves_the_module(self, address: int, head: bytes) -> bool:
-        """Whether the ``jmp rel32`` at ``address`` lands outside the client's module."""
+        """Whether the ``jmp rel32`` at ``address`` lands outside the client's module.
+
+        This is no longer what decides whether a patch is ours — :meth:`_is_our_stale_patch` is — but
+        the stale-patch walk still uses it to pick its candidates, so it stays.
+        """
 
         destination = (address + 5 + struct.unpack_from("<i", head, 1)[0]) & 0xFFFFFFFF
         return not (
             self._module_base <= destination < self._module_base + self._module_size
         )
 
-    def _stale_patch_before(
-        self, access: WriteAccess, address: int, size: int, window: int = 0x1000
-    ) -> int | None:
-        """The leftover patch this library left at a target the resolver walked past.
+    def _entry_jump_ahead(
+        self,
+        access: WriteAccess,
+        address: int,
+        size: int,
+        window: int = _ENTRY_WINDOW,
+        limit: int = 0,
+    ) -> tuple[int, bool] | None:
+        """Find the entry jump the resolver's walk-back hid, and say whose it is.
 
-        A killed controller's patch is a ``jmp rel32`` whose destination points at the block that
-        died, so it leaves the module — and after ``ToFunctionStart`` has answered the function
-        *before* the target, that jump is ahead of the answer, not behind it. This looks for it
-        there, and the caller verifies the restore by writing the bytes it expects at the address
-        it finds.
+        ``Scanner::ToFunctionStart`` walks back to a ``55 8B EC`` prologue (``scanner.cpp:205-210``), so
+        when anything at all has replaced a function's first bytes the walk answers the function
+        **before** it. That is this project's own stale patch — the case this walk was written for — and
+        it is equally what another runtime's entry patch does. Measured live on 2026-10-01 against a
+        client with Reforged injected: ``ui.send_ui_message_func`` was answered as ``0x1184510``, whose
+        bytes are a plain prologue, while the declared function is ``0x11845F0`` — ``E9 36 A8 77 56``
+        followed by ``08 83 F8 56``, which is the tail of the declared entry — and
+        ``render.end_scene_func`` likewise answered ``0x12202C0`` where the declared function is
+        ``0x1220350``. Both jumps land in ``Py4GW.dll``.
+
+        **"Leaves the module" selects candidates; it does not decide.** Ordinary control flow inside a
+        function is a jump too, and one that lands inside ``Gw.exe`` is not an entry patch — the two
+        measured clients' functions are full of those. So a candidate has to leave the module to be
+        considered at all, and the caller then asks :meth:`_is_our_stale_patch` whose code it lands on:
+        this library's own means repair, anything else means refuse and name it.
+
+        Returns ``(patch_address, is_ours)`` for the first candidate, or ``None`` when there is none.
+        ``limit`` bounds the search: when the resolver walked back to its answer, the address the pattern
+        matched is *inside* the declared function, so the entry cannot be past it, and looking further
+        would only find jumps belonging to later functions.
         """
 
         end = min(address + window, self._module_base + self._module_size)
+        if limit:
+            end = min(end, limit)
         try:
             window_bytes = access.read(address, end - address)
         except OSError:
@@ -642,8 +945,9 @@ class ConnectedClient:
             head = window_bytes[offset : offset + size]
             if len(head) < 5:
                 break
-            if self._leaves_the_module(candidate, head):
-                return candidate
+            if not self._leaves_the_module(candidate, head):
+                continue
+            return candidate, self._is_our_stale_patch(access, candidate, head)
         return None
 
 
@@ -1461,6 +1765,19 @@ class ConnectedClient:
         return not self._reader.is_closed
 
     @property
+    def chained_hooks(self) -> tuple[str, ...]:
+        """Return the hooked functions this connection patched **on top of another runtime's jump**.
+
+        Empty on a client where the four entries held their own bytes, which is the ordinary case; the
+        four catalog names on a client where Reforged was already injected, which is the arrangement that
+        matters in practice. Each of those placements replaces the other runtime's five-byte ``jmp rel32``,
+        relocates it into this library's trampoline so that runtime keeps running underneath, and puts it
+        back on disconnect — so this is a report of what the install found, not a mode a caller selects.
+        """
+
+        return self._chained_hooks
+
+    @property
     def is_logged_in(self) -> bool:
         """Return whether this connected client has a logged-in character."""
 
@@ -1597,12 +1914,19 @@ def connect(process: dict[str, Any] | int, game_thread: bool = True) -> Connecte
 
 
 def disconnect() -> None:
-    """Close and clear the current selected client, if one exists."""
+    """Close and clear the current selected client, if one exists.
+
+    **The registry is cleared before the close runs**, because a close can refuse: removing a hook whose
+    generated stub another runtime has patched reports and frees nothing (``hooker.Hooker.remove``), and the
+    client is closed either way — the hooked functions' own bytes are back and the handle is released. If
+    the raise happened first, the module would keep pointing at a closed connection and the next
+    ``require_client()`` would answer a client that has nothing behind it.
+    """
 
     global _current_client
-    if _current_client is not None:
-        _current_client.close()
-        _current_client = None
+    client, _current_client = _current_client, None
+    if client is not None:
+        client.close()
 
 
 def current_client() -> ConnectedClient | None:

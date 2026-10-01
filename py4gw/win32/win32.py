@@ -292,6 +292,57 @@ class Win32:
         finally:
             self._close_handle(snapshot)
 
+    def list_modules(self, pid: int) -> list[dict[str, Any]]:
+        """Return every module loaded in ``pid``: base, size, name and path, outermost first.
+
+        Read-only, and it needs only ``PROCESS_QUERY_INFORMATION | PROCESS_VM_READ``. It exists because a
+        **pointer** found in the client has to be told apart from a pointer nothing owns any more: a hooking
+        runtime's code lives inside a loaded module's image, while a controller that died leaves its code in
+        memory no module covers. ``0x03`` is ``LIST_MODULES_ALL`` — 32-bit and 64-bit modules alike, which
+        is what a probe of a live process wants.
+        """
+
+        if pid <= 0:
+            raise ValueError("pid must be positive.")
+        handle = self.open_process_memory(pid)
+        try:
+            modules = (wintypes.HMODULE * 1024)()
+            needed = wintypes.DWORD()
+            if not self._psapi.EnumProcessModulesEx(
+                handle,
+                modules,
+                ctypes.sizeof(modules),
+                ctypes.byref(needed),
+                0x03,
+            ):
+                self._raise_last_error(f"EnumProcessModulesEx(pid={pid})")
+
+            information = self._module_information()
+            found: list[dict[str, Any]] = []
+            for module in modules[: needed.value // ctypes.sizeof(wintypes.HMODULE)]:
+                if not module:
+                    continue
+                if not self._psapi.GetModuleInformation(
+                    handle,
+                    module,
+                    ctypes.byref(information),
+                    ctypes.sizeof(information),
+                ):
+                    continue
+                path = ctypes.create_unicode_buffer(1024)
+                self._psapi.GetModuleFileNameExW(handle, module, path, 1024)
+                found.append(
+                    {
+                        "base_address": int(information.lpBaseOfDll or 0),
+                        "size": int(information.SizeOfImage),
+                        "name": os.path.basename(path.value) if path.value else "",
+                        "path": path.value or None,
+                    }
+                )
+            return found
+        finally:
+            self.close_process_memory(handle)
+
     def _is_guild_wars_name(self, name: str) -> bool:
         """Apply the only Guild Wars detection rule used in this first step."""
 

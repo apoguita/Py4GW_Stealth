@@ -19,6 +19,7 @@ from typing import Any, Protocol, TypeVar, cast
 from .game_context import GameContext, GameContextStruct
 from .gw_array import GWArray, GWArrayValueView, GWBaseArray, GWArrayView, RemoteMemoryReader
 from .gw_list import GWLinkStruct, GWListStruct
+from .world_context import GamePos
 
 
 class _memory_reader(RemoteMemoryReader, Protocol):
@@ -128,6 +129,23 @@ class Node:
 
     type: int
     id: int
+
+
+class PathPoint(TargetStruct):
+    """The native 0x10 path point (``context/pathing.h``): a ``GamePos`` and its trapezoid.
+
+    Native declares it as ``struct PathPoint { GamePos pos; const PathingTrapezoid* t; };`` and it is
+    the record the client's own path finder reads and writes (``pathing.find_path_func`` takes two of
+    them as the endpoints and a caller-supplied array of them for the answer), so the size and the two
+    field names are the layout. ``pos`` is this port's own ``GamePos`` — the same three words
+    (``world_context.py``, and ``game_pos.h`` for the layout).
+    """
+
+    _pack_ = 1
+    _fields_ = [
+        ("pos", GamePos),
+        ("t", c_uint32),
+    ]
 
 
 @dataclass(slots=True)
@@ -1041,7 +1059,9 @@ class NativeMapContextPrefixStruct(TargetStruct):
         ("props", c_uint32),
         ("h0080", c_uint32),
         ("terrain", c_uint32),
-        ("h0088", c_uint32 * 42),
+        ("h0088", c_uint32),
+        ("map_id", c_uint32),
+        ("h0090", c_uint32 * 40),
         ("zones", c_uint32),
     ]
 
@@ -1745,6 +1765,7 @@ class MapContextStruct(TargetStruct):
 
 assert ctypes.sizeof(MapVec2fStruct) == 0x08
 assert ctypes.sizeof(MapVec3fStruct) == 0x0C
+assert ctypes.sizeof(PathPoint) == 0x10
 assert ctypes.sizeof(SpawnEntryStruct) == 0x10
 assert ctypes.sizeof(PathingTrapezoidStruct) == 0x30
 assert ctypes.sizeof(NodeStruct) == 0x08

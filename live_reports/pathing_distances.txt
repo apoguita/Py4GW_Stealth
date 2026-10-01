@@ -1,0 +1,221 @@
+=== planner distances: started Wed 09/30/2026 11:12:11.46 === 
+plan -> 3 in 0.2063s (0 points)
+  ends: None
+compute_immediate: 0 points
+get_path: {'type': 'list', 'points': 4} in 0.28s
+  ends: [(-2202.12109375, 1759.824951171875, 0.0), (-702.12109375, 1759.824951171875, 0.0)] | z is start z: True
+get_path_to: {'type': 'list', 'points': 4} ends [(-2202.12109375, 1759.824951171875), (-702.12109375, 1759.824951171875)]
+player did not move: True
+{
+  "stage": "act",
+  "goal_offset": 1500.0,
+  "pid": 29504,
+  "controller_elevated": true,
+  "game_thread": true,
+  "before": {
+    "agent_id": 41,
+    "xy": [
+      -2202.12109375,
+      1759.824951171875
+    ],
+    "map_id": 642
+  },
+  "plan_call": null,
+  "plan_seconds": 0.2063,
+  "plan_status": "3",
+  "plan_is_ready": false,
+  "plan_was_successful": false,
+  "plan_points": 0,
+  "expected_status_ready": "2",
+  "compute_immediate_points": 0,
+  "get_path_seconds": 0.28,
+  "get_path": {
+    "type": "list",
+    "points": 4
+  },
+  "get_path_ends": [
+    [
+      -2202.12109375,
+      1759.824951171875,
+      0.0
+    ],
+    [
+      -702.12109375,
+      1759.824951171875,
+      0.0
+    ]
+  ],
+  "get_path_z_is_start_z": true,
+  "get_path_to": {
+    "type": "list",
+    "points": 4
+  },
+  "get_path_to_ends": [
+    [
+      -2202.12109375,
+      1759.824951171875
+    ],
+    [
+      -702.12109375,
+      1759.824951171875
+    ]
+  ],
+  "after": {
+    "agent_id": 41,
+    "xy": [
+      -2202.12109375,
+      1759.824951171875
+    ],
+    "map_id": 642
+  },
+  "player_did_not_move": true,
+  "note": "act stage: the client's own find_path_func, called through the port's PathPlanner and AutoPathing. A path is computed, not walked, so the player's position must be identical afterwards; anything else is a defect.",
+  "hooks_original_after_disconnect": true
+}
+plan -> 3 in 0.2086s (0 points)
+  ends: None
+compute_immediate: 0 points
+get_path: {'type': 'list', 'points': 27} in 0.2819s
+  ends: [(-2202.12109375, 1759.824951171875, 0.0), (1797.87890625, 1759.824951171875, 0.0)] | z is start z: True
+get_path_to: {'type': 'list', 'points': 19} ends [(-2202.12109375, 1759.824951171875), (1797.87890625, 1759.824951171875)]
+player did not move: True
+{
+  "stage": "act",
+  "goal_offset": 4000.0,
+  "pid": 29504,
+  "controller_elevated": true,
+  "game_thread": true,
+  "before": {
+    "agent_id": 41,
+    "xy": [
+      -2202.12109375,
+      1759.824951171875
+    ],
+    "map_id": 642
+  },
+  "plan_call": null,
+  "plan_seconds": 0.2086,
+  "plan_status": "3",
+  "plan_is_ready": false,
+  "plan_was_successful": false,
+  "plan_points": 0,
+  "expected_status_ready": "2",
+  "compute_immediate_points": 0,
+  "get_path_seconds": 0.2819,
+  "get_path": {
+    "type": "list",
+    "points": 27
+  },
+  "get_path_ends": [
+    [
+      -2202.12109375,
+      1759.824951171875,
+      0.0
+    ],
+    [
+      1797.87890625,
+      1759.824951171875,
+      0.0
+    ]
+  ],
+  "get_path_z_is_start_z": true,
+  "get_path_to": {
+    "type": "list",
+    "points": 19
+  },
+  "get_path_to_ends": [
+    [
+      -2202.12109375,
+      1759.824951171875
+    ],
+    [
+      1797.87890625,
+      1759.824951171875
+    ]
+  ],
+  "after": {
+    "agent_id": 41,
+    "xy": [
+      -2202.12109375,
+      1759.824951171875
+    ],
+    "map_id": 642
+  },
+  "player_did_not_move": true,
+  "note": "act stage: the client's own find_path_func, called through the port's PathPlanner and AutoPathing. A path is computed, not walked, so the player's position must be identical afterwards; anything else is a defect.",
+  "hooks_original_after_disconnect": true
+}
+plan -> 3 in 0.192s (0 points)
+  ends: None
+compute_immediate: 0 points
+get_path: {'type': 'list', 'points': 23} in 0.2809s
+  ends: [(-2202.12109375, 1759.824951171875, 0.0), (5797.87890625, 1759.824951171875, 0.0)] | z is start z: True
+get_path_to: {'type': 'list', 'points': 22} ends [(-2202.12109375, 1759.824951171875), (5797.87890625, 1759.824951171875)]
+player did not move: True
+{
+  "stage": "act",
+  "goal_offset": 8000.0,
+  "pid": 29504,
+  "controller_elevated": true,
+  "game_thread": true,
+  "before": {
+    "agent_id": 41,
+    "xy": [
+      -2202.12109375,
+      1759.824951171875
+    ],
+    "map_id": 642
+  },
+  "plan_call": null,
+  "plan_seconds": 0.192,
+  "plan_status": "3",
+  "plan_is_ready": false,
+  "plan_was_successful": false,
+  "plan_points": 0,
+  "expected_status_ready": "2",
+  "compute_immediate_points": 0,
+  "get_path_seconds": 0.2809,
+  "get_path": {
+    "type": "list",
+    "points": 23
+  },
+  "get_path_ends": [
+    [
+      -2202.12109375,
+      1759.824951171875,
+      0.0
+    ],
+    [
+      5797.87890625,
+      1759.824951171875,
+      0.0
+    ]
+  ],
+  "get_path_z_is_start_z": true,
+  "get_path_to": {
+    "type": "list",
+    "points": 22
+  },
+  "get_path_to_ends": [
+    [
+      -2202.12109375,
+      1759.824951171875
+    ],
+    [
+      5797.87890625,
+      1759.824951171875
+    ]
+  ],
+  "after": {
+    "agent_id": 41,
+    "xy": [
+      -2202.12109375,
+      1759.824951171875
+    ],
+    "map_id": 642
+  },
+  "player_did_not_move": true,
+  "note": "act stage: the client's own find_path_func, called through the port's PathPlanner and AutoPathing. A path is computed, not walked, so the player's position must be identical afterwards; anything else is a defect.",
+  "hooks_original_after_disconnect": true
+}
+=== planner distances: done Wed 09/30/2026 11:12:26.70 === 

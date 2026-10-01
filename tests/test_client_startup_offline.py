@@ -59,6 +59,11 @@ class StartupOrderTests(unittest.TestCase):
         client._pid = 4321
         client._module_base = 0x400000
         client._module_size = 0x1000
+        # The connection asks the Windows layer for the client's loaded modules, because the packet hooks
+        # use them to tell another runtime's handler from a dead controller's stub. No modules is what this
+        # stand-in answers: nothing in this test reads a handler pointer.
+        client._win32 = mock.MagicMock()
+        client._win32.list_modules.return_value = []
         client._access = None
         client._bridge = None
         client._callbacks = None
@@ -66,8 +71,13 @@ class StartupOrderTests(unittest.TestCase):
         client._suspended_threads = 0
         client._listener = mock.MagicMock()
         client._resolve = lambda name: 0x401000  # type: ignore[method-assign]
+        client._resolve_placement = lambda name: (0x401000, None)  # type: ignore[method-assign]
         client._count_suspended_threads = lambda access: 0  # type: ignore[method-assign]
-        client._prepare_target = lambda access, name, address, expected: None  # type: ignore[method-assign]
+        client._prepare_target = (  # type: ignore[method-assign]
+            lambda access, name, address, expected, anchor=None: client_module._Placement(
+                name, address, expected, chained=False
+            )
+        )
         return client
 
     def install(
