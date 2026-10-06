@@ -47,7 +47,7 @@ class ItemContextOfflineTests(unittest.TestCase):
         self.assertEqual(ctypes.sizeof(ItemModifierStruct), 0x04)
         self.assertEqual(ctypes.sizeof(ItemContextItemDataStruct), 0x10)
         self.assertEqual(ctypes.sizeof(InventoryStruct), 0x98)
-        self.assertEqual(ctypes.sizeof(ItemFormulaStruct), 0x14)
+        self.assertEqual(ctypes.sizeof(ItemFormulaStruct), 0x18)
         self.assertEqual(ctypes.sizeof(MaterialCostStruct), 0x10)
         self.assertEqual(ctypes.sizeof(WeaponSetStruct), 0x08)
         self.assertEqual(ctypes.sizeof(PvPItemUpgradeInfoStruct), 0x28)
@@ -182,7 +182,7 @@ class ItemContextOfflineTests(unittest.TestCase):
             MaterialCostStruct: ["material", "amount", "h0008", "h000c"],
             ItemFormulaStruct: [
                 "h0000", "gold_cost", "skill_point_cost",
-                "material_cost_count", "material_cost_buffer",
+                "material_cost_count", "material_cost_buffer", "h0014",
             ],
             BagStruct: [
                 "bag_type", "index", "_unknown0", "container_item",

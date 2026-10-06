@@ -1486,27 +1486,33 @@ class AgentArrayStruct(TargetStruct):
     def GetAgentByID(
         self, agent_id: int
     ) -> AgentStruct | AgentLivingStruct | AgentItemStruct | AgentGadgetStruct | None:
-        """Return one agent record by identifier (``AgentContext.py:1260-1280``).
+        """Return one agent record by identifier (``AgentContext.py:1260-1280``), read on demand.
 
         The source answers from its own per-id cache first — the one ``_build_allegiance_cache``
         fills — and then from the injected runtime's shared-memory channel
         (``SystemShaMemMgr.get_agent_array_wrapper()``, which this project does not have).
 
-        **The divergence, on that fallback only:** where the source asks the shared-memory channel,
-        this port rebuilds the cache from the client's own agent array — the same array the channel
-        is filled from — and answers from that, or ``None`` when the id is not there. The source
-        answers ``None`` on the same missing-id path.
+        **The divergence, and it is this port's execution model's:** the source's cache is refreshed
+        **every frame** by its injected runtime's tick. This port has no frame loop, and a stored
+        agent record is a *dereferenced* read — precisely what ``README.md`` rules out (*"never cache
+        a dereferenced pointer, because that is map-scoped"*). Served from that cache, an agent's
+        position froze for the life of a connection: measured live 2026-10-05, a character walked 500
+        units in 1.6 s while ``Agent.GetXY`` answered the identical coordinates to the millimetre,
+        while ``IsMoving`` — which converts to a living record and re-reads — tracked the walk
+        exactly. So the traversal is re-run from the client's own array on **every** call: the
+        answer is the client's now, and nothing survives the call that produced it. ``None`` is
+        answered for an id the client's array does not hold, the source's own missing-id path.
         """
 
         self._ensure_fields()
-        cached_agent = self._agent_by_id.get(agent_id)
-        if cached_agent is not None:
-            return cached_agent
-        self._build_allegiance_cache()
+        self._ensure_cache_up_to_date()
         return self._agent_by_id.get(agent_id)
 
     def _ids(self, category_name: str) -> list[int]:
+        """Return one category's ids, from a traversal made **now** (see :meth:`GetAgentByID`)."""
+
         self._ensure_fields()
+        self._ensure_cache_up_to_date()
         if self._allegiance_cache is None:
             return []
         return list(self._allegiance_cache.get(category_name, []))
@@ -1579,7 +1585,6 @@ class AgentArray:
         self._patterns = patterns
         self._cache_context_validator = cache_context_validator
         self._array_address: int | None = None
-        self._context_view: AgentArrayStruct | None = None
 
     @property
     def cached_array_address(self) -> int | None:
@@ -1601,13 +1606,11 @@ class AgentArray:
         """Discard the cached view, as the source's ``reset_cache`` discards its pointer.
 
         The source clears ``_cached_ctx`` and its per-id record cache
-        (``AgentContext.py:1417-1433``); this port additionally drops the caches
-        the view itself holds, because the view is a local copy of the structure.
+        (``AgentContext.py:1417-1433``). **There is nothing of either to clear here**: this reader
+        holds no view and no record (every read is taken when it is asked for), so the member keeps
+        the source's name and does the only thing it can — nothing — rather than discarding state
+        that does not exist.
         """
-
-        if self._context_view is not None:
-            self._context_view._drop_cache()
-        self._context_view = None
 
     def enable(self) -> None:
         """Register the source's per-frame ``UpdatePtr`` callback (``AgentContext.py:1443-1452``).
@@ -1637,18 +1640,17 @@ class AgentArray:
         self._array_address = None
 
     def get_context(self) -> AgentArrayStruct:
-        """Return the source-shaped view, building it on first use.
+        """Return the source-shaped view of the client's agent array, **read now**.
 
         The source returns whatever its per-frame ``UpdatePtr`` callback cached
-        (``AgentContext.py:1473-1474``), which can be ``None`` before the first tick. This project
-        has no frame loop, so the view is built the first time it is asked for — the read-on-demand
-        rule the rest of the port follows — and the answer is therefore always the view: a read that
-        cannot be made raises from :meth:`read_context` instead of answering ``None``.
+        (``AgentContext.py:1473-1474``), which can be ``None`` before the first tick. This project has
+        no frame loop, and a held view is a held *dereference* — the header's buffer, size and
+        capacity as they were when it was built — so the view is read on every call and nothing is
+        kept: a read that cannot be made raises from :meth:`read_context` instead of answering a
+        stored one or ``None``.
         """
 
-        if self._context_view is None:
-            return self.read_context()
-        return self._context_view
+        return self.read_context()
 
     def _update_cache(self) -> None:
         """Run the source-named category-cache refresh on the current view."""
@@ -1685,20 +1687,20 @@ class AgentArray:
 
 
     def read_context(self) -> AgentArrayStruct:
-        """Read the structure the cached pointer addresses and build its caches.
+        """Read the structure the resolved pointer addresses, and build its caches **now**.
 
         The source's callback keeps the client's own ``AgentArrayStruct`` pointer and this read is
-        its external equivalent (``AgentContext.py:1405-1415``): the fixed-width
-        ``GWArray<Agent*>`` header (buffer, capacity, size) is read into a local copy and bound to
-        this client's reader and owner. The category caches are built by the view itself, from that
-        same array — ``_build_allegiance_cache``.
+        its external equivalent (``AgentContext.py:1405-1415``): the fixed-width ``GWArray<Agent*>``
+        header (buffer, capacity, size) is read into a local copy and bound to this client's reader
+        and owner. Nothing is stored on this reader — the copy is handed back to the caller and is
+        gone when the call is. The category caches are built by that view itself, from the same
+        array — ``_build_allegiance_cache``.
         """
 
         header = self._read_array_header(self.resolve_address(), "agent array")
-        self._context_view = AgentArrayStruct.from_buffer_copy(
-            bytes(header)
-        ).bind_external(self, self._reader)
-        return self._context_view
+        return AgentArrayStruct.from_buffer_copy(bytes(header)).bind_external(
+            self, self._reader
+        )
 
     def GetAgentByID(
         self, agent_id: int

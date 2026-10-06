@@ -1,0 +1,1112 @@
+{
+  "pid": 4692,
+  "image": "F:\\GW\\GW1\\Gw.exe",
+  "module": {
+    "base": "0xd40000",
+    "size": "0xf4c000"
+  },
+  "probe": "read-only: no client function was called and nothing was written",
+  "loaded_modules": [
+    {
+      "name": "F:\\GW\\GW1\\Gw.exe",
+      "base": "0xd40000",
+      "size": "0xf4c000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\ntdll.dll",
+      "base": "0x77160000",
+      "size": "0x1a4000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\KERNEL32.DLL",
+      "base": "0x76ae0000",
+      "size": "0xf0000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\KERNELBASE.dll",
+      "base": "0x75420000",
+      "size": "0x239000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\apphelp.dll",
+      "base": "0x6b250000",
+      "size": "0xa4000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\AcLayers.DLL",
+      "base": "0x6e9e0000",
+      "size": "0x285000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\msvcrt.dll",
+      "base": "0x74fd0000",
+      "size": "0xbf000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\USER32.dll",
+      "base": "0x75660000",
+      "size": "0x19d000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\win32u.dll",
+      "base": "0x75800000",
+      "size": "0x18000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\GDI32.dll",
+      "base": "0x76990000",
+      "size": "0x23000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\gdi32full.dll",
+      "base": "0x76bd0000",
+      "size": "0xe7000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\msvcp_win.dll",
+      "base": "0x750b0000",
+      "size": "0x7b000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\ucrtbase.dll",
+      "base": "0x75130000",
+      "size": "0x120000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\SHELL32.dll",
+      "base": "0x760a0000",
+      "size": "0x5db000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\SHLWAPI.dll",
+      "base": "0x77100000",
+      "size": "0x49000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\OLEAUT32.dll",
+      "base": "0x76cd0000",
+      "size": "0x96000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\combase.dll",
+      "base": "0x76d70000",
+      "size": "0x280000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\RPCRT4.dll",
+      "base": "0x75de0000",
+      "size": "0xb9000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\SETUPAPI.dll",
+      "base": "0x75980000",
+      "size": "0x43a000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\cfgmgr32.dll",
+      "base": "0x76a20000",
+      "size": "0x3b000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\bcrypt.dll",
+      "base": "0x75dc0000",
+      "size": "0x19000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\MPR.dll",
+      "base": "0x73c00000",
+      "size": "0x19000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\sfc.dll",
+      "base": "0x1dd0000",
+      "size": "0x3000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\WINSPOOL.DRV",
+      "base": "0x6ab50000",
+      "size": "0x7d000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\shcore.dll",
+      "base": "0x75ea0000",
+      "size": "0x87000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\sfc_os.DLL",
+      "base": "0x6ede0000",
+      "size": "0xf000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\IMM32.DLL",
+      "base": "0x75820000",
+      "size": "0x25000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\ADVAPI32.dll",
+      "base": "0x76a60000",
+      "size": "0x7d000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\sechost.dll",
+      "base": "0x75250000",
+      "size": "0x77000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\WS2_32.dll",
+      "base": "0x75910000",
+      "size": "0x63000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\ole32.dll",
+      "base": "0x76680000",
+      "size": "0xe3000"
+    },
+    {
+      "name": "C:\\Windows\\WinSxS\\x86_microsoft.windows.common-controls_6595b64144ccf1df_5.82.19041.6280_none_c0dab36c38bfeda0\\COMCTL32.dll",
+      "base": "0x6a590000",
+      "size": "0x8d000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\dbghelp.dll",
+      "base": "0x6b340000",
+      "size": "0x1ab000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\WINHTTP.dll",
+      "base": "0x73aa0000",
+      "size": "0xca000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\VERSION.dll",
+      "base": "0x740d0000",
+      "size": "0x8000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\WINMM.dll",
+      "base": "0x74080000",
+      "size": "0x28000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\MSACM32.dll",
+      "base": "0x530a0000",
+      "size": "0x19000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\Secur32.dll",
+      "base": "0x6e340000",
+      "size": "0xa000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\winmmbase.dll",
+      "base": "0x53240000",
+      "size": "0x1d000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\SSPICLI.DLL",
+      "base": "0x714d0000",
+      "size": "0x21000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\windows.storage.dll",
+      "base": "0x72bd0000",
+      "size": "0x619000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\Wldp.dll",
+      "base": "0x72a60000",
+      "size": "0x25000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\kernel.appcore.dll",
+      "base": "0x74690000",
+      "size": "0xf000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\profapi.dll",
+      "base": "0x72a40000",
+      "size": "0x1b000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\CRYPTBASE.DLL",
+      "base": "0x70510000",
+      "size": "0xa000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\bcryptPrimitives.dll",
+      "base": "0x752d0000",
+      "size": "0x5f000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\xinput1_4.DLL",
+      "base": "0x68bd0000",
+      "size": "0xd000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\DEVOBJ.dll",
+      "base": "0x73230000",
+      "size": "0x29000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\inputhost.dll",
+      "base": "0x68f10000",
+      "size": "0xed000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\CoreUIComponents.dll",
+      "base": "0x69590000",
+      "size": "0x27f000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\CoreMessaging.dll",
+      "base": "0x69810000",
+      "size": "0x9b000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\wintypes.dll",
+      "base": "0x6ef20000",
+      "size": "0xdd000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\PROPSYS.dll",
+      "base": "0x72950000",
+      "size": "0xc0000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\ntmarta.dll",
+      "base": "0x72a10000",
+      "size": "0x29000"
+    },
+    {
+      "name": "C:\\Windows\\system32\\uxtheme.dll",
+      "base": "0x6e450000",
+      "size": "0x74000"
+    },
+    {
+      "name": "C:\\Program Files (x86)\\RivaTuner Statistics Server\\RTSSHooks.dll",
+      "base": "0x10000000",
+      "size": "0x350f000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\MSCTF.dll",
+      "base": "0x75340000",
+      "size": "0xd4000"
+    },
+    {
+      "name": "C:\\Windows\\system32\\napinsp.dll",
+      "base": "0x6e890000",
+      "size": "0x11000"
+    },
+    {
+      "name": "C:\\Windows\\system32\\pnrpnsp.dll",
+      "base": "0x6e870000",
+      "size": "0x16000"
+    },
+    {
+      "name": "C:\\Windows\\system32\\wshbth.dll",
+      "base": "0x6e850000",
+      "size": "0x16000"
+    },
+    {
+      "name": "C:\\Windows\\system32\\NLAapi.dll",
+      "base": "0x6e830000",
+      "size": "0x16000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\IPHLPAPI.DLL",
+      "base": "0x747e0000",
+      "size": "0x32000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\mswsock.dll",
+      "base": "0x72a90000",
+      "size": "0x52000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\DNSAPI.dll",
+      "base": "0x74750000",
+      "size": "0x90000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\NSI.dll",
+      "base": "0x770f0000",
+      "size": "0x7000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\winrnr.dll",
+      "base": "0x6e820000",
+      "size": "0xe000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\textinputframework.dll",
+      "base": "0x698b0000",
+      "size": "0xb9000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\fwpuclnt.dll",
+      "base": "0x6e7b0000",
+      "size": "0x58000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\rasadhlp.dll",
+      "base": "0x6e810000",
+      "size": "0x8000"
+    },
+    {
+      "name": "F:\\GW\\GW1\\steam_api.dll",
+      "base": "0x50280000",
+      "size": "0x42000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\PSAPI.DLL",
+      "base": "0x76cc0000",
+      "size": "0x6000"
+    },
+    {
+      "name": "F:\\GW\\GW1\\OpenAL32.dll",
+      "base": "0x50010000",
+      "size": "0x261000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\AVRT.dll",
+      "base": "0x5b440000",
+      "size": "0x8000"
+    },
+    {
+      "name": "F:\\GW\\GW1\\d3d9.dll",
+      "base": "0x77f00000",
+      "size": "0xf1000"
+    },
+    {
+      "name": "C:\\Windows\\system32\\d3d9.dll",
+      "base": "0x6a3a0000",
+      "size": "0x192000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\dwmapi.dll",
+      "base": "0x6e8c0000",
+      "size": "0x26000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\DriverStore\\FileRepository\\u0203303.inf_amd64_e5876a26758f154c\\B026363\\atidx9loader32.dll",
+      "base": "0x6b680000",
+      "size": "0x1a000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\DriverStore\\FileRepository\\u0203303.inf_amd64_e5876a26758f154c\\B026363\\AMDXN32.DLL",
+      "base": "0x60bd0000",
+      "size": "0x22b2000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\dxgi.dll",
+      "base": "0x6de40000",
+      "size": "0xc5000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\DriverStore\\FileRepository\\u0203303.inf_amd64_e5876a26758f154c\\B026363\\amdihk32.dll",
+      "base": "0x6b6a0000",
+      "size": "0x2c000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\clbcatq.dll",
+      "base": "0x75f30000",
+      "size": "0x7e000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\dxcore.dll",
+      "base": "0x6dc90000",
+      "size": "0x2c000"
+    },
+    {
+      "name": "C:\\Windows\\system32\\windowscodecs.dll",
+      "base": "0x6a220000",
+      "size": "0x172000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\MMDevApi.dll",
+      "base": "0x6ddd0000",
+      "size": "0x6b000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\AUDIOSES.DLL",
+      "base": "0x530c0000",
+      "size": "0x136000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\powrprof.dll",
+      "base": "0x73260000",
+      "size": "0x44000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\UMPDC.dll",
+      "base": "0x740b0000",
+      "size": "0xd000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\resourcepolicyclient.dll",
+      "base": "0x50540000",
+      "size": "0xf000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\webio.dll",
+      "base": "0x6b150000",
+      "size": "0x74000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\WINNSI.DLL",
+      "base": "0x5d8e0000",
+      "size": "0x8000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\deviceaccess.dll",
+      "base": "0x53260000",
+      "size": "0x30000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\schannel.dll",
+      "base": "0x691a0000",
+      "size": "0x7d000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\mskeyprotect.dll",
+      "base": "0x690a0000",
+      "size": "0x10000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\NTASN1.dll",
+      "base": "0x69070000",
+      "size": "0x28000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\ncrypt.dll",
+      "base": "0x69040000",
+      "size": "0x21000"
+    },
+    {
+      "name": "C:\\Windows\\system32\\ncryptsslp.dll",
+      "base": "0x69020000",
+      "size": "0x1f000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\CRYPT32.dll",
+      "base": "0x76ff0000",
+      "size": "0xff000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\MSASN1.dll",
+      "base": "0x70580000",
+      "size": "0xe000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\DPAPI.DLL",
+      "base": "0x69000000",
+      "size": "0x8000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\Py4GW_Reforged\\Py4GW.dll",
+      "base": "0x780f0000",
+      "size": "0xf94000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Temp\\_MEI154202\\python313.dll",
+      "base": "0x516e0000",
+      "size": "0x569000"
+    },
+    {
+      "name": "C:\\Windows\\WinSxS\\x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.19041.6456_none_d950d087e104e52a\\gdiplus.dll",
+      "base": "0x68800000",
+      "size": "0x169000"
+    },
+    {
+      "name": "C:\\Windows\\System32\\COMDLG32.dll",
+      "base": "0x768e0000",
+      "size": "0xaf000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Temp\\_MEI154202\\VCRUNTIME140.dll",
+      "base": "0x516c0000",
+      "size": "0x15000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\MSVCP140.dll",
+      "base": "0x740e0000",
+      "size": "0x96000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\D3DCOMPILER_47.dll",
+      "base": "0x77b60000",
+      "size": "0x394000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\dbgcore.DLL",
+      "base": "0x6e950000",
+      "size": "0x2b000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\CRYPTSP.dll",
+      "base": "0x70560000",
+      "size": "0x13000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Temp\\_MEI154202\\python3.DLL",
+      "base": "0x9d90000",
+      "size": "0x10000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\_ctypes.pyd",
+      "base": "0x50520000",
+      "size": "0x1d000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\libffi-8.dll",
+      "base": "0x50510000",
+      "size": "0x9000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\_uuid.pyd",
+      "base": "0x50000000",
+      "size": "0x6000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\_queue.pyd",
+      "base": "0x77b50000",
+      "size": "0x8000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\_socket.pyd",
+      "base": "0x77b30000",
+      "size": "0x11000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\select.pyd",
+      "base": "0x77b20000",
+      "size": "0x8000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\_hashlib.pyd",
+      "base": "0x77b10000",
+      "size": "0xd000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\libcrypto-3.dll",
+      "base": "0x777b0000",
+      "size": "0x35b000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\_bz2.pyd",
+      "base": "0x77790000",
+      "size": "0x14000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\_lzma.pyd",
+      "base": "0x77760000",
+      "size": "0x23000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\_sqlite3.pyd",
+      "base": "0x77740000",
+      "size": "0x19000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\sqlite3.dll",
+      "base": "0x77600000",
+      "size": "0x134000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\unicodedata.pyd",
+      "base": "0x77550000",
+      "size": "0xab000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\_decimal.pyd",
+      "base": "0x77510000",
+      "size": "0x39000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\_tkinter.pyd",
+      "base": "0x77500000",
+      "size": "0xe000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\tcl86t.dll",
+      "base": "0x773a0000",
+      "size": "0x160000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\tk86t.dll",
+      "base": "0x79090000",
+      "size": "0x135000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\USERENV.dll",
+      "base": "0x74f10000",
+      "size": "0x25000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\NETAPI32.dll",
+      "base": "0x6e370000",
+      "size": "0x14000"
+    },
+    {
+      "name": "C:\\Windows\\WinSxS\\x86_microsoft.windows.common-controls_6595b64144ccf1df_6.0.19041.6456_none_a865dda286726b5c\\COMCTL32.dll",
+      "base": "0x6da70000",
+      "size": "0x211000"
+    },
+    {
+      "name": "C:\\Users\\Apo\\AppData\\Local\\Programs\\Python\\Python313-32\\DLLs\\zlib1.dll",
+      "base": "0x77370000",
+      "size": "0x26000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\NETUTILS.DLL",
+      "base": "0x712d0000",
+      "size": "0xb000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\SAMCLI.DLL",
+      "base": "0x69220000",
+      "size": "0x15000"
+    },
+    {
+      "name": "C:\\Windows\\SYSTEM32\\LOGONCLI.DLL",
+      "base": "0x77330000",
+      "size": "0x32000"
+    }
+  ],
+  "declared_bytes_search": [
+    {
+      "name": "game_thread.leave_game_thread_func",
+      "declared": "55 8b ec 81 ec 20 02 00 00",
+      "hits": [
+        {
+          "address": "0xef6182",
+          "head": "55 8b ec 81 ec 20 02 00 00 8b 4d 08 53 56 57 8b"
+        },
+        {
+          "address": "0xf34980",
+          "head": "55 8b ec 81 ec 20 02 00 00 a1 00 a5 53 01 33 c5"
+        },
+        {
+          "address": "0xf34d00",
+          "head": "55 8b ec 81 ec 20 02 00 00 a1 00 a5 53 01 33 c5"
+        },
+        {
+          "address": "0xf34ef0",
+          "head": "55 8b ec 81 ec 20 02 00 00 a1 00 a5 53 01 33 c5"
+        },
+        {
+          "address": "0xf87d00",
+          "head": "55 8b ec 81 ec 20 02 00 00 a1 00 a5 53 01 33 c5"
+        }
+      ],
+      "count": 5
+    },
+    {
+      "name": "ui.send_ui_message_func",
+      "declared": "55 8b ec 8b 45 08 83 f8 56",
+      "hits": [],
+      "count": 0
+    },
+    {
+      "name": "effects.post_process_effect_func",
+      "declared": "55 8b ec 83 ec 08",
+      "hits": [
+        {
+          "address": "0xd9e800",
+          "head": "55 8b ec 83 ec 08 d9 ee 80 c9 ff d9 55 fc d9 5d"
+        },
+        {
+          "address": "0xd9ee00",
+          "head": "55 8b ec 83 ec 08 d9 ee d9 55 fc d9 5d f8 d9 45"
+        },
+        {
+          "address": "0xdaad80",
+          "head": "55 8b ec 83 ec 08 8b 45 14 8b d1 8b 4d 0c 56 8b"
+        },
+        {
+          "address": "0xdad260",
+          "head": "55 8b ec 83 ec 08 56 e8 f4 23 01 00 8b 30 85 f6"
+        },
+        {
+          "address": "0xdad3f0",
+          "head": "55 8b ec 83 ec 08 53 56 57 e8 62 22 01 00 8b 5d"
+        }
+      ],
+      "count": 5
+    },
+    {
+      "name": "render.end_scene_func",
+      "declared": "55 8b ec 83 ec 48",
+      "hits": [
+        {
+          "address": "0xd48259",
+          "head": "55 8b ec 83 ec 48 8b 45 08 53 56 57 33 ff 8b f1"
+        },
+        {
+          "address": "0xd4d5d7",
+          "head": "55 8b ec 83 ec 48 53 8b d9 33 c9 56 39 4d 0c 57"
+        },
+        {
+          "address": "0xd60f17",
+          "head": "55 8b ec 83 ec 48 53 56 57 8b 7d 08 85 ff 8b f1"
+        },
+        {
+          "address": "0xd85b95",
+          "head": "55 8b ec 83 ec 48 56 8b f1 8b 86 f0 02 00 00 83"
+        },
+        {
+          "address": "0xd8849f",
+          "head": "55 8b ec 83 ec 48 8b 55 08 56 85 d2 8b f1 0f 84"
+        }
+      ],
+      "count": 5
+    }
+  ],
+  "jumps_ahead_of_the_answer": [
+    {
+      "name": "game_thread.leave_game_thread_func",
+      "from": "0xf75cd0",
+      "candidates": [
+        {
+          "address": "0xf75cd0",
+          "bytes": "e9 32 97 18 77",
+          "landing": "0x780ff407",
+          "landing_module": "C:\\Users\\Apo\\Py4GW_Reforged\\Py4GW.dll",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf7602a",
+          "bytes": "e9 d1 02 00 00",
+          "landing": "0xf76300",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf76218",
+          "bytes": "e9 e3 00 00 00",
+          "landing": "0xf76300",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf764c0",
+          "bytes": "e9 d9 c9 d9 5d",
+          "landing": "0x5ed12e9e",
+          "landing_module": "no loaded module: an allocated region",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf76730",
+          "bytes": "e9 01 75 dc 5d",
+          "landing": "0x5ed3dc36",
+          "landing_module": "no loaded module: an allocated region",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf76770",
+          "bytes": "e9 01 75 dc 5d",
+          "landing": "0x5ed3dc76",
+          "landing_module": "no loaded module: an allocated region",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf774f4",
+          "bytes": "e9 fc 01 00 00",
+          "landing": "0xf776f5",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf7795c",
+          "bytes": "e9 2f ed ff ff",
+          "landing": "0xf76690",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        }
+      ]
+    },
+    {
+      "name": "ui.send_ui_message_func",
+      "from": "0xf74510",
+      "candidates": [
+        {
+          "address": "0xf745f0",
+          "bytes": "e9 36 a8 18 77",
+          "landing": "0x780fee2b",
+          "landing_module": "C:\\Users\\Apo\\Py4GW_Reforged\\Py4GW.dll",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf74615",
+          "bytes": "e9 76 8c 01 00",
+          "landing": "0xf8d290",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf74690",
+          "bytes": "e9 ab ad 01 00",
+          "landing": "0xf8f440",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf747e3",
+          "bytes": "e9 de 01 00 53",
+          "landing": "0x53f749c6",
+          "landing_module": "no loaded module: an allocated region",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf74a50",
+          "bytes": "e9 7b e3 01 00",
+          "landing": "0xf92dd0",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf74e1d",
+          "bytes": "e9 de 14 00 00",
+          "landing": "0xf76300",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf74eaa",
+          "bytes": "e9 51 14 00 00",
+          "landing": "0xf76300",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0xf74ec0",
+          "bytes": "e9 3b 14 00 00",
+          "landing": "0xf76300",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        }
+      ]
+    },
+    {
+      "name": "effects.post_process_effect_func",
+      "from": "0x1151630",
+      "candidates": [
+        {
+          "address": "0x1151630",
+          "bytes": "e9 44 16 fb 76",
+          "landing": "0x78102c79",
+          "landing_module": "C:\\Users\\Apo\\Py4GW_Reforged\\Py4GW.dll",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x11517ac",
+          "bytes": "e9 8b 45 08 89",
+          "landing": "0x8a1d5d3c",
+          "landing_module": "no loaded module: an allocated region",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x11518cd",
+          "bytes": "e9 c5 ff 8d 45",
+          "landing": "0x46a31897",
+          "landing_module": "no loaded module: an allocated region",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x1151a6c",
+          "bytes": "e9 8b 45 08 89",
+          "landing": "0x8a1d5ffc",
+          "landing_module": "no loaded module: an allocated region",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x1151d27",
+          "bytes": "e9 6a 00 8d 45",
+          "landing": "0x46a21d96",
+          "landing_module": "no loaded module: an allocated region",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x1151d8c",
+          "bytes": "e9 00 00 00 83",
+          "landing": "0x84151d91",
+          "landing_module": "no loaded module: an allocated region",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x1152600",
+          "bytes": "e9 2b f3 fc ff",
+          "landing": "0x1121930",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x1152610",
+          "bytes": "e9 2b f3 fc ff",
+          "landing": "0x1121940",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        }
+      ]
+    },
+    {
+      "name": "render.end_scene_func",
+      "from": "0x10102c0",
+      "candidates": [
+        {
+          "address": "0x1010350",
+          "bytes": "e9 68 95 0e 77",
+          "landing": "0x780f98bd",
+          "landing_module": "C:\\Users\\Apo\\Py4GW_Reforged\\Py4GW.dll",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x101068a",
+          "bytes": "e9 ed ff 8b e5",
+          "landing": "0xe68d067c",
+          "landing_module": "no loaded module: an allocated region",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x10106a0",
+          "bytes": "e9 d1 32 0f 77",
+          "landing": "0x78103976",
+          "landing_module": "C:\\Users\\Apo\\Py4GW_Reforged\\Py4GW.dll",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x1010c1b",
+          "bytes": "e9 ee 00 00 00",
+          "landing": "0x1010d0e",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x1010c2b",
+          "bytes": "e9 de 00 00 00",
+          "landing": "0x1010d0e",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x1010c55",
+          "bytes": "e9 b4 00 00 00",
+          "landing": "0x1010d0e",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x1010c72",
+          "bytes": "e9 97 00 00 00",
+          "landing": "0x1010d0e",
+          "landing_module": "F:\\GW\\GW1\\Gw.exe",
+          "lands_on_this_project": false
+        },
+        {
+          "address": "0x10112e3",
+          "bytes": "e9 39 f8 ff 83",
+          "landing": "0x85010b21",
+          "landing_module": "no loaded module: an allocated region",
+          "lands_on_this_project": false
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "name": "game_thread.leave_game_thread_func",
+      "expected_entry": "55 8b ec 81 ec 20 02 00 00",
+      "resolved": true,
+      "message": "",
+      "walked_back_from": null,
+      "address": "0xf75cd0",
+      "in_module": true,
+      "head": "e9 32 97 18 77 20 02 00 00 a1 00 a5 53 01 33 c5",
+      "entry_is": "a jmp rel32",
+      "entry_is_original": false,
+      "landing": "0x780ff407",
+      "landing_inside_the_client_module": false,
+      "landing_module": "C:\\Users\\Apo\\Py4GW_Reforged\\Py4GW.dll",
+      "landing_region": {
+        "allocation_base": "0x780f0000",
+        "type": "MEM_IMAGE (a loaded module)",
+        "protection": "0x20",
+        "size": 11554816
+      },
+      "landing_head": "e9 f4 0b 0e 00 e9 6f 28 04 00 e9 ea c5 63 00 e9",
+      "landing_is": "a jmp rel32",
+      "entry_jump_ahead": {
+        "address": "0xf75cd0",
+        "is_this_project": false,
+        "declared_tail_matches": true
+      },
+      "this_project_would": "CHAIN on top of another runtime's entry jump here (in place)"
+    },
+    {
+      "name": "ui.send_ui_message_func",
+      "expected_entry": "55 8b ec 8b 45 08 83 f8 56",
+      "resolved": true,
+      "message": "",
+      "walked_back_from": "0xf74605",
+      "address": "0xf74510",
+      "in_module": true,
+      "head": "55 8b ec 83 ec 2c 53 8b 5d 08 57 8b fb f7 df 1b",
+      "entry_is": "a compiled function's prologue",
+      "entry_is_original": false,
+      "entry_jump_ahead": {
+        "address": "0xf745f0",
+        "is_this_project": false,
+        "declared_tail_matches": true
+      },
+      "this_project_would": "CHAIN on top of another runtime's entry jump, at the declared function found ahead (0x00F745F0)"
+    },
+    {
+      "name": "effects.post_process_effect_func",
+      "expected_entry": "55 8b ec 83 ec 08",
+      "resolved": true,
+      "message": "",
+      "walked_back_from": null,
+      "address": "0x1151630",
+      "in_module": true,
+      "head": "e9 44 16 fb 76 08 8b 45 0c db 45 08 89 45 f8 8b",
+      "entry_is": "a jmp rel32",
+      "entry_is_original": false,
+      "landing": "0x78102c79",
+      "landing_inside_the_client_module": false,
+      "landing_module": "C:\\Users\\Apo\\Py4GW_Reforged\\Py4GW.dll",
+      "landing_region": {
+        "allocation_base": "0x780f0000",
+        "type": "MEM_IMAGE (a loaded module)",
+        "protection": "0x20",
+        "size": 11542528
+      },
+      "landing_head": "e9 32 a5 0c 00 e9 0d 4e 0b 00 e9 18 35 0c 00 e9",
+      "landing_is": "a jmp rel32",
+      "entry_jump_ahead": {
+        "address": "0x1151630",
+        "is_this_project": false,
+        "declared_tail_matches": true
+      },
+      "this_project_would": "CHAIN on top of another runtime's entry jump here (in place)"
+    },
+    {
+      "name": "render.end_scene_func",
+      "expected_entry": "55 8b ec 83 ec 48",
+      "resolved": true,
+      "message": "",
+      "walked_back_from": "0x101036e",
+      "address": "0x10102c0",
+      "in_module": true,
+      "head": "55 8b ec 56 8b 75 08 83 be b8 01 00 00 00 75 1c",
+      "entry_is": "a compiled function's prologue",
+      "entry_is_original": false,
+      "entry_jump_ahead": {
+        "address": "0x1010350",
+        "is_this_project": false,
+        "declared_tail_matches": true
+      },
+      "this_project_would": "CHAIN on top of another runtime's entry jump, at the declared function found ahead (0x01010350)"
+    }
+  ],
+  "verdict": "another runtime holds 4 of 4 entries: this project chains on top of each of them, relocating the jump it displaces, and the restore puts those bytes back."
+}

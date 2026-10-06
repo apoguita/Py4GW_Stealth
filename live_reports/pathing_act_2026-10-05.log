@@ -1,0 +1,94 @@
+=== pathing act: start Mon 10/05/2026 21:43:59.09 === 
+plan -> 3 in 0.2087s (0 points)
+  ends: None
+compute_immediate: 0 points
+get_path: {'type': 'list', 'points': 2} in 0.2782s
+  ends: [(-2550.839111328125, 3708.314453125, 0.0), (-2250.839111328125, 3708.314453125, 0.0)] | z is start z: True
+get_path_to: {'type': 'list', 'points': 1} ends [(-2250.839111328125, 3708.314453125), (-2250.839111328125, 3708.314453125)]
+player did not move: True
+{
+  "stage": "act",
+  "goal_offset": 300.0,
+  "pid": 4692,
+  "controller_elevated": true,
+  "entry_decisions": [
+    "game_thread.leave_game_thread_func: CHAIN on top of another runtime's entry jump here (in place)",
+    "ui.send_ui_message_func: CHAIN on top of another runtime's entry jump, at the declared function found ahead (0x00F745F0)",
+    "effects.post_process_effect_func: CHAIN on top of another runtime's entry jump here (in place)",
+    "render.end_scene_func: CHAIN on top of another runtime's entry jump, at the declared function found ahead (0x01010350)"
+  ],
+  "entries_before": {
+    "game_thread.leave_game_thread_func": "e9 32 97 18 77 20 02 00 00 a1 00 a5 53 01 33 c5",
+    "ui.send_ui_message_func": "55 8b ec 83 ec 2c 53 8b 5d 08 57 8b fb f7 df 1b",
+    "effects.post_process_effect_func": "e9 44 16 fb 76 08 8b 45 0c db 45 08 89 45 f8 8b",
+    "render.end_scene_func": "55 8b ec 56 8b 75 08 83 be b8 01 00 00 00 75 1c"
+  },
+  "game_thread": true,
+  "before": {
+    "agent_id": 17,
+    "xy": [
+      -2550.839111328125,
+      3708.314453125
+    ],
+    "map_id": 642
+  },
+  "plan_call": null,
+  "plan_seconds": 0.2087,
+  "plan_status": "3",
+  "plan_is_ready": false,
+  "plan_was_successful": false,
+  "plan_points": 0,
+  "expected_status_ready": "2",
+  "compute_immediate_points": 0,
+  "get_path_seconds": 0.2782,
+  "get_path": {
+    "type": "list",
+    "points": 2
+  },
+  "get_path_ends": [
+    [
+      -2550.839111328125,
+      3708.314453125,
+      0.0
+    ],
+    [
+      -2250.839111328125,
+      3708.314453125,
+      0.0
+    ]
+  ],
+  "get_path_z_is_start_z": true,
+  "get_path_to": {
+    "type": "list",
+    "points": 1
+  },
+  "get_path_to_ends": [
+    [
+      -2250.839111328125,
+      3708.314453125
+    ],
+    [
+      -2250.839111328125,
+      3708.314453125
+    ]
+  ],
+  "after": {
+    "agent_id": 17,
+    "xy": [
+      -2550.839111328125,
+      3708.314453125
+    ],
+    "map_id": 642
+  },
+  "player_did_not_move": true,
+  "note": "act stage: the client's own find_path_func, called through the port's PathPlanner and AutoPathing. A path is computed, not walked, so the player's position must be identical afterwards; anything else is a defect.",
+  "entries_after_disconnect": {
+    "game_thread.leave_game_thread_func": "e9 32 97 18 77 20 02 00 00 a1 00 a5 53 01 33 c5",
+    "ui.send_ui_message_func": "55 8b ec 83 ec 2c 53 8b 5d 08 57 8b fb f7 df 1b",
+    "effects.post_process_effect_func": "e9 44 16 fb 76 08 8b 45 0c db 45 08 89 45 f8 8b",
+    "render.end_scene_func": "55 8b ec 56 8b 75 08 83 be b8 01 00 00 00 75 1c"
+  },
+  "hooks_original_after_disconnect": true
+}
+act_exit=0 
+=== done Mon 10/05/2026 21:44:03.76 === 

@@ -67,9 +67,12 @@ NATIVE_BINDINGS = Path(r"C:\Users\Apo\Py4GW_Reforged_Native\src\GW\skillbar\skil
 NATIVE_NAMES = Path(r"C:\Users\Apo\Py4GW_Reforged_Native\src\GW\skillbar\skill_names.cpp")
 
 #: The client image the record was verified against, and the address the port's resolver answers
-#: for ``skillbar.skill_array_addr`` on it (``tools/resolve_offline.py skillbar``).
+#: for ``skillbar.skill_array_addr`` on it (``tools/resolve_offline.py skillbar``). The 2026-09-30
+#: client update (build 38974) moved the table ``+0x1140``; the resolver reads the immediate out of the
+#: client's own accessor, so it answered the new address while this expectation still held the old one
+#: (re-measured 2026-10-05).
 CLIENT = Path(r"F:\GW\GW1\Gw.exe")
-SKILL_ARRAY_ADDRESS = 0x98A370
+SKILL_ARRAY_ADDRESS = 0x98B4B0
 
 #: ``(field, offset)`` for every member of the client's record, from ``skill.h``'s own comments.
 RECORD_LAYOUT: tuple[tuple[str, int], ...] = (
@@ -240,7 +243,7 @@ class SkillRecordLayoutTests(unittest.TestCase):
 
         self.assertEqual(ctypes.sizeof(SkillStruct), 0xA4)
         self.assertEqual(SKILL_RECORD_SIZE, 0xA4)
-        self.assertEqual(SKILL_ARRAY_LENGTH, 0xD94)
+        self.assertEqual(SKILL_ARRAY_LENGTH, 0xDA7)
 
     def test_every_field_sits_at_the_headers_offset(self) -> None:
         """Each offset is asserted against ``skill.h``'s own comment for that field."""
@@ -606,7 +609,7 @@ class SkillArrayReaderTests(unittest.TestCase):
         self.assertEqual(record.skill_id, 0x99)
 
     def test_the_clients_bound_is_enforced(self) -> None:
-        """``cmp esi, 0xD94``: at the bound and past it the reader answers ``None``."""
+        """``cmp esi, 0xDA7``: at the bound and past it the reader answers ``None``."""
 
         array, reader = self._array()
         self.assertIsNotNone(array.read(SKILL_ARRAY_LENGTH - 1))

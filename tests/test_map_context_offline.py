@@ -294,21 +294,26 @@ class MapContextOfflineTests(unittest.TestCase):
         self.assertEqual(MapContext.get_ptr(), 0)
         self.assertIsNone(MapContext.get_context())
 
-    def test_pathing_cache_can_be_cleared_by_map_or_process(self) -> None:
-        """Cache keys isolate clients and support explicit lifecycle cleanup."""
+    def test_pathing_reads_are_taken_on_demand_and_nothing_is_kept(self) -> None:
+        """``GetPathingMaps`` reads the client every call, and the clear member drops nothing.
 
-        MapContext._pathing_maps_cache[(101, 42)] = []
-        MapContext._pathing_maps_cache[(202, 42)] = []
-        MapContext._pathing_maps_cache_raw[(101, 42)] = []
-        MapContext._pathing_maps_cache_raw[(101, 43)] = []
+        Reforged keeps per-map snapshot dictionaries and ``ClearPathingCache`` empties them. Those
+        snapshots describe live client memory, and this library — having no frame loop — cannot know
+        when one went stale, so it holds none: the members keep the source's names while the state is
+        gone. What may be cached is what can never change, the static ``gw.dat`` tables behind
+        ``FfnaMapMethods``, and that is where ``Map.Pathing.ClearPathingCache`` clears.
+        """
 
+        self.assertFalse(hasattr(MapContext, "_pathing_maps_cache"))
+        self.assertFalse(hasattr(MapContext, "_pathing_maps_cache_raw"))
+
+        # With no client connected there is nothing to read, and nothing stored to answer with.
+        self.assertEqual(MapContext.GetPathingMaps(), [])
+        self.assertEqual(MapContext.GetPathingMapsRaw(), [])
+
+        # The source's clearing member is still a member: it must answer without raising.
         MapContext.ClearPathingCache(42)
-        self.assertNotIn((101, 42), MapContext._pathing_maps_cache)
-        self.assertNotIn((202, 42), MapContext._pathing_maps_cache)
-        self.assertNotIn((101, 42), MapContext._pathing_maps_cache_raw)
-
-        MapContext._clear_pathing_cache_for_pid(101)
-        self.assertNotIn((101, 43), MapContext._pathing_maps_cache_raw)
+        MapContext.ClearPathingCache()
 
     def test_reads_pathing_context_roots_without_materializing_graph(self) -> None:
         """Read PathContext/MapStaticData/PathingMap roots only."""

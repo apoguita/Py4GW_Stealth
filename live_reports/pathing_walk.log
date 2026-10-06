@@ -1,0 +1,313 @@
+=== pathing walk: start Mon 10/05/2026 22:25:08.20 === 
+player 17 at (-2357.0, 3456.4) zplane 22 facing (0.796, -0.605) -> goal (-1958.8, 3154.0)
+walking 2 point(s): [[-2357.01, 3456.4], [-1958.8, 3154.02]]
+end (-2357.0, 3456.4) displacement 0.0 | to goal 500.0 | goal_reached=False
+{
+  "stage": "pathing-walk",
+  "goal_distance": 500.0,
+  "pid": 4692,
+  "controller_elevated": true,
+  "entry_decisions": [
+    "game_thread.leave_game_thread_func: CHAIN on top of another runtime's entry jump here (in place)",
+    "ui.send_ui_message_func: CHAIN on top of another runtime's entry jump, at the declared function found ahead (0x00F745F0)",
+    "effects.post_process_effect_func: CHAIN on top of another runtime's entry jump here (in place)",
+    "render.end_scene_func: CHAIN on top of another runtime's entry jump, at the declared function found ahead (0x01010350)"
+  ],
+  "player": {
+    "agent_id": 17,
+    "map_id": 642,
+    "start": [
+      -2357.01,
+      3456.4
+    ],
+    "zplane": 22,
+    "rotation_angle": -0.6495,
+    "rotation_cos_sin": [
+      0.7933,
+      -0.6024
+    ],
+    "facing_unit": [
+      0.7964,
+      -0.6048
+    ]
+  },
+  "goal": [
+    -1958.8,
+    3154.02
+  ],
+  "goal_distance_from_start": 500.0,
+  "get_path": [
+    [
+      -2357.01,
+      3456.4,
+      22.0
+    ],
+    [
+      -1958.8,
+      3154.02,
+      22.0
+    ]
+  ],
+  "get_path_to": [
+    [
+      -2357.01,
+      3456.4
+    ],
+    [
+      -1958.8,
+      3154.02
+    ]
+  ],
+  "walked_path": [
+    [
+      -2357.01,
+      3456.4
+    ],
+    [
+      -1958.8,
+      3154.02
+    ]
+  ],
+  "legs": [
+    {
+      "index": 0,
+      "waypoint": [
+        -2357.01,
+        3456.4
+      ],
+      "skipped": "the path's first point is the player's own position",
+      "player": [
+        -2357.01,
+        3456.4
+      ]
+    },
+    {
+      "index": 1,
+      "waypoint": [
+        -1958.8,
+        3154.02
+      ],
+      "moved_at": 0.51,
+      "arrived": false,
+      "no_progress": true,
+      "seconds": 2.52,
+      "final_distance": 500.0
+    }
+  ],
+  "trail": [
+    {
+      "t": 0.47,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 0.0,
+      "moving": false
+    },
+    {
+      "t": 0.51,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 0.61,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 0.71,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 0.81,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 0.91,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.01,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.11,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.21,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.31,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.41,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.51,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.62,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.72,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.82,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.92,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.02,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.12,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.22,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.32,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.42,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.52,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.62,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.72,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.82,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.92,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 3.02,
+      "x": -2357.01,
+      "y": 3456.4,
+      "to_waypoint": 500.0,
+      "moving": false
+    }
+  ],
+  "end": [
+    -2357.01,
+    3456.4
+  ],
+  "displacement": 0.0,
+  "distance_to_goal": 500.0,
+  "goal_reached": false,
+  "walk_seconds": 3.02,
+  "every_leg_arrived": false,
+  "entries_before": {
+    "game_thread.leave_game_thread_func": "e9 32 97 18 77 20 02 00 00 a1 00 a5 53 01 33 c5",
+    "ui.send_ui_message_func": "55 8b ec 83 ec 2c 53 8b 5d 08 57 8b fb f7 df 1b",
+    "effects.post_process_effect_func": "e9 44 16 fb 76 08 8b 45 0c db 45 08 89 45 f8 8b",
+    "render.end_scene_func": "55 8b ec 56 8b 75 08 83 be b8 01 00 00 00 75 1c"
+  },
+  "entries_after_disconnect": {
+    "game_thread.leave_game_thread_func": "e9 32 97 18 77 20 02 00 00 a1 00 a5 53 01 33 c5",
+    "ui.send_ui_message_func": "55 8b ec 83 ec 2c 53 8b 5d 08 57 8b fb f7 df 1b",
+    "effects.post_process_effect_func": "e9 44 16 fb 76 08 8b 45 0c db 45 08 89 45 f8 8b",
+    "render.end_scene_func": "55 8b ec 56 8b 75 08 83 be b8 01 00 00 00 75 1c"
+  },
+  "hooks_original_after_disconnect": true,
+  "note": "one connection; the port's own get_path, then Player.Move per waypoint with the player's position and the client's moving flag watched until each waypoint was reached or its own timeout expired. Nothing but the character moved."
+}
+walk_exit=4 
+=== done Mon 10/05/2026 22:25:13.79 === 

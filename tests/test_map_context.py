@@ -100,28 +100,15 @@ class LiveMapContextTests(unittest.TestCase):
             pathing_maps = MapContext.GetPathingMaps()
             self.assertEqual(len(raw_maps), len(pathing_maps))
             self.assertGreater(len(raw_maps), 0)
-            self.assertIs(MapContext.GetPathingMapsRaw(), raw_maps)
-            self.assertIs(MapContext.GetPathingMaps(), pathing_maps)
-            self.assertTrue(
-                all(key[0] == self.pid for key in MapContext._pathing_maps_cache)
-            )
+            # Read on demand: a second call is a second read of the client, not the same object.
+            self.assertIsNot(MapContext.GetPathingMapsRaw(), raw_maps)
+            self.assertIsNot(MapContext.GetPathingMaps(), pathing_maps)
 
+            # The source's clearing member keeps its name with no stored snapshot behind it.
             MapContext.ClearPathingCache(int(snapshot.map_id))
-            self.assertFalse(
-                any(
-                    key[0] == self.pid and key[1] == int(snapshot.map_id)
-                    for key in MapContext._pathing_maps_cache
-                )
-            )
         finally:
             MapContext.disable()
             disconnect()
-        self.assertFalse(
-            any(key[0] == self.pid for key in MapContext._pathing_maps_cache)
-        )
-        self.assertFalse(
-            any(key[0] == self.pid for key in MapContext._pathing_maps_cache_raw)
-        )
 
     def test_reads_bounded_map_root_and_spawns(self) -> None:
         """Read root values and bounded spawn records from the live client."""

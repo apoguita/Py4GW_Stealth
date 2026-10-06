@@ -32,13 +32,20 @@ the client's own static data: the function this project's catalog resolves as
 `skillbar.skill_array_addr` is the accessor the client itself uses, and its whole body is
 
 ```asm
-005a8d20  55                push ebp
-005a8d24  8b 75 08          mov  esi, [ebp+8]        ; esi = skill_id
-005a8d27  81 fe 94 0d 00 00 cmp  esi, 0xD94          ; the table's own bound (3476)
-005a8d40  69 c6 a4 00 00 00 imul eax, esi, 0xA4     ; stride = sizeof(Skill)
-005a8d47  05 70 a3 98 00    add  eax, 0x98A370       ; &skill_array[skill_id]
-005a8d4d  c3                ret
+005a9160  55                push ebp
+005a9164  8b 75 08          mov  esi, [ebp+8]        ; esi = skill_id
+005a9167  81 fe a7 0d 00 00 cmp  esi, 0xDA7          ; the table's own bound (3495)
+005a9183  69 c6 a4 00 00 00 imul eax, esi, 0xA4     ; stride = sizeof(Skill)
+005a918a  05 b0 b4 98 00    add  eax, 0x98B4B0       ; &skill_array[skill_id]
+005a9190  c3                ret
 ```
+
+The 2026-09-30 update (build 38974) moved all three of those numbers: the function is now at
+`0x005A9160` (was `0x005A8D20`), the bound is `0xDA7` (3495, was `0xD94`/3476) and the table is at
+`0x98B4B0` (was `0x98A370`). `SKILL_ARRAY_LENGTH` in `py4gw/context/skill_context.py` carries the
+re-measured bound, and the offline test's address constant was re-pinned to `0x98B4B0` — where the
+first twelve records read `0, 1, … 11`, while the old address no longer holds a table of skill ids.
+The resolver needed no change: it reads the immediate out of the client's own instruction.
 
 so the port's reader is `address + skill_id * 0xA4` behind the client's own bound, with no call, no
 hook and no state involved. `tests/test_skill_offline.py` then decodes the real records out of

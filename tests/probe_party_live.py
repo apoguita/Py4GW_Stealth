@@ -52,6 +52,9 @@ from py4gw.context.world_context import WorldContext
 from py4gw.memory import MemoryManager, ProcessMemoryReader
 from py4gw.scanner import PatternCatalog, RemoteScanner
 from py4gw.ui.frame import FrameArray
+from py4gw.ui.frame_tree import FrameTree
+from py4gw.context.gameplay_context import GameplayContext
+from py4gw.context.mission_map_context import MissionMapContext
 from py4gw.win32 import Win32
 
 #: Where the read stage's report goes, and where the elevated stages' does.
@@ -195,6 +198,17 @@ class _LiveClient:
         )
         self._map_context = MapContext(reader, self._game_context)
         self.frame_array = FrameArray(reader, scanner, patterns)
+        # The frame-array route to the frame-published contexts, built the way ``ConnectedClient``
+        # builds it (``client.py:393-410``): ``Map.Pathing.Quad`` is the source's own body and reaches
+        # screen coordinates through ``Map.MissionMap.GetPanOffset``, so a stand-in without this
+        # refused ``IsPointInPathing`` with an ``AttributeError`` instead of reading it.
+        self.frame_tree = FrameTree(self.frame_array, scanner.function_from_near_call)
+        self._mission_map_context = MissionMapContext(
+            reader, scanner, patterns, self.frame_tree
+        )
+        # The same reach goes on through ``Map.MissionMap.GetZoom`` (``map.py:1114``).
+        self._gameplay_context = GameplayContext(reader, scanner, patterns)
+        self._gameplay_context.initialize()
         self.agent_array = AgentArray(
             reader, scanner, patterns, cache_context_validator=lambda: True
         )
@@ -216,6 +230,18 @@ class _LiveClient:
 
     def resolves(self, name: str) -> bool:
         return self._patterns.resolve(name, self._scanner).ok
+
+    @property
+    def mission_map_context(self) -> MissionMapContext:
+        """The frame-array-backed reader, under the name ``ConnectedClient`` gives it."""
+
+        return self._mission_map_context
+
+    @property
+    def gameplay_context(self) -> GameplayContext:
+        """The gameplay reader, under the name ``ConnectedClient`` gives it."""
+
+        return self._gameplay_context
 
     def call_function(self, *args: Any, **kwargs: Any) -> Any:
         raise RuntimeError(

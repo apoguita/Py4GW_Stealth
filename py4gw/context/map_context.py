@@ -1815,8 +1815,6 @@ class MapContext:
     _ptr: int = 0
     _cached_ctx: MapContextStruct | None = None
     _callback_name = "MapContext.UpdatePtr"
-    _pathing_maps_cache: dict[tuple[int, int], list[PathingMap]] = {}
-    _pathing_maps_cache_raw: dict[tuple[int, int], list[PathingMapStruct]] = {}
 
     def __init__(self, reader: _memory_reader, game_context: GameContext) -> None:
         """Create a reader using the selected client's GameContext."""
@@ -1953,59 +1951,42 @@ class MapContext:
 
     @staticmethod
     def GetPathingMaps() -> list[PathingMap]:
-        """Return cached source-style pathing snapshots for the current map."""
+        """Return the current map's pathing snapshots, **read on demand**.
+
+        Nothing is stored. These snapshots describe memory the *client* owns, and it can change
+        between frames — the library has no frame loop, so it cannot know when a stored one went
+        stale, and a stale one does not merely mislead: it holds pointers into a map the client may
+        have unloaded. What may be cached is what can never change — the `gw.dat` tables behind
+        `FfnaMapMethods`, which is where `Map.Pathing`'s offline branch reads from.
+        """
 
         inputs = MapContext._pathing_cache_inputs()
         if inputs is None:
             return []
-        cache_key, map_context = inputs
-        cached = MapContext._pathing_maps_cache.get(cache_key)
-        if cached is None:
-            cached = map_context.pathing_maps_snapshot
-            MapContext._pathing_maps_cache[cache_key] = cached
-        return cached
+        _cache_key, map_context = inputs
+        return map_context.pathing_maps_snapshot
 
     @staticmethod
     def GetPathingMapsRaw() -> list[PathingMapStruct]:
-        """Return cached raw pathing-map records for the current map."""
+        """Return the current map's raw pathing-map records, read on demand (see above)."""
 
         inputs = MapContext._pathing_cache_inputs()
         if inputs is None:
             return []
-        cache_key, map_context = inputs
-        cached = MapContext._pathing_maps_cache_raw.get(cache_key)
-        if cached is None:
-            cached = map_context.pathing_maps
-            MapContext._pathing_maps_cache_raw[cache_key] = cached
-        return cached
+        _cache_key, map_context = inputs
+        return map_context.pathing_maps
 
     @staticmethod
     def ClearPathingCache(map_id: int | None = None) -> None:
-        """Clear all pathing caches or a map's entries across connected clients."""
+        """The source's own cache-clearing member, which has nothing of its own to clear here.
 
-        if map_id is None:
-            MapContext._pathing_maps_cache.clear()
-            MapContext._pathing_maps_cache_raw.clear()
-            return
-        for cache in (
-            MapContext._pathing_maps_cache,
-            MapContext._pathing_maps_cache_raw,
-        ):
-            for cache_key in tuple(cache):
-                if cache_key[1] == map_id:
-                    cache.pop(cache_key, None)
-
-    @staticmethod
-    def _clear_pathing_cache_for_pid(pid: int) -> None:
-        """Remove cached raw records before their process handle is closed."""
-
-        for cache in (
-            MapContext._pathing_maps_cache,
-            MapContext._pathing_maps_cache_raw,
-        ):
-            for cache_key in tuple(cache):
-                if cache_key[0] == pid:
-                    cache.pop(cache_key, None)
+        Reforged clears the per-map snapshot dictionaries it holds. This reader holds no snapshot of
+        live client memory — :meth:`GetPathingMaps` reads the client every time it is asked — so the
+        member keeps the source's name and drops nothing rather than dropping state that no longer
+        exists. The pathing data that *is* cacheable, the static `gw.dat` tables, is cleared by
+        `Map.Pathing.ClearPathingCache` through `FfnaMapMethods.ClearCache`, which is where the
+        source's own call goes.
+        """
 
     @staticmethod
     def GetTravelPortals() -> list[TravelPortal]:

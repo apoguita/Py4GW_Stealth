@@ -251,6 +251,158 @@ def jump_destination(address: int, head: bytes) -> int:
     return (address + 5 + struct.unpack_from("<i", head, 1)[0]) & 0xFFFFFFFF
 
 
+def decide_entries(
+    pid: int,
+    reader: ProcessMemoryReader,
+    scanner: RemoteScanner,
+    catalog: PatternCatalog,
+    modules: list[tuple[int, int, str]],
+    module_base: int,
+    module_size: int,
+) -> list[dict[str, Any]]:
+    """Drive the connection's own placement decision on the live bytes, one entry at a time.
+
+    The decision is the shipping one, driven method by method on the live bytes, in the order
+    ``ConnectedClient._prepare_target`` drives them, so what these rows say is what a ``connect()``
+    would do rather than a model of it. A bare instance is enough: the methods consulted read the two
+    module words, the pattern catalog, the scanner and the access object, and nothing else.
+    """
+
+    decision = object.__new__(ConnectedClient)
+    decision._pid = pid
+    decision._module_base = module_base
+    decision._module_size = module_size
+    decision._patterns = catalog
+    decision._scanner = scanner
+
+    access = cast("WriteAccess", ReadOnlyAccess(reader))
+    rows: list[dict[str, Any]] = []
+    for name, entry_bytes in TARGETS:
+        row: dict[str, Any] = {"name": name, "expected_entry": entry_bytes.hex(" ")}
+        try:
+            address, anchor = decision._resolve_placement(name)
+        except RuntimeError as error:
+            row["resolved"] = False
+            row["message"] = str(error)
+            rows.append(row)
+            continue
+        row["resolved"] = True
+        row["message"] = ""
+        row["walked_back_from"] = hex(anchor) if anchor else None
+
+        row["address"] = hex(address)
+        row["in_module"] = bool(module_base <= address < module_base + module_size)
+        row["head"] = reader.read(address, HEAD_BYTES).hex(" ")
+        head = bytes.fromhex(row["head"])
+        row["entry_is"] = classify(head)
+        row["entry_is_original"] = head[: len(entry_bytes)] == entry_bytes
+
+        if head[:1] == bytes((JMP_REL32,)):
+            landing = jump_destination(address, head)
+            landing_head = reader.read(landing, HEAD_BYTES)
+            row["landing"] = hex(landing)
+            row["landing_inside_the_client_module"] = bool(
+                module_base <= landing < module_base + module_size
+            )
+            row["landing_module"] = module_for(pid, landing, modules)
+            row["landing_region"] = region_for(pid, landing)
+            row["landing_head"] = landing_head.hex(" ")
+            row["landing_is"] = classify(landing_head)
+
+        decision_anchor = anchor
+        ahead = decision._entry_jump_ahead(access, address, len(entry_bytes), limit=anchor or 0)
+        if ahead is not None:
+            patch_address, ahead_is_ours = ahead
+            row["entry_jump_ahead"] = {
+                "address": hex(patch_address),
+                "is_this_project": ahead_is_ours,
+            }
+            if not ahead_is_ours:
+                ahead_head = reader.read(patch_address, len(entry_bytes))
+                row["entry_jump_ahead"]["declared_tail_matches"] = (
+                    decision._jump_covers_part_of_declared_entry(ahead_head, entry_bytes)
+                )
+
+        if row["entry_is_original"]:
+            row["this_project_would"] = "place its own patch on the client's own bytes"
+        elif decision._is_our_stale_patch(access, address, head):
+            row["this_project_would"] = (
+                "repair its own stale patch, then place on the client's own bytes"
+            )
+        elif decision._is_foreign_patch_on_the_declared_function(
+            head, entry_bytes, decision_anchor, found_by_the_walk=False
+        ):
+            row["this_project_would"] = (
+                "CHAIN on top of another runtime's entry jump here (in place)"
+            )
+        elif row.get("entry_jump_ahead") and not row["entry_jump_ahead"]["is_this_project"]:
+            ahead_address = int(row["entry_jump_ahead"]["address"], 16)
+            ahead_head = reader.read(ahead_address, len(entry_bytes))
+            if decision._is_foreign_patch_on_the_declared_function(
+                ahead_head, entry_bytes, decision_anchor, found_by_the_walk=True
+            ):
+                row["this_project_would"] = (
+                    "CHAIN on top of another runtime's entry jump, at the declared function "
+                    f"found ahead (0x{ahead_address:08X})"
+                )
+            else:
+                row["this_project_would"] = (
+                    "REFUSE: a jump ahead of the answer whose bytes do not match this catalog's "
+                    "declared entry"
+                )
+        else:
+            row["this_project_would"] = (
+                "REFUSE: the entry is not a jump and not the bytes this build's catalog "
+                "declares, and no usable entry jump was found ahead of the answer either"
+            )
+        rows.append(row)
+    return rows
+
+
+def placement_is_safe(rows: list[dict[str, Any]]) -> tuple[bool, list[str]]:
+    """Whether ``py4gw.connect`` would proceed, and what it would do at each entry.
+
+    True when every entry is one the connection places on, repairs, or chains on top of — the outcomes
+    ``ConnectedClient._prepare_target`` can reach. A ``REFUSE`` row, or an entry the resolver could not
+    answer, is the connection's own refusal; this reports it rather than forming a second opinion.
+    """
+
+    decisions = [
+        f"{row['name']}: {row.get('this_project_would') or row.get('message') or 'unresolved'}"
+        for row in rows
+    ]
+    refused = [
+        row
+        for row in rows
+        if not row.get("resolved") or str(row.get("this_project_would", "")).startswith("REFUSE")
+    ]
+    return (not refused, decisions)
+
+
+def connectable(win32: Win32, pid: int) -> tuple[bool, list[str]]:
+    """Answer, read-only, whether ``py4gw.connect`` would proceed on one client.
+
+    This is the gate an acting probe wants before it opens the write path: the arrangement the owner
+    runs has Reforged injected, so an entry that is not the client's own bytes is the ordinary case and
+    connect chains on it. Only the decisions ``_prepare_target`` would refuse at come back ``False``.
+    """
+
+    module = win32.get_main_module(pid)
+    module_base = int(module["base_address"])
+    module_size = int(module["size"])
+    reader = ProcessMemoryReader(win32, pid)
+    try:
+        scanner = RemoteScanner(reader, module_base=module_base, module_size=module_size)
+        scanner.initialize()
+        catalog = PatternCatalog.from_directory("offsets")
+        rows = decide_entries(
+            pid, reader, scanner, catalog, loaded_modules(pid), module_base, module_size
+        )
+        return placement_is_safe(rows)
+    finally:
+        reader.close()
+
+
 def main() -> int:
     argv = [argument for argument in sys.argv[1:] if not argument.startswith("--pid")]
     pid_argument = next(
@@ -291,108 +443,17 @@ def main() -> int:
         scanner.initialize()
         catalog = PatternCatalog.from_directory("offsets")
 
-        # The connection's own decision, driven on the live bytes. A bare instance is enough:
-        # ``_is_our_stale_patch`` reads only these two words and the access object.
-        decision = object.__new__(ConnectedClient)
-        decision._pid = pid
-        decision._module_base = module_base
-        decision._module_size = module_size
-        # The two the shipping helpers read, so ``_resolve_placement`` and the placement decision below are
-        # the connection's own code driven on the live bytes rather than a copy of it.
-        decision._patterns = catalog
-        decision._scanner = scanner
-
         modules = loaded_modules(pid)
         report["loaded_modules"] = [
             {"name": name, "base": hex(base), "size": hex(size)}
             for base, size, name in modules
         ]
 
-        rows = []
-        for name, entry_bytes in TARGETS:
-            row: dict[str, Any] = {"name": name, "expected_entry": entry_bytes.hex(" ")}
-            try:
-                address, anchor = decision._resolve_placement(name)
-            except RuntimeError as error:
-                row["resolved"] = False
-                row["message"] = str(error)
-                rows.append(row)
-                continue
-            row["resolved"] = True
-            row["message"] = ""
-            row["walked_back_from"] = hex(anchor) if anchor else None
-
-            row["address"] = hex(address)
-            row["in_module"] = bool(module_base <= address < module_base + module_size)
-            row["head"] = reader.read(address, HEAD_BYTES).hex(" ")
-            head = bytes.fromhex(row["head"])
-            row["entry_is"] = classify(head)
-            row["entry_is_original"] = head[: len(entry_bytes)] == entry_bytes
-
-            if head[:1] == bytes((JMP_REL32,)):
-                landing = jump_destination(address, head)
-                landing_head = reader.read(landing, HEAD_BYTES)
-                row["landing"] = hex(landing)
-                row["landing_inside_the_client_module"] = bool(
-                    module_base <= landing < module_base + module_size
-                )
-                row["landing_module"] = module_for(pid, landing, modules)
-                row["landing_region"] = region_for(pid, landing)
-                row["landing_head"] = landing_head.hex(" ")
-                row["landing_is"] = classify(landing_head)
-
-            # The decision is the shipping one, driven method by method on the live bytes, in the order
-            # ``ConnectedClient._prepare_target`` drives them.
-            access = cast("WriteAccess", ReadOnlyAccess(reader))
-            decision_anchor = anchor
-            ahead = decision._entry_jump_ahead(access, address, len(entry_bytes), limit=anchor or 0)
-            if ahead is not None:
-                patch_address, ahead_is_ours = ahead
-                row["entry_jump_ahead"] = {
-                    "address": hex(patch_address),
-                    "is_this_project": ahead_is_ours,
-                }
-                if not ahead_is_ours:
-                    ahead_head = reader.read(patch_address, len(entry_bytes))
-                    row["entry_jump_ahead"]["declared_tail_matches"] = (
-                        decision._jump_covers_part_of_declared_entry(ahead_head, entry_bytes)
-                    )
-
-            if row["entry_is_original"]:
-                row["this_project_would"] = (
-                    "place its own patch on the client's own bytes"
-                )
-            elif decision._is_our_stale_patch(access, address, head):
-                row["this_project_would"] = (
-                    "repair its own stale patch, then place on the client's own bytes"
-                )
-            elif decision._is_foreign_patch_on_the_declared_function(
-                head, entry_bytes, decision_anchor, found_by_the_walk=False
-            ):
-                row["this_project_would"] = (
-                    "CHAIN on top of another runtime's entry jump here (in place)"
-                )
-            elif row.get("entry_jump_ahead") and not row["entry_jump_ahead"]["is_this_project"]:
-                ahead_address = int(row["entry_jump_ahead"]["address"], 16)
-                ahead_head = reader.read(ahead_address, len(entry_bytes))
-                if decision._is_foreign_patch_on_the_declared_function(
-                    ahead_head, entry_bytes, decision_anchor, found_by_the_walk=True
-                ):
-                    row["this_project_would"] = (
-                        "CHAIN on top of another runtime's entry jump, at the declared function "
-                        f"found ahead (0x{ahead_address:08X})"
-                    )
-                else:
-                    row["this_project_would"] = (
-                        "REFUSE: a jump ahead of the answer whose bytes do not match this catalog's "
-                        "declared entry"
-                    )
-            else:
-                row["this_project_would"] = (
-                    "REFUSE: the entry is not a jump and not the bytes this build's catalog "
-                    "declares, and no usable entry jump was found ahead of the answer either"
-                )
-            rows.append(row)
+        # The connection's own decision, driven on the live bytes by the shipping methods — the same
+        # function the acting probes gate on before they open the write path (``connectable``).
+        rows = decide_entries(
+            pid, reader, scanner, catalog, modules, module_base, module_size
+        )
 
         # The declared entry bytes are searched for independently of the resolver. If they are in
         # ``.text`` somewhere else, the resolver's anchor answered the wrong function on this build; if

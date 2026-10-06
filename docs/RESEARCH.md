@@ -1183,7 +1183,9 @@ Status: source-verified and verified against one live client build.
 
 The maintained Reforged definitions agree on the relevant layout:
 
-- `CharContext` is `0x448` bytes;
+- `CharContext` is `0x450` bytes (`0x448` before the 2026-09-30 client update, which inserted a word
+  at `+0x228` and shifted everything from `district_number` onward by four — measured live 2026-10-01
+  and matching Reforged's own `Fixing Charcontext struct` fix);
 - `CharContext.player_name` is an inline UTF-16/wchar field at offset `0x74`,
   with 20 code units;
 - `GameContext.character` is a 32-bit target pointer at offset `0x44`.

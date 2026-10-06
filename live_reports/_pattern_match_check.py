@@ -40,7 +40,10 @@ def sweep(scanner: RemoteScanner, catalog: PatternCatalog) -> int:
     rows: list[tuple[str, int, list[int]]] = []
     ambiguous = 0
     checked = 0
-    for definition in catalog.patterns():
+    # The catalog exposes named lookups, not an iteration: the loaded definitions are its own map, and
+    # this tool is a scratch diagnostic, so it reads that map rather than adding an accessor to the
+    # library for it.
+    for name, definition in sorted(catalog._patterns.items()):
         pattern = definition.pattern
         if pattern is None:
             continue

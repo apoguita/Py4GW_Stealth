@@ -41,6 +41,37 @@ themselves rather than waiting on work — `Player.player_instance` and
 owns in-process; every other remaining item in this document is work with a name, and no item here
 says a source feature is missing, because the sources are complete and working.
 
+### Unreachable in this library: the ImGui and render side
+
+**These are not work items.** They are members whose source body reads the *injected runtime's own*
+ImGui context or overlay manager — surfaces that do not exist in this library, because nothing here
+loads a runtime into the client and there is no render process on this side. Every one of them says so
+in its own body and raises; **not one returns a stand-in**, and no live code path in `py4gw/` calls
+`PyImGui` or `PyOverlay` at all (a sweep of the package finds those names only inside raise messages
+and docstrings). The register is exhaustive as of 2026-10-05: **19 members**, and the sweep that
+produced it is `ast`-based over every module in `py4gw/`.
+
+| module | member | what the source body needs |
+| --- | --- | --- |
+| `frame_tree/frame.py` | `_FrameTree.overlay` | `PyOverlay.Overlay()` — the injected runtime's overlay manager |
+| `frame_tree/frame.py` | `_FrameTree.color_frames` | `FrameTree.overlay` + `Frame.draw` |
+| `frame_tree/frame.py` | `Frame.is_mouse_over` | `PyImGui.get_io()` + `ImGui.is_mouse_in_rect` |
+| `frame_tree/frame.py` | `Frame.draw` | `FrameTree.overlay` + `PyOverlay.Vec2f` |
+| `frame_tree/frame.py` | `Frame.draw_outline` | `FrameTree.overlay`, `PyOverlay.Vec2f`, `overlay.DrawQuad` |
+| `frame_tree/frame.py` | `Frame.io_events` | `UIManager.GetIOEventsForFrame`, whose only producer is `_UpdateFrameIOEvents` (below) |
+| `map.py` | `MissionMap.IsMouseOver`, `MissionMap.GetLastClickCoords`, `MissionMap.GetLastRightClickCoords` | `PyImGui.get_io()`; `UIManager.GetIOEventsForFrame` |
+| `map.py` | `MiniMap.IsMouseOver`, `MiniMap.GetLastClickCoords`, `MiniMap.GetLastRightClickCoords` | as above |
+| `map.py` | `WorldMap.IsMouseOver`, `WorldMap.GetLastClickCoords`, `WorldMap.GetLastRightClickCoords` | as above |
+| `map.py` | `Pathing.WorldToScreen` | `PyOverlay.Overlay()` + `Overlay.FindZ` |
+| `ui_manager.py` | `UIManager._UpdateFrameIOEvents` | `PyImGui.get_io()` (mouse position, wheel), `PyImGui.is_mouse_clicked`/`is_mouse_double_clicked`, `PySystem.get_tick_count64()` |
+| `inventory.py` | `Inventory._salvage_choice_debug_log` | `PySystem.Console` — the injected runtime's in-client ImGui console |
+| `py4gwcorelib_src/utils.py` | `Utils.TokenizeMarkupText` | `PyImGui.StyleConfig()` + `PyImGui.calc_text_size` |
+
+The chain to note: `Frame.io_events` and the nine `Map` mouse members all hang off
+`UIManager._UpdateFrameIOEvents`, which is the single place the injected runtime's `get_io()` would be
+read. With that one member unreachable, all ten of its consumers are unreachable for the same reason —
+which is why they are marked as a group here rather than counted as independent gaps.
+
 ## The migrated classes at a glance (2026-09-27)
 
 Every class this project has taken on, with what its own module says about it. **The counts are public

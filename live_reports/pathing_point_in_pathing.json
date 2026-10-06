@@ -1,0 +1,12 @@
+{
+  "pid": 4692,
+  "agent_id": 17,
+  "xy": [
+    -2550.839111328125,
+    3708.314453125
+  ],
+  "is_point_in_pathing": true,
+  "is_point_in_pathing_seconds": 801.1,
+  "is_screen_point_in_pathing": true,
+  "is_screen_point_in_pathing_seconds": 0.3
+}

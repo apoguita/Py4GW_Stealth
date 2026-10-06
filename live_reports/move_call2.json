@@ -1,0 +1,434 @@
+{
+  "stage": "move-call",
+  "distance": 500.0,
+  "watch_seconds": 6.0,
+  "pid": 8456,
+  "controller_elevated": true,
+  "entry_decisions": [
+    "game_thread.leave_game_thread_func: place its own patch on the client's own bytes",
+    "ui.send_ui_message_func: place its own patch on the client's own bytes",
+    "effects.post_process_effect_func: place its own patch on the client's own bytes",
+    "render.end_scene_func: place its own patch on the client's own bytes"
+  ],
+  "player": {
+    "agent_id": 431,
+    "map_id": 642,
+    "start": [
+      -1544.99,
+      3477.7
+    ],
+    "zplane": 22,
+    "facing_unit": [
+      -0.9946,
+      0.1038
+    ]
+  },
+  "goal": [
+    -2042.29,
+    3529.61
+  ],
+  "zplane_source": "the source's own default (omitted, so 0 — what every Reforged caller passes: Movement.py:83, Sequential.py:58, BuildMgr.py:1451)",
+  "move_call": null,
+  "move_call_seconds": 0.023,
+  "samples": [
+    {
+      "t": 0.04,
+      "x": -1563.9,
+      "y": 3479.67,
+      "moving": true,
+      "from_start": 19.0,
+      "to_goal": 481.0
+    },
+    {
+      "t": 0.17,
+      "x": -1602.28,
+      "y": 3483.68,
+      "moving": true,
+      "from_start": 57.6,
+      "to_goal": 442.4
+    },
+    {
+      "t": 0.29,
+      "x": -1640.38,
+      "y": 3487.66,
+      "moving": true,
+      "from_start": 95.9,
+      "to_goal": 404.1
+    },
+    {
+      "t": 0.42,
+      "x": -1673.89,
+      "y": 3491.16,
+      "moving": true,
+      "from_start": 129.6,
+      "to_goal": 370.4
+    },
+    {
+      "t": 0.55,
+      "x": -1711.99,
+      "y": 3495.13,
+      "moving": true,
+      "from_start": 167.9,
+      "to_goal": 332.1
+    },
+    {
+      "t": 0.68,
+      "x": -1750.09,
+      "y": 3499.11,
+      "moving": true,
+      "from_start": 206.2,
+      "to_goal": 293.8
+    },
+    {
+      "t": 0.81,
+      "x": -1788.47,
+      "y": 3503.12,
+      "moving": true,
+      "from_start": 244.8,
+      "to_goal": 255.2
+    },
+    {
+      "t": 0.94,
+      "x": -1821.7,
+      "y": 3506.58,
+      "moving": true,
+      "from_start": 278.2,
+      "to_goal": 221.8
+    },
+    {
+      "t": 1.07,
+      "x": -1860.08,
+      "y": 3510.59,
+      "moving": true,
+      "from_start": 316.8,
+      "to_goal": 183.2
+    },
+    {
+      "t": 1.19,
+      "x": -1898.18,
+      "y": 3514.57,
+      "moving": true,
+      "from_start": 355.1,
+      "to_goal": 144.9
+    },
+    {
+      "t": 1.32,
+      "x": -1931.69,
+      "y": 3518.07,
+      "moving": true,
+      "from_start": 388.8,
+      "to_goal": 111.2
+    },
+    {
+      "t": 1.45,
+      "x": -1969.79,
+      "y": 3522.04,
+      "moving": true,
+      "from_start": 427.1,
+      "to_goal": 72.9
+    },
+    {
+      "t": 1.58,
+      "x": -2008.17,
+      "y": 3526.05,
+      "moving": true,
+      "from_start": 465.7,
+      "to_goal": 34.3
+    },
+    {
+      "t": 1.71,
+      "x": -2042.29,
+      "y": 3529.61,
+      "moving": false,
+      "from_start": 500.0,
+      "to_goal": 0.0
+    },
+    {
+      "t": 1.84,
+      "x": -2042.29,
+      "y": 3529.61,
+      "moving": false,
+      "from_start": 500.0,
+      "to_goal": 0.0
+    },
+    {
+      "t": 1.97,
+      "x": -2042.29,
+      "y": 3529.61,
+      "moving": false,
+      "from_start": 500.0,
+      "to_goal": 0.0
+    },
+    {
+      "t": 2.1,
+      "x": -2042.29,
+      "y": 3529.61,
+      "moving": false,
+      "from_start": 500.0,
+      "to_goal": 0.0
+    },
+    {
+      "t": 2.23,
+      "x": -2042.29,
+      "y": 3529.61,
+      "moving": false,
+      "from_start": 500.0,
+      "to_goal": 0.0
+    },
+    {
+      "t": 2.36,
+      "x": -2042.29,
+      "y": 3529.61,
+      "moving": false,
+      "from_start": 500.0,
+      "to_goal": 0.0
+    },
+    {
+      "t": 2.48,
+      "x": -2042.29,
+      "y": 3529.61,
+      "moving": false,
+      "from_start": 500.0,
+      "to_goal": 0.0
+    },
+    {
+      "t": 2.61,
+      "x": -2042.29,
+      "y": 3529.61,
+      "moving": false,
+      "from_start": 500.0,
+      "to_goal": 0.0
+    },
+    {
+      "t": 2.74,
+      "x": -2042.29,
+      "y": 3529.61,
+      "moving": false,
+      "from_start": 500.0,
+      "to_goal": 0.0
+    },
+    {
+      "t": 2.87,
+      "x": -2042.29,
+      "y": 3529.61,
+      "moving": false,
+      "from_start": 500.0,
+      "to_goal": 0.0
+    },
+    {
+      "t": 3.0,
+      "x": -2042.29,
+      "y": 3529.61,
+      "moving": false,
+      "from_start": 500.0,
+      "to_goal": 0.0
+    },
+    {
+      "t": 3.13,
+      "x": -2042.29,
+      "y": 3529.61,
+      "moving": true,
+      "from_start": 500.0,
+      "to_goal": 0.0
+    },
+    {
+      "t": 3.25,
+      "x": -2074.95,
+      "y": 3522.58,
+      "moving": true,
+      "from_start": 531.9,
+      "to_goal": 33.4
+    },
+    {
+      "t": 3.38,
+      "x": -2112.68,
+      "y": 3514.45,
+      "moving": true,
+      "from_start": 568.9,
+      "to_goal": 72.0
+    },
+    {
+      "t": 3.51,
+      "x": -2150.12,
+      "y": 3506.39,
+      "moving": true,
+      "from_start": 605.8,
+      "to_goal": 110.3
+    },
+    {
+      "t": 3.64,
+      "x": -2182.83,
+      "y": 3498.3,
+      "moving": true,
+      "from_start": 638.2,
+      "to_goal": 144.0
+    },
+    {
+      "t": 3.77,
+      "x": -2219.46,
+      "y": 3487.14,
+      "moving": true,
+      "from_start": 674.5,
+      "to_goal": 182.2
+    },
+    {
+      "t": 3.9,
+      "x": -2254.23,
+      "y": 3471.16,
+      "moving": true,
+      "from_start": 709.3,
+      "to_goal": 219.8
+    },
+    {
+      "t": 4.03,
+      "x": -2288.33,
+      "y": 3453.11,
+      "moving": true,
+      "from_start": 743.7,
+      "to_goal": 257.7
+    },
+    {
+      "t": 4.15,
+      "x": -2317.64,
+      "y": 3437.07,
+      "moving": true,
+      "from_start": 773.7,
+      "to_goal": 290.5
+    },
+    {
+      "t": 4.28,
+      "x": -2348.73,
+      "y": 3414.32,
+      "moving": true,
+      "from_start": 806.2,
+      "to_goal": 327.4
+    },
+    {
+      "t": 4.41,
+      "x": -2377.61,
+      "y": 3389.16,
+      "moving": true,
+      "from_start": 837.3,
+      "to_goal": 363.5
+    },
+    {
+      "t": 4.54,
+      "x": -2402.91,
+      "y": 3366.91,
+      "moving": true,
+      "from_start": 865.0,
+      "to_goal": 395.6
+    },
+    {
+      "t": 4.67,
+      "x": -2431.58,
+      "y": 3341.51,
+      "moving": true,
+      "from_start": 897.0,
+      "to_goal": 432.4
+    },
+    {
+      "t": 4.8,
+      "x": -2458.08,
+      "y": 3313.88,
+      "moving": true,
+      "from_start": 927.7,
+      "to_goal": 468.4
+    },
+    {
+      "t": 4.93,
+      "x": -2483.36,
+      "y": 3284.72,
+      "moving": true,
+      "from_start": 958.0,
+      "to_goal": 504.5
+    },
+    {
+      "t": 5.05,
+      "x": -2503.37,
+      "y": 3257.98,
+      "moving": true,
+      "from_start": 983.2,
+      "to_goal": 535.1
+    },
+    {
+      "t": 5.18,
+      "x": -2524.7,
+      "y": 3225.82,
+      "moving": true,
+      "from_start": 1011.6,
+      "to_goal": 570.1
+    },
+    {
+      "t": 5.31,
+      "x": -2544.48,
+      "y": 3193.03,
+      "moving": true,
+      "from_start": 1039.2,
+      "to_goal": 604.6
+    },
+    {
+      "t": 5.44,
+      "x": -2560.46,
+      "y": 3163.37,
+      "moving": true,
+      "from_start": 1063.0,
+      "to_goal": 634.5
+    },
+    {
+      "t": 5.57,
+      "x": -2573.98,
+      "y": 3127.57,
+      "moving": true,
+      "from_start": 1086.9,
+      "to_goal": 666.6
+    },
+    {
+      "t": 5.7,
+      "x": -2583.2,
+      "y": 3090.41,
+      "moving": true,
+      "from_start": 1108.1,
+      "to_goal": 696.8
+    },
+    {
+      "t": 5.83,
+      "x": -2589.77,
+      "y": 3052.38,
+      "moving": true,
+      "from_start": 1128.0,
+      "to_goal": 726.3
+    },
+    {
+      "t": 5.95,
+      "x": -2593.88,
+      "y": 3019.23,
+      "moving": true,
+      "from_start": 1144.7,
+      "to_goal": 751.5
+    }
+  ],
+  "end": [
+    -2594.31,
+    2980.69
+  ],
+  "displacement": 1161.07,
+  "max_displacement_seen": 1144.7,
+  "distance_to_goal": 778.49,
+  "moved": true,
+  "ever_moving": true,
+  "entries_before": {
+    "game_thread.leave_game_thread_func": "55 8b ec 81 ec 20 02 00 00 a1 00 a5 53 01 33 c5",
+    "ui.send_ui_message_func": "55 8b ec 8b 45 08 83 f8 56 73 16 68 3d 0f 00 00",
+    "effects.post_process_effect_func": "55 8b ec 83 ec 08 8b 45 0c db 45 08 89 45 f8 8b",
+    "render.end_scene_func": "55 8b ec 83 ec 48 a1 00 a5 53 01 33 c5 89 45 fc"
+  },
+  "entries_after_disconnect": {
+    "game_thread.leave_game_thread_func": "55 8b ec 81 ec 20 02 00 00 a1 00 a5 53 01 33 c5",
+    "ui.send_ui_message_func": "55 8b ec 8b 45 08 83 f8 56 73 16 68 3d 0f 00 00",
+    "effects.post_process_effect_func": "55 8b ec 83 ec 08 8b 45 0c db 45 08 89 45 f8 8b",
+    "render.end_scene_func": "55 8b ec 83 ec 48 a1 00 a5 53 01 33 c5 89 45 fc"
+  },
+  "hooks_original_after_disconnect": true,
+  "note": "exactly one client function was called: agent.move_to_func, once, through Player.Move (FLOAT_PTR: the source's own {x, y, zplane, 0.0} array). Everything after it is reads."
+}

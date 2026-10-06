@@ -1102,6 +1102,15 @@ class UIManager:
         ``Render::GetViewportWidth/Height``, i.e. the DX context this port does not capture). The
         two are recorded in ``docs/UIMANAGER_PORT.md`` as a source-against-source disagreement, and
         the member ports Native's, which is the higher authority and needs no render context.
+
+        **The four numbers are the binding's floats** — ``py::make_tuple(pos->p1.x, pos->p1.y,
+        pos->p2.x, pos->p2.y)``. An earlier round cast each one to ``int`` here, which the port's own
+        offline test caught (``tests/test_ui_manager_offline.py``: a record holding ``1.5, 2.5, 3.5,
+        4.5`` came back as ``1, 2, 3, 4``); the casts are gone and the values travel as the binding
+        hands them over. The source's own annotation for the member is ``list[int]`` and is kept
+        verbatim, and the port answers a list where the binding answers a tuple — both recorded here
+        rather than quietly carried, the annotation because it is Reforged's own line and the
+        container because that shape is already this member's and its live probe's.
         """
 
         from .client import require_client
@@ -1116,7 +1125,7 @@ class UIManager:
             base + int(window_id) * _WINDOW_POSITION_SIZE, _WINDOW_POSITION_SIZE
         )
         _state, p1x, p1y, p2x, p2y = struct.unpack("<Iffff", raw)
-        return [int(p1x), int(p1y), int(p2x), int(p2y)]
+        return [p1x, p1y, p2x, p2y]
 
     @staticmethod
     def IsWindowVisible(window_id: int) -> bool:

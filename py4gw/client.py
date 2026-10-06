@@ -1864,7 +1864,6 @@ class ConnectedClient:
         finally:
             if access is not None:
                 access.close()
-            MapContext._clear_pathing_cache_for_pid(self._pid)
             self._reader.close()
 
         if failure is not None:

@@ -21,7 +21,7 @@ class CharContextParityTests(unittest.TestCase):
         self.assertEqual(ctypes.sizeof(ObserverMatchFlags), 0x38)
         self.assertEqual(ctypes.sizeof(ObserverMatch), 0x78)
         self.assertEqual(ctypes.sizeof(ProgressBar), 0x2C)
-        self.assertEqual(ctypes.sizeof(CharContextStruct), 0x448)
+        self.assertEqual(ctypes.sizeof(CharContextStruct), 0x450)
         expected_offsets = {
             "h0000_array": 0x0000,
             "h0010": 0x0010,
@@ -42,21 +42,22 @@ class CharContextParityTests(unittest.TestCase):
             "host": 0x01A0,
             "token2": 0x01B8,
             "h01BC": 0x01BC,
-            "district_number": 0x0228,
-            "language": 0x022C,
-            "observe_map_id": 0x0230,
-            "current_map_id": 0x0234,
-            "observe_map_type": 0x0238,
-            "current_map_type": 0x023C,
-            "h0240": 0x0240,
-            "observer_matches_array": 0x0254,
-            "h0264": 0x0264,
-            "player_flags": 0x02A8,
-            "player_number": 0x02AC,
-            "h02B0": 0x02B0,
-            "progress_bar_ptr": 0x0350,
-            "h0354": 0x0354,
-            "player_email_ptr": 0x03C8,
+            "h0228": 0x0228,
+            "district_number": 0x022C,
+            "language": 0x0230,
+            "observe_map_id": 0x0234,
+            "current_map_id": 0x0238,
+            "observe_map_type": 0x023C,
+            "current_map_type": 0x0240,
+            "h0244": 0x0244,
+            "observer_matches_array": 0x0258,
+            "h0268": 0x0268,
+            "player_flags": 0x02AC,
+            "player_number": 0x02B0,
+            "h02B4": 0x02B4,
+            "progress_bar_ptr": 0x035C,
+            "h0360": 0x0360,
+            "player_email_ptr": 0x03D0,
         }
         self.assertEqual(
             [field[0] for field in CharContextStruct._fields_],

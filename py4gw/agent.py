@@ -520,6 +520,16 @@ class Agent:
         The four lines the source leaves *after* its own ``return`` (``Agent.py:74-81``) are
         unreachable there and are not reproduced; the cache they maintain is the adaptation the
         module docstring describes.
+
+        **What that delegate does here, and why the record cannot go stale:** the context member
+        re-runs its traversal from the client's own array on every call, so the answer is the
+        client's *now* and no record survives the call that produced it. The source can serve a
+        stored one because its injected runtime refreshes that cache every frame; this port has no
+        frame loop, and a stored agent record is a cached *dereference* — the one thing `README.md`
+        rules out. Live, 2026-10-05: serving the stored record froze an agent's position for the life
+        of a connection (a character walked 500 units in 1.6 s while ``Agent.GetXY`` answered the
+        identical coordinates), while ``IsMoving`` — which converts to a living record and re-reads —
+        tracked the walk exactly.
         """
 
         from .agent_array import AgentArray

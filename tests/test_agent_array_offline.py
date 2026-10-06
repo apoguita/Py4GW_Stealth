@@ -65,7 +65,6 @@ class AgentArrayOfflineTests(unittest.TestCase):
         self.array_address = 0x00100000
         self.array._reader = self.reader
         self.array._array_address = self.array_address
-        self.array._context_view = None
         self.array._cache_context_validator = None
 
     def test_rejects_size_greater_than_capacity(self) -> None:
@@ -207,14 +206,20 @@ class AgentArrayOfflineTests(unittest.TestCase):
 
         self.assertEqual(self.array.get_ptr(), 0x00100000)
         context = self.array.get_context()
-        self.assertIsNotNone(context, "get_context builds the view on demand")
-        self.assertEqual(self.array.get_context(), context, "get_context keeps the view")
+        self.assertIsNotNone(context, "get_context reads the view on demand")
+        self.assertIsNot(
+            context,
+            self.array.get_context(),
+            "get_context keeps nothing: every call reads the client's array again",
+        )
         with self.assertRaisesRegex(NotImplementedError, "injected callback"):
             self.array.enable()
 
         self.array.reset_cache()
 
-        self.assertIsNone(self.array._context_view)
+        # ``reset_cache`` clears the source's ``_cached_ctx``, which this reader never holds: every
+        # read is taken when it is asked for, so the member keeps its name and the resolved pointer
+        # is untouched by it.
         self.assertEqual(self.array.get_ptr(), 0x00100000)
 
         self.array.disable()

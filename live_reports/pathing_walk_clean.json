@@ -1,0 +1,307 @@
+{
+  "stage": "pathing-walk",
+  "goal_distance": 500.0,
+  "pid": 8456,
+  "controller_elevated": true,
+  "entry_decisions": [
+    "game_thread.leave_game_thread_func: place its own patch on the client's own bytes",
+    "ui.send_ui_message_func: place its own patch on the client's own bytes",
+    "effects.post_process_effect_func: place its own patch on the client's own bytes",
+    "render.end_scene_func: place its own patch on the client's own bytes"
+  ],
+  "player": {
+    "agent_id": 38,
+    "map_id": 642,
+    "start": [
+      -2783.75,
+      3813.43
+    ],
+    "zplane": 22,
+    "rotation_angle": -0.5689,
+    "rotation_cos_sin": [
+      0.8425,
+      -0.5387
+    ],
+    "facing_unit": [
+      0.8425,
+      -0.5387
+    ]
+  },
+  "goal": [
+    -2362.52,
+    3544.06
+  ],
+  "goal_distance_from_start": 500.0,
+  "get_path": [
+    [
+      -2783.75,
+      3813.43,
+      22.0
+    ],
+    [
+      -2362.52,
+      3544.06,
+      22.0
+    ]
+  ],
+  "get_path_to": [
+    [
+      -2783.75,
+      3813.43
+    ],
+    [
+      -2362.52,
+      3544.06
+    ]
+  ],
+  "walked_path": [
+    [
+      -2783.75,
+      3813.43
+    ],
+    [
+      -2362.52,
+      3544.06
+    ]
+  ],
+  "legs": [
+    {
+      "index": 0,
+      "waypoint": [
+        -2783.75,
+        3813.43
+      ],
+      "skipped": "the path's first point is the player's own position",
+      "player": [
+        -2783.75,
+        3813.43
+      ]
+    },
+    {
+      "index": 1,
+      "waypoint": [
+        -2362.52,
+        3544.06
+      ],
+      "moved_at": 0.51,
+      "arrived": false,
+      "no_progress": true,
+      "seconds": 2.52,
+      "final_distance": 500.0
+    }
+  ],
+  "trail": [
+    {
+      "t": 0.48,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 0.0,
+      "moving": false
+    },
+    {
+      "t": 0.51,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 0.61,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 0.71,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 0.82,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 0.92,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.02,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.12,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.22,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.32,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.42,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.52,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.62,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.72,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.82,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 1.92,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.02,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.12,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.22,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.33,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.43,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.53,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.63,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.73,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.83,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 2.93,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    },
+    {
+      "t": 3.03,
+      "x": -2783.75,
+      "y": 3813.43,
+      "to_waypoint": 500.0,
+      "moving": false
+    }
+  ],
+  "end": [
+    -2783.75,
+    3813.43
+  ],
+  "displacement": 0.0,
+  "distance_to_goal": 500.0,
+  "goal_reached": false,
+  "walk_seconds": 3.03,
+  "every_leg_arrived": false,
+  "entries_before": {
+    "game_thread.leave_game_thread_func": "55 8b ec 81 ec 20 02 00 00 a1 00 a5 53 01 33 c5",
+    "ui.send_ui_message_func": "55 8b ec 8b 45 08 83 f8 56 73 16 68 3d 0f 00 00",
+    "effects.post_process_effect_func": "55 8b ec 83 ec 08 8b 45 0c db 45 08 89 45 f8 8b",
+    "render.end_scene_func": "55 8b ec 83 ec 48 a1 00 a5 53 01 33 c5 89 45 fc"
+  },
+  "entries_after_disconnect": {
+    "game_thread.leave_game_thread_func": "55 8b ec 81 ec 20 02 00 00 a1 00 a5 53 01 33 c5",
+    "ui.send_ui_message_func": "55 8b ec 8b 45 08 83 f8 56 73 16 68 3d 0f 00 00",
+    "effects.post_process_effect_func": "55 8b ec 83 ec 08 8b 45 0c db 45 08 89 45 f8 8b",
+    "render.end_scene_func": "55 8b ec 83 ec 48 a1 00 a5 53 01 33 c5 89 45 fc"
+  },
+  "hooks_original_after_disconnect": true,
+  "note": "one connection; the port's own get_path, then Player.Move per waypoint with the player's position and the client's moving flag watched until each waypoint was reached or its own timeout expired. Nothing but the character moved."
+}

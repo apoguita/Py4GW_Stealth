@@ -150,12 +150,27 @@ def main() -> int:
     )
     from py4gw.player import Player
 
-    from tests.probe_party_live import entry_is_original
+    from tests.probe_two_runtimes_live import connectable
+    from tests.test_live_coexistence import _Entries
 
-    if not entry_is_original(win32, pid):
-        report["error"] = "another controller is attached; nothing was done"
+    # The gate is the connection's own placement decision, not "the entries hold the client's own
+    # bytes": the arrangement the owner runs has Reforged injected, so every entry carries another
+    # runtime's jump and ``connect`` chains on it (live, 2026-10-05, ``tests/test_live_coexistence.py``
+    # 3/3 OK on the same client). Only a decision ``_prepare_target`` would refuse at stops the probe.
+    connectable_now, decisions = connectable(win32, pid)
+    report["entry_decisions"] = decisions
+    if not connectable_now:
+        report["error"] = (
+            "connect would refuse at least one of the four entries, so nothing was done: "
+            + "; ".join(decisions)
+        )
         print(json.dumps(report, indent=2))
         return 7
+
+    entries = _Entries(pid)
+    before = entries.snapshot()
+    before_jumps = entries.foreign_entries()
+    report["entries_before"] = {name: row["head"].hex(" ") for name, row in before.items()}
 
     with py4gw.connect(process, game_thread=True) as client:
         report["find_path_func"] = FIND_PATH_FUNC
@@ -222,7 +237,19 @@ def main() -> int:
             )
         report["cases"] = results
 
-    report["hooks_original_after_disconnect"] = entry_is_original(win32, pid)
+    after = entries.snapshot()
+    after_jumps = entries.foreign_entries()
+    entries.close()
+    report["entries_after_disconnect"] = {name: row["head"].hex(" ") for name, row in after.items()}
+    # "The hooks came out" is a claim about the bytes that were there before this probe patched —
+    # Reforged's own jump on this client — so both the four declared entries and the addresses that
+    # actually carried a jump are compared (``tests/test_live_coexistence.py`` compares the same way).
+    report["hooks_original_after_disconnect"] = (
+        {name: row["head"] for name, row in after.items()}
+        == {name: row["head"] for name, row in before.items()}
+        and {name: row["head"] for name, row in after_jumps.items()}
+        == {name: row["head"] for name, row in before_jumps.items()}
+    )
     text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
     print(text)
     with open(report_path, "w", encoding="utf-8") as handle:

@@ -219,6 +219,12 @@ link-opening hook). Every one of those is **target-side work with a name** in
    runtime's derived `left/top/right/bottom` through `WindowPosition::xAxis`/`yAxis`
    (`py_ui.h:4843-4855` → `UIMgr.cpp:2513-2568`) — which need `Render::GetViewportWidth/Height`,
    i.e. the DX context. Native's is both the higher authority and the one this port can read.
+   **Fixed 2026-10-05:** the body cast all four values to `int`, which the binding does not — it
+   returns `py::make_tuple(pos->p1.x, pos->p1.y, pos->p2.x, pos->p2.y)`, four floats. The port's own
+   offline test had been reporting it as a pre-existing failure (a record holding `1.5, 2.5, 3.5,
+   4.5` came back as `1, 2, 3, 4`); the casts are gone and the values now travel as the binding hands
+   them over. The source's annotation (`list[int]`) is kept verbatim, and the port answers a list
+   where the binding answers a tuple — both recorded rather than quietly carried.
 5. **`SetWindowPosition`'s caller passes four numbers and no state**, and the shipped binding kept
    the client's own word by writing `p1`/`p2` in place before the call (`py_ui.h:4873-4889`). The
    port reads that word and passes the whole struct to the client's setter, which is what native's

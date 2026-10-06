@@ -7,23 +7,30 @@ callee — verified offline against ``F:\\GW\\GW1\\Gw.exe`` with ``tools/resolve
 byte read, and it is the whole of the addressing:
 
 ```asm
-005a8d20  55                push ebp
-005a8d21  8b ec             mov  ebp, esp
-005a8d23  56                push esi
-005a8d24  8b 75 08          mov  esi, [ebp+8]        ; esi = skill_id
-005a8d27  81 fe 94 0d 00 00 cmp  esi, 0xD94          ; the table's own bound (3476)
-005a8d2d  72 14             jb   +0x14
-...        (the client's own assert)
-005a8d40  69 c6 a4 00 00 00 imul eax, esi, 0xA4     ; eax = skill_id * sizeof(Skill)
-005a8d46  5e                pop  esi
-005a8d47  05 70 a3 98 00    add  eax, 0x98A370       ; eax = &skill_array[skill_id]
-005a8d4c  5d                pop  ebp
-005a8d4d  c3                ret
+005a9160  55                push ebp
+005a9161  8b ec             mov  ebp, esp
+005a9163  56                push esi
+005a9164  8b 75 08          mov  esi, [ebp+8]        ; esi = skill_id
+005a9167  81 fe a7 0d 00 00 cmp  esi, 0xDA7          ; the table's own bound (3495)
+005a916d  72 14             jb   +0x14
+...        (the client's own assert: push 0xF31, then its two string literals)
+005a9183  69 c6 a4 00 00 00 imul eax, esi, 0xA4     ; eax = skill_id * sizeof(Skill)
+005a9189  5e                pop  esi
+005a918a  05 b0 b4 98 00    add  eax, 0x98B4B0       ; eax = &skill_array[skill_id]
+005a918f  5d                pop  ebp
+005a9190  c3                ret
 ```
 
-So the table is static data the client compiles in — ``0x98A370`` is in ``.rdata``, the records are
+So the table is static data the client compiles in — ``0x98B4B0`` is in ``.rdata``, the records are
 ``0xA4`` bytes apart, and the first word of each record is its own skill id (checked: records 0..11
 begin ``0, 1, 2, … 11``). Reading it needs no call, no hook and no state.
+
+**Both numbers are the client's, and the 2026-09-30 client update moved both.** Against the pre-update
+``Gw.exe`` this accessor sat at ``0x005A8D20``, asserted ``0xD94`` and added ``0x98A370``; build 38974
+has it at ``0x005A9160`` with ``0xDA7`` and ``0x98B4B0`` — measured 2026-10-05 from the client's own
+bytes (``tools/resolve_offline.py`` plus a byte read). The resolver reads that immediate out of the
+instruction, so it followed the move by itself (``+0x1140``); the old address no longer holds a table
+of skill ids, while the new one does.
 
 **The record.** ``py4gw/context/skill_context.py`` declares ``SkillStruct`` from native
 ``include/GW/context/skill.h`` (``static_assert(sizeof(Skill) == 0xA4)``). The declaration was
@@ -57,10 +64,12 @@ class _memory_reader(RemoteMemoryReader, Protocol):
 #: ``sizeof(GW::Context::Skill)`` — the stride the client's own accessor multiplies by.
 SKILL_RECORD_SIZE = 0xA4
 
-#: The bound the client's accessor asserts against (``cmp esi, 0xD94`` at ``005a8d27``): the table
-#: holds 3476 records. The client's function asserts; this reader refuses the read instead, which is
-#: the project's rule for an address range before interpreting it.
-SKILL_ARRAY_LENGTH = 0xD94
+#: The bound the client's accessor asserts against (``cmp esi, 0xDA7`` at ``005a9167``): the table
+#: holds 3495 records. The client's function asserts; this reader refuses the read instead, which is
+#: the project's rule for an address range before interpreting it. The 2026-09-30 client update moved
+#: this bound from ``0xD94`` (3476) — the table grew with the build, and both the bound and the
+#: table's own address are re-measured from the client's own bytes.
+SKILL_ARRAY_LENGTH = 0xDA7
 
 #: ``GW::Constants::unused_skill_ids`` (``common/constants/skills.h``), as the client's own ids: 64
 #: entries in the header's order — ``2511..2539``, then ``1380, 1580, 1581``, ``2303..2325``, then

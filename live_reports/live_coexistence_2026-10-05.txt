@@ -1,0 +1,21 @@
+=== coexistence: start Mon 10/05/2026 21:41:06.33 === 
+test_connecting_chains_on_top_of_every_foreign_jump (tests.test_live_coexistence.ReforgedFirstTests.test_connecting_chains_on_top_of_every_foreign_jump)
+The supported arrangement for this client: this library second, on Reforged's own patches. ... ok
+test_the_client_still_runs_after_a_chain_and_a_disconnect (tests.test_live_coexistence.ReforgedFirstTests.test_the_client_still_runs_after_a_chain_and_a_disconnect)
+A chain that left the client worse off would be worse than the problem it solves. ... ok
+test_the_other_runtime_is_left_byte_for_byte_after_a_disconnect (tests.test_live_coexistence.ReforgedFirstTests.test_the_other_runtime_is_left_byte_for_byte_after_a_disconnect)
+The chain is temporary by construction: the displaced jump is written back, unaltered. ... ok
+setUpClass (tests.test_live_coexistence.StealthFirstTests) ... skipped "2 entries already hold another runtime's jump (game_thread.leave_game_thread_func, effects.post_process_effect_func), so this project cannot connect first on this client: restart the client without Reforged injected to run this class."
+
+----------------------------------------------------------------------
+Ran 3 tests in 6.204s
+
+OK (skipped=1)
+
+[coexistence] pid 4692: 4 of 4 entries carry another runtime's jump; this project must chain on top of each and leave them byte-for-byte.
+    game_thread.leave_game_thread_func: jump at 0x00F75CD0 -> 0x780FF407
+    ui.send_ui_message_func: jump at 0x00F745F0 -> 0x780FEE2B (the resolver answered 0x00F74510)
+    effects.post_process_effect_func: jump at 0x01151630 -> 0x78102C79
+    render.end_scene_func: jump at 0x01010350 -> 0x780F98BD (the resolver answered 0x010102C0)
+coexist_exit=0 
+=== done Mon 10/05/2026 21:41:12.78 === 

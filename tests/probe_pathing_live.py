@@ -160,9 +160,24 @@ def reads_stage(win32: Win32, process: dict[str, Any], report: dict[str, Any]) -
                 )
                 if isinstance(here, int):
                     report["neighbours"] = _ask(lambda: len(navmesh.get_neighbors(here)))
-                report["is_point_in_pathing"] = _ask(
-                    lambda: Map.Pathing.IsPointInPathing(float(x), float(y))
-                )
+                # ``IsPointInPathing`` is the source's own loop over **every** trapezoid, and each
+                # ``Pathing.Quad`` projects through ``Map.MissionMap`` — a context this port acquires by
+                # walking the client's frame array, with no frame loop to hold it for (the
+                # ``@frame_cache`` decision). One ``Quad`` is timed here and the loop's cost is
+                # reported instead of paid: on a 3,361-trapezoid map one call is ~0.26 s, so the whole
+                # member is ~15 minutes. Its actual answer is measured once, by hand, in
+                # ``live_reports/pathing_point_in_pathing.json``.
+                layers = _ask(Map.Pathing.GetPathingMaps)
+                if not isinstance(layers, str) and layers and layers[0].trapezoids:
+                    trapezoids_total = sum(len(layer.trapezoids) for layer in layers)
+                    started = time.monotonic()
+                    Map.Pathing.Quad(layers[0].trapezoids[0])
+                    quad_seconds = time.monotonic() - started
+                    report["trapezoids_total"] = trapezoids_total
+                    report["quad_seconds"] = round(quad_seconds, 4)
+                    report["is_point_in_pathing_estimated_seconds"] = round(
+                        quad_seconds * trapezoids_total, 1
+                    )
 
                 astar = AStar(navmesh)
                 started = time.monotonic()
@@ -360,17 +375,29 @@ def main() -> int:
     if stage == "reads":
         return _write(report, report_path, reads_stage(win32, process, report))
 
-    from tests.probe_party_live import entry_is_original
+    from tests.probe_two_runtimes_live import connectable
+    from tests.test_live_coexistence import _Entries
 
     report["controller_elevated"] = bool(win32.is_elevated())
-    if not entry_is_original(win32, int(process["pid"])):
+    # The gate is the connection's own placement decision, not "the entries hold the client's own
+    # bytes": the arrangement the owner runs has Reforged injected, so every entry carries another
+    # runtime's jump and ``connect`` chains on it (live, 2026-10-05, ``tests/test_live_coexistence.py``
+    # 3/3 OK on the same client). Only a decision ``_prepare_target`` would refuse at stops the probe.
+    connectable_now, decisions = connectable(win32, int(process["pid"]))
+    report["entry_decisions"] = decisions
+    if not connectable_now:
         report["error"] = (
-            "one of the hooked entries does not hold the client's own bytes, so another controller "
-            "is attached or was killed while attached. Nothing was done."
+            "connect would refuse at least one of the four entries, so this probe does not open the "
+            "write path: " + "; ".join(decisions)
         )
         return _write(report, report_path, 7)
 
     import py4gw
+
+    entries = _Entries(int(process["pid"]))
+    before = entries.snapshot()
+    before_jumps = entries.foreign_entries()
+    report["entries_before"] = {name: row["head"].hex(" ") for name, row in before.items()}
 
     with py4gw.connect(process, game_thread=True) as _client:
         report["game_thread"] = True
@@ -378,7 +405,19 @@ def main() -> int:
             report, elevated_pid=int(process["pid"]), goal_offset=goal_offset
         )
 
-    report["hooks_original_after_disconnect"] = entry_is_original(win32, int(process["pid"]))
+    after = entries.snapshot()
+    after_jumps = entries.foreign_entries()
+    entries.close()
+    report["entries_after_disconnect"] = {name: row["head"].hex(" ") for name, row in after.items()}
+    # "The hooks came out" is a claim about the bytes that were there before this probe patched —
+    # Reforged's own jump on this client — so both the four declared entries and the addresses that
+    # actually carried a jump are compared (``tests/test_live_coexistence.py`` compares the same way).
+    report["hooks_original_after_disconnect"] = (
+        {name: row["head"] for name, row in after.items()}
+        == {name: row["head"] for name, row in before.items()}
+        and {name: row["head"] for name, row in after_jumps.items()}
+        == {name: row["head"] for name, row in before_jumps.items()}
+    )
     return _write(report, report_path, code)
 
 
