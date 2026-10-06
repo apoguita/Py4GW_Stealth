@@ -1,0 +1,102 @@
+{
+  "pid": 31024,
+  "controller_elevated": true,
+  "game_thread": true,
+  "key_mappings_table": 14830680,
+  "state": {
+    "GetTextLanguage": 0,
+    "IsWorldMapShowing": false,
+    "IsUIDrawn": true,
+    "IsShiftScreenshot": false,
+    "GetCurrentTooltipAddress": 782204300,
+    "GetFPSLimit": 60
+  },
+  "preferences": {
+    "frame_limiter_options": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "GetEnumPreference": 2,
+    "GetIntPreference": 0,
+    "GetBoolPreference": true,
+    "GetStringPreference": "<email redacted>"
+  },
+  "settings_bytes": 798,
+  "windows": {
+    "0": {
+      "position": [
+        332.0,
+        76.0,
+        183.0,
+        140.0
+      ],
+      "visible": true
+    },
+    "1": {
+      "position": [
+        326.0,
+        205.0,
+        174.0,
+        305.0
+      ],
+      "visible": true
+    },
+    "12": {
+      "position": [
+        201.0,
+        237.0,
+        215.0,
+        133.0
+      ],
+      "visible": true
+    },
+    "22": {
+      "position": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "visible": true
+    },
+    "64": {
+      "position": [
+        43.0,
+        237.0,
+        586.0,
+        732.0
+      ],
+      "visible": false
+    },
+    "101": {
+      "position": [
+        715.0,
+        941.0,
+        715.0,
+        941.0
+      ],
+      "visible": false
+    }
+  },
+  "key_mappings": {
+    "words": 117,
+    "first": [
+      137,
+      148,
+      208,
+      223,
+      150,
+      5,
+      6,
+      194
+    ],
+    "nonzero": 117
+  },
+  "dialog": {
+    "IsNPCDialogVisible": false,
+    "IsLockedChestWindowVisible": false
+  },
+  "note": "read-only: game_thread=False installed no hook and no patch, and no call into the client was made. The members that act are a separate, explicitly scoped run."
+}

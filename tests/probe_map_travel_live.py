@@ -24,7 +24,7 @@ stalled cannot be judged.
 
 Usage (elevated)::
 
-    python tests/probe_map_travel_live.py live_reports/map_travel_progress.txt live_reports/map_travel.json
+    python tests/probe_map_travel_live.py tests/live_reports/map_travel_progress.txt tests/live_reports/map_travel.json
 """
 
 from __future__ import annotations

@@ -15,7 +15,7 @@ and turned into the ``DecodedMod`` records the rest of the library works with.
 
 **How it is ported.** The body is the source's own bytes. Five things are adapted, and each one is
 asserted to occur exactly as often as expected while the file is generated
-(``live_reports/port_mods_core.py``):
+(``tests/scratch\1port_mods_core.py``):
 
 1. the source-package import prefix on the four ``GameData_enums`` names, the two ``Item_enums`` names,
    ``mods_upgrades`` and the four ``mods_types`` names becomes this port's relative import, because the

@@ -79,10 +79,24 @@ def _read_uint32_pointer(reader: _memory_reader | None, address: int) -> int | N
 
 
 class MapVec2fStruct(TargetStruct):
-    """Two target-process single-precision coordinates."""
+    """Two target-process single-precision coordinates, and the method the source calls on them.
+
+    ``to_tuple`` is not decoration: the source's own call site uses it —
+    ``offset = subcontext.mission_map_pan_offset.to_tuple()`` (``Map.py:1081``, the port's
+    ``Map.MissionMap.GetPanOffset``). In Reforged the name comes from the bound ``GW::Vec2f``, so the
+    port's record has to carry it too, exactly as the ported ``internals/types.py`` ``Vec2f`` does
+    (``:36``). Measured live 2026-10-05: without it ``GetPanOffset`` raised ``AttributeError``, and
+    everything above it — ``GameMapToScreen``, ``WorldMapToScreen``, ``Pathing.Quad``,
+    ``IsPointInPathing`` — failed with it.
+    """
 
     _pack_ = 1
     _fields_ = [("x", c_float), ("y", c_float)]
+
+    def to_tuple(self) -> tuple[float, float]:
+        """Return the pair the source's call site unpacks (``Map.py:1081``)."""
+
+        return (self.x, self.y)
 
 
 @dataclass(frozen=True, slots=True)

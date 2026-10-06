@@ -21,7 +21,7 @@ does the deliberate retry the owner asked for, in the order that makes the preco
 3. press the member **once**, paced, with the window there;
 4. watch the party's own records for ``WATCH_SECONDS`` and report every reading.
 
-Everything is printed and written to ``live_reports/party_leave_live.json``.
+Everything is printed and written to ``tests/live_reports/party_leave_live.json``.
 
 Usage (elevated, owner present):  python tests/probe_party_leave.py
 """
@@ -145,7 +145,7 @@ def main() -> int:
               f"heroes={row['heroes']} henchmen={row['henchmen']}")
     print(f"party changed: {report['changed']} | "
           f"hooks original after disconnect: {report['hooks_original_after_disconnect']}")
-    with open("live_reports/party_leave_live.json", "w", encoding="utf-8") as handle:
+    with open("tests/live_reports/party_leave_live.json", "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2, ensure_ascii=False, default=str)
     return 0
 

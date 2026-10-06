@@ -1878,7 +1878,7 @@ class Frame:
         ``frame_callbacks``' offset, ``0xA8``), the second word is the dummy ``EDX`` the source passes null
         for, and only the message and the caller's two words travel on the stack. The live read is what
         settled that: the function this port resolves ends ``ret 0xc`` — three stack words, released by the
-        callee (``0x85cd80`` on the 2026-09-27 client, ``live_reports/send_frame_ui_message_read.json``).
+        callee (``0x85cd80`` on the 2026-09-27 client, ``tests/live_reports/send_frame_ui_message_read.json``).
         """
 
         from ..client import require_client

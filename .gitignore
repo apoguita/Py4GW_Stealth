@@ -8,3 +8,8 @@ __pycache__/
 # tools read the file itself; these are the disassembler's own state and are far too large to track.
 /.ghidra/
 /.ghidra_home/
+# pytest's own temporary directories, which it drops in the working directory
+pytest-cache-files-*/
+# pytest's temp trees and cache, redirected under tests/ by pyproject.toml
+tests/.pytest-tmp/
+.pytest_cache/

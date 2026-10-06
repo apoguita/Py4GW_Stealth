@@ -692,7 +692,7 @@ Before this change the same client would have had Reforged's hooks on the two di
 `0x01185CD0` as the function that carries Reforged's jump and `0x578FF407` where it lands; all four entries
 read back **byte-for-byte identical** to a snapshot taken before the attempt; and the client is still
 healthy afterwards. That is the direction that used to be silent damage, so it is the one worth having a
-live test for. (`live_reports/live_coexistence_reforged_first.txt`, `live_reports/live_refusal_text.txt`.)
+live test for. (`tests/live_reports/live_coexistence_reforged_first.txt`, `tests/live_reports/live_refusal_text.txt`.)
 
 **What is still owed.** The live run of the supported order, which needs a client that does **not** have
 Reforged injected yet: `tests/test_live_coexistence.py`'s `StealthFirstTests` connects first, waits for

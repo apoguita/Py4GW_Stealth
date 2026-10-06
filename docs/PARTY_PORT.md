@@ -460,7 +460,7 @@ do **not** settle is the ABI: how many words the callee takes and who releases t
 a claim about the client's own code, and this project has been burned by one before
 (`SendFrameUIMessage` had to be live-read as `ret 0xc`), so each function was read on the running
 client before any stub calls it: `tests/probe_party_abi.py` (read-only, unelevated, nothing called) →
-`live_reports/party_abi.json`.
+`tests/live_reports/party_abi.json`.
 
 | function | declared | measured epilogue | what the port must emit |
 | --- | --- | --- | --- |
@@ -577,7 +577,7 @@ mechanism to tell "slow" from "refused".
 **The client was put back, from the recorded original.** The two fields the first run left changed
 (hero at position 1: `hero_behavior` 1 → 0, skillbar slot 1 → disabled) were restored by
 `tests/probe_party_restore.py`, which reads the **recorded** pre-change state out of
-`live_reports/party_act_flags_live.json` (the `flags` step's `before` block — that step changes neither
+`tests/live_reports/party_act_flags_live.json` (the `flags` step's `before` block — that step changes neither
 field) and writes each value back with the port's own members, waiting for the client to show each one.
 It reported `restored: True` for both heroes, `hooks_original_after_disconnect: True`, and a read-only
 pass afterwards confirms hero 1493 back at `behavior 1, disabled 0` with hero 1494's `disabled 64`
@@ -629,9 +629,9 @@ waits), `before == after`, and no field left changed.
     1494; ``GetHeroIDByPartyPosition(0)`` 26 and ``GetHeroIdByName('Norgu')`` 1; **`IsAllFlagged` true
     with `GetAllFlag` = `[inf, inf]`** and **`IsHeroFlagged(0)` true** — both documented source
     limitations, answered live exactly as the source writes them; the party member's login 48, agent
-    1189, connected, not ticked, and the name **"Fezzik The Untamed"** through
+    1189, connected, not ticked, and the name **"<character name redacted>"** through
     `GetPlayerNameByLoginNumber` — the member built in round 6, answering a real name; no pet in this
-    party, which is the source's own zeroed record. Report: `live_reports/party_reads_live.json`.
+    party, which is the source's own zeroed record. Report: `tests/live_reports/party_reads_live.json`.
     **Re-run after round 21's removals** (same client, same stage, unelevated): `reads: 0 member(s)
     refused`, the `hold` plan unchanged at 23 entries of which 0 would write, and the same readiness
     table — which is what a change to the records' *surface* should look like when nothing in the party
@@ -670,7 +670,7 @@ waits), `before == after`, and no field left changed.
 - **The elevated run is pre-flighted against the live data it will use** (round 22). The plan and the
   stages are two pieces of code computing the same thing from the same reads, so
   `tests/test_probe_party_live_offline.py` replays the **live** report: `LivePlanRehearsalTests` builds a
-  stand-in from `live_reports/party_reads_live.json`'s own state and asserts that `hold_stage`'s calls
+  stand-in from `tests/live_reports/party_reads_live.json`'s own state and asserts that `hold_stage`'s calls
   are the plan's entries, in the plan's order, with the same arguments, none of them refused by
   anything but the source's own guard, no client function called and the state unchanged;
   `ActStepRehearsalTests` replays each reversible acting step with the members patched to a recorder and
@@ -721,7 +721,7 @@ waits), `before == after`, and no field left changed.
   else), and `UseSkill`'s switch, target swap and restore in the source's order, including the
   restore that runs when nothing was changed; the documented constants; and the hero table.
 - `tests/probe_party_abi.py` — the ten ABI measurements above, read-only and unelevated, with the
-  report in `live_reports/party_abi.json`.
+  report in `tests/live_reports/party_abi.json`.
 - `tests/test_party.py` — 24 live tests, each checked against the party context
   or an invariant in a loaded map. The four members that were first ported from
   the wrong source — `GetPartySize`, `GetHeroCount`, `IsPartyLeader`,
@@ -917,7 +917,7 @@ client can follow rather than at the rate the port can produce them.
       their own guards refuse, with a before/after comparison), and `act` (elevated, owner present: the
       steps that really act, each with its restore, **none of them run unless the owner names it**).
       The read stage answered **every member with zero errors** against `Gw.exe` pid 44052
-      (`live_reports/party_reads_live.json`), including the two documented source limitations
+      (`tests/live_reports/party_reads_live.json`), including the two documented source limitations
       (`IsAllFlagged` true with `[inf, inf]`, `IsHeroFlagged(0)` true) and the round-6 name member
       answering a real name. **And it found a defect**: `Players.GetAgentIDByLoginNumber(0)` answered
       `0` where the source answers the caller's own player's agent id — it used Reforged's
@@ -1136,7 +1136,7 @@ client can follow rather than at the rate the port can produce them.
       computing the same thing from the same reads — the arrangement that drifts silently — so this
       round took the **live** report's own values and replayed both halves offline.
       * **`tests/test_probe_party_live_offline.py` → `LivePlanRehearsalTests`**: builds a stand-in from
-        `live_reports/party_reads_live.json`'s own state (hero 1493 behaviour 1 / disabled 0, hero 1494
+        `tests/live_reports/party_reads_live.json`'s own state (hero 1493 behaviour 1 / disabled 0, hero 1494
         behaviour 1 / disabled 64, normal mode, the flag at `(inf, inf)`, no pet) and drives `hold_stage`
         against it. Three assertions: the calls the stage makes are the plan's entries **in the plan's
         order** (names, then names-plus-arguments), every planned call is `refused_by_the_source`, and
@@ -1202,7 +1202,7 @@ client can follow rather than at the rate the port can produce them.
       a bounded wait (3 s) that polls the client's own record and **reports what it saw** — placed
       between a flip and its restore, with one verdict line per run (`settled: True/False`). **The
       client was put back from the recorded original** by `tests/probe_party_restore.py`, which reads
-      the pre-change state out of `live_reports/party_act_flags_live.json` (that step touches neither
+      the pre-change state out of `tests/live_reports/party_act_flags_live.json` (that step touches neither
       field) and writes it back with the port's own members: `restored: True` for both heroes, hooks
       original afterwards, and a read-only pass confirming hero 1493 at `behavior 1, disabled 0` with
       hero 1494's `disabled 64` untouched. **Proved by re-running the two steps with the fix**:

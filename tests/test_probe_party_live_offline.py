@@ -18,7 +18,7 @@ The probe is imported rather than copied, so a change to the stage is a change t
 **And round 22 rehearses the plan itself.** The plan is what the owner reads before deciding to run
 anything, and ``hold`` is what actually runs; they are two pieces of code computing the same thing from
 the same reads, which is exactly the arrangement that drifts. So the last class here replays the
-**live** plan from ``live_reports/party_reads_live.json``: it builds a stand-in from that report's own
+**live** plan from ``tests/live_reports/party_reads_live.json``: it builds a stand-in from that report's own
 state — the heroes' agent ids, behaviour words and disabled words, the mode, the pet — and asserts that
 the calls ``hold_stage`` makes are the plan's calls, in the plan's order, with the state unchanged.
 """
@@ -457,14 +457,14 @@ class ReadStageAnswerTests(unittest.TestCase):
 
 
 _LIVE_REPORT = (
-    Path(__file__).resolve().parent.parent / "live_reports" / "party_reads_live.json"
+    Path(__file__).resolve().parent.parent / "tests/live_reports" / "party_reads_live.json"
 )
 
 
 @unittest.skipUnless(
     _LIVE_REPORT.exists(),
     "no live read report to rehearse against — run `python tests/probe_party_live.py reads "
-    "live_reports/party_reads_live.json` on a running client first",
+    "tests/live_reports/party_reads_live.json` on a running client first",
 )
 class LivePlanRehearsalTests(unittest.TestCase):
     """The live plan, replayed as the hold stage's calls, on the live client's own values.

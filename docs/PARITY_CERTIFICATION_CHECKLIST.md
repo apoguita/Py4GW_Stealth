@@ -210,7 +210,7 @@ class's own port doc; `CLASS_PORT_MAP.md` carries the same verdicts beside the w
 members; a raise counted when it is written in that member's own body — a member can also fail through
 one it calls, which is why `Dialog` shows no direct raise and is still INCOMPLETE, so the port doc's word
 is the one that counts). Live evidence for the three completed classes is in `AGENT_PORT.md`,
-`PLAYER_PORT.md` and `live_reports/`.
+`PLAYER_PORT.md` and `tests/live_reports/`.
 
 ### Classes at a glance
 
@@ -265,7 +265,7 @@ Missing or changed declarations: none found in the source surface
 Transport-only adaptations: target pointers use uint32 addresses; fixed-width
   wide-character arrays use uint16 storage to preserve the x86 target layout
 Live evidence: tests/test_context.py passed against the running client on
-  2026-09-22. CharContext=0x00ADDD98; player name=Fezzik The Untamed;
+  2026-09-22. CharContext=0x00ADDD98; player name=<character name redacted>;
   GW_Array h0014=0; observer_matches=0
 Tests: tests/test_char_context_offline.py; full discovery run passed
 Pyright: 0 errors, 0 warnings, 0 informations
@@ -436,7 +436,7 @@ Transport-only adaptations: source c_wchar[20] uses uint16 storage for the x86
   AvailableCharacterInfoStruct remain aliases of one layout
 Live evidence: tests/test_available_character_context.py passed against the
   running client on 2026-09-22. GWArray=0x017AF28C; entries=14;
-  first=Fezzik The Untamed; level=20; map_id=449
+  first=<character name redacted>; level=20; map_id=449
 Tests: tests/test_available_character_context_offline.py (6 passed) and
   tests/test_available_character_context.py (3 passed)
 Pyright: 0 errors, 0 warnings, 0 informations
@@ -486,7 +486,7 @@ Transport-only adaptations: target pointers use uint32 addresses; source
   key_data view and the native four-word k view over the same 0x10-byte target
   record; empty source GW_Array views return None
 Live evidence: tests/test_guild_context.py passed against the running client on
-  2026-09-22. GuildContext=0x00AD42A0; player=Fezzik The Untamed;
+  2026-09-22. GuildContext=0x00AD42A0; player=<character name redacted>;
   guilds=243; roster=42; history=20
 Tests: tests/test_guild_context_offline.py (6 passed) and
   tests/test_guild_context.py (3 passed)

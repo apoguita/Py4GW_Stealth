@@ -46,7 +46,7 @@ REPORT_PATH = sys.argv[2] if len(sys.argv) > 2 else ""
 #: Where the hang, if there is one, is written: ``faulthandler`` dumps every thread's stack on a
 #: timer, so a run that stops producing output names the line it stopped on instead of leaving a
 #: silent gap (the 2026-09-27 run stopped after its interaction and said nothing for 90 s).
-STACK_PATH = (REPORT_PATH or "live_reports/find_npc") + ".stack"
+STACK_PATH = (REPORT_PATH or "tests/live_reports/find_npc") + ".stack"
 
 #: The hard stop. The watchdog dumps the stacks, disconnects, and leaves: a probe that hangs must not
 #: leave the client patched, and a controller killed mid-run does exactly that (twice now).

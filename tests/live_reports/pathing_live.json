@@ -1,0 +1,110 @@
+{
+  "stage": "reads",
+  "goal_offset": 300.0,
+  "pid": 8456,
+  "module": {
+    "base": "0xd40000",
+    "size": "0xf4c000"
+  },
+  "resolve": {
+    "ok": true,
+    "address": "0x104a740"
+  },
+  "abi": {
+    "entry": "55 8b ec 83 ec 20 53 56 57 e8 12 4f d7 ff 8b 5d",
+    "window": 1024,
+    "candidates": [
+      {
+        "offset": 127,
+        "form": "ret"
+      },
+      {
+        "offset": 180,
+        "form": "ret"
+      },
+      {
+        "offset": 541,
+        "form": "ret"
+      },
+      {
+        "offset": 580,
+        "form": "ret"
+      },
+      {
+        "offset": 642,
+        "form": "ret"
+      },
+      {
+        "offset": 689,
+        "form": "ret"
+      },
+      {
+        "offset": 735,
+        "form": "ret"
+      },
+      {
+        "offset": 762,
+        "form": "ret"
+      },
+      {
+        "offset": 881,
+        "form": "ret"
+      },
+      {
+        "offset": 893,
+        "form": "ret"
+      },
+      {
+        "offset": 973,
+        "form": "ret"
+      }
+    ],
+    "first": {
+      "offset": 127,
+      "form": "ret"
+    }
+  },
+  "pathing_maps_live": 24,
+  "pathing_maps_raw": 24,
+  "available_map_ids": 404,
+  "map": {
+    "id": 642,
+    "outpost": true
+  },
+  "load_pathing_maps": "driven to completion",
+  "navmesh_seconds": 0.001,
+  "navmesh": {
+    "map_id": 642,
+    "trapezoids": 3361,
+    "portal_links": 15220
+  },
+  "player": {
+    "agent_id": 431,
+    "x": -1623.78,
+    "y": 3076.11
+  },
+  "trapezoid_at_player": 3249,
+  "nearest_trapezoid": 3249,
+  "neighbours": 4,
+  "trapezoids_total": 3361,
+  "quad": "RuntimeError: this stage installs no capability layer, so no client function can be called",
+  "astar": {
+    "found": true,
+    "seconds": 0.0001,
+    "points": 3
+  },
+  "smooth_path_by_los": {
+    "points": 2,
+    "ends": [
+      [
+        -1623.7816162109375,
+        3076.109375
+      ],
+      [
+        -1323.7816162109375,
+        3076.109375
+      ]
+    ]
+  },
+  "note": "read stage: unelevated, nothing connected and no client function called. The navmesh, the BSP, the neighbour graph and the A* search are all this port's own arithmetic over the client's pathing records, so they run here; 'abi' is the epilogue measurement the elevated stage's six-word call depends on."
+}

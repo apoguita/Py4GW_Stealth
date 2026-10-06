@@ -2622,7 +2622,7 @@ class TestFrameSendMessageOffline(unittest.TestCase):
         Native declares the target fastcall-shaped because its detour ABI requires it
         (``SendFrameUIMessageFn``, ``ui_patterns.cpp:32``); the client's own convention is ``__thiscall``,
         which the live read confirmed: the resolved function ends ``ret 0xc``
-        (``live_reports/send_frame_ui_message_read.json``).
+        (``tests/live_reports/send_frame_ui_message_read.json``).
         """
 
         client = self._client(0x00200000, 2)

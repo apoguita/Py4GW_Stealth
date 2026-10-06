@@ -1370,7 +1370,7 @@ includes the fixed UTF-16 name plus packed map, profession, campaign, level,
 and PvP properties.
 
 The latest focused run on 2026-09-22 resolved the roster array at
-`0x017AF28C`, read 14 entries, and observed `Fezzik The Untamed` as the first
+`0x017AF28C`, read 14 entries, and observed `<character name redacted>` as the first
 entry (level 20, map 449). These values and the address are observations for
 one client build.
 
@@ -1489,7 +1489,7 @@ player_name    non-empty UTF-16 name decoded successfully
 
 The name was read from `CharContext + 0x74` as a fixed 20-code-unit
 UTF-16LE field. The latest focused run on 2026-09-22 observed
-`CharContext=0x00ADDD98`, decoded `Fezzik The Untamed`, and read
+`CharContext=0x00ADDD98`, decoded `<character name redacted>`, and read
 `GW_Array.h0014=0` with `observer_matches=0`. This verifies the initial
 target-specific read path: a copied resolver, explicit 32-bit pointer reads,
 and a structure field decode. The same path is now exposed by
@@ -1554,7 +1554,7 @@ comment, but its explicit field offsets end at the 0x368-byte roster array;
 the Python layout follows those concrete offsets.
 
 The live test resolved `GuildContext` at `0x00AD42A0` and observed player
-`Fezzik The Untamed`, 243 guild records, 42 roster entries, and 20 history
+`<character name redacted>`, 243 guild records, 42 roster entries, and 20 history
 entries. Offline parity tests also cover the source aliases, `GHKey.from_hex`,
 the native `GHKey.k` view, and empty-array `None` semantics. These values are
 one observation and are not assumed stable across client builds or account
@@ -3010,7 +3010,7 @@ seven `Agent` members over it), the whole `Effects` class over `WorldContext.par
 `tests/probe_agent_effects_live.py` — which reads **directly**, without `py4gw.connect()`, because
 connecting is a write and elevation is not needed for reads. The probe builds the same facades
 `ConnectedClient` builds, registers that stand-in as the current client, and lets the ported members
-run unmodified. Its full output is `live_reports/probe_agent_effects_live.txt`.
+run unmodified. Its full output is `tests/live_reports/probe_agent_effects_live.txt`.
 
 **The agent-name walk answers on all four of the source's branches.** Over the 93 non-null records in
 the client's agent array, the branch that produced each name was: **player array 55**, **world
@@ -3084,9 +3084,9 @@ result      ok=true, name="Random Arenas", is_name_ready=true, disconnected
 And the whole suite on the same path (`tests/test_live_agent_effects.py`, 18 tests, **8.2 s, OK**):
 
 ```text
-Live decoded names: players=[(25, 'Fezzik The Untamed')], table-backed first=15:'Random Arenas',
+Live decoded names: players=[(25, '<character name redacted>')], table-backed first=15:'Random Arenas',
                     decoded 7 of 8 sampled agents
-Live player name: 'Fezzik The Untamed' (agent 25)
+Live player name: '<character name redacted>' (agent 25)
 Live string table: 5 of the client's 99 files read for the names this suite asked for;
                    5120 entries held
 Live effect: agent=25, skill=160, attribute=15, elapsed=7106 ms, remaining=5894 ms
@@ -3361,7 +3361,7 @@ PC is `00697bdb`, inside a function that starts at `00697BBB` and whose prologue
 target. The module list carries `RTSSHooks.dll` (RivaTuner) and `steam_api.dll` with the Steam overlay.
 
 **What this project's own record says about that moment.** The only live run of the session finished at
-**11:02:48** (`live_reports/probe_render_capture.json`) — sixteen and a half minutes before the crash — and a
+**11:02:48** (`tests/live_reports/probe_render_capture.json`) — sixteen and a half minutes before the crash — and a
 process listing afterwards found no controller process at all. That run's report ends with
 `observing_render_after_disconnect: false`, and the probe writes that field **after** its
 `with py4gw.connect(process)` block has exited: it is evidence that `disconnect()` had already removed the
@@ -3489,7 +3489,7 @@ validate-and-return path (`payload.py:801-802`) and dereferences nothing. Suite:
 `pyright` 0 errors; no test depended on the removed list.
 
 **Verified live, and the verification closed a second question.** The same cider experiment re-ran
-cleanly: **222 → 221** in 0.75 s (`live_reports/use_item_live2.json`), `hooks after disconnect = []`, and
+cleanly: **222 → 221** in 0.75 s (`tests/live_reports/use_item_live2.json`), `hooks after disconnect = []`, and
 **no drain error** — where the crashed run had reported *"observe_effects still had 1 call(s) inside its
 stub 2.0 s after its entry was restored; nothing was freed"*. The drain failure disappearing together
 with the dereference is the evidence that the two were **one event**: the call the counter was waiting on
@@ -3614,10 +3614,10 @@ now asserts the opposite. The owner's ruling of 2026-10-01 ("Reforged will alway
 Stealth") is what turned the refusal into a placeholder for the chain.
 
 `tests/test_live_coexistence.ReforgedFirstTests` ran **elevated** against that client — three tests, all
-passing in 4.7 s (`live_reports/live_coexistence_reforged_first.txt`):
+passing in 4.7 s (`tests/live_reports/live_coexistence_reforged_first.txt`):
 
 - the connection **refuses**, and the refusal is this, word for word
-  (`live_reports/live_refusal_text.txt`):
+  (`tests/live_reports/live_refusal_text.txt`):
 
   > `pid 47380: game_thread.leave_game_thread_func: the first five bytes at 0x01185CD0 are another
   > runtime's entry jump to 0x578FF407, and what it lands on is not this library's generated code. The
@@ -3638,7 +3638,7 @@ injection, and then checks the chain and the refused free.
 
 `tests/test_live_coexistence.ReforgedFirstTests` ran **elevated** against the client with Reforged injected —
 the arrangement the owner ruled for, and the one that happens in practice — **3/3 in 5.8 s**
-(`live_reports/live_coexistence_chain.txt`). What the run establishes, in order:
+(`tests/live_reports/live_coexistence_chain.txt`). What the run establishes, in order:
 
 - the four entries that carry Reforged's jump were found by the shipping helpers, two of them **behind the
   resolver's walk-back** (`ui.send_ui_message_func`: answered `0x01184510`, jump at `0x011845F0`;
@@ -3679,7 +3679,7 @@ Reforged's own line, and it is **not** its runtime restarting and **not** a hook
 - So each line is one frame in which the D3D9 device was not ready, plus the frame that recovered it.
 
 **What makes the device not ready is the UAC prompt, and it was measured rather than guessed**
-(`live_reports/suspend_experiment.txt`, pid 47380, one session, phase by phase, with the client's own log
+(`tests/live_reports/suspend_experiment.txt`, pid 47380, one session, phase by phase, with the client's own log
 counted around each phase):
 
 | phase | device-lost lines |

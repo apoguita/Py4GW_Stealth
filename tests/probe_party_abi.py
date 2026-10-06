@@ -22,7 +22,7 @@ from py4gw.memory import ProcessMemoryReader
 from py4gw.scanner import PatternCatalog, RemoteScanner
 from py4gw.win32 import Win32
 
-REPORT_PATH = sys.argv[1] if len(sys.argv) > 1 else "live_reports/party_abi.json"
+REPORT_PATH = sys.argv[1] if len(sys.argv) > 1 else "tests/live_reports/party_abi.json"
 
 #: Each resolver the party actions call, with the prototype the sources declare for it.
 #: ``(resolver name, declared prototype, source line)``.

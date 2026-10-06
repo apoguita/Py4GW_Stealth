@@ -14,3 +14,11 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["py4gw*"]
+
+[tool.pytest.ini_options]
+# pytest's temporary directories belong under tests/, never in the repository root. An external
+# pytest run with an explicit --basetemp in the working directory left 53 `pytest-cache-files-*`
+# directories at the root; they were removed on 2026-10-05 (elevated, because those runs owned them,
+# so an unelevated delete was refused). This keeps a future run's temp trees out of the root, and
+# `tests/scratch/_clean_junk.cmd` clears any that still appear.
+addopts = "--basetemp=tests/.pytest-tmp"

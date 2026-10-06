@@ -403,7 +403,7 @@ class CallForm(IntEnum):
     #: ``party_methods.cpp:20``) and calls the client's handler with the caller's context array and
     #: `wparam` array. **The callee releases the word**: measured on this build, the party-search
     #: callback ends ``mov esp,ebp; pop ebp; ret 4`` twenty times through its body
-    #: (``tests/probe_party_abi.py``, ``live_reports/party_abi.json``), so nothing is released after
+    #: (``tests/probe_party_abi.py``, ``tests/live_reports/party_abi.json``), so nothing is released after
     #: the call. The five-word ``FASTCALL_U32_U32_U32`` cannot stand in: it pushes three words, and
     #: the callee would pop one.
     FASTCALL_U32 = 11

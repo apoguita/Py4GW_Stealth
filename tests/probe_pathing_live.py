@@ -39,7 +39,7 @@ from py4gw.memory import ProcessMemoryReader  # noqa: E402
 from py4gw.scanner import PatternCatalog, RemoteScanner  # noqa: E402
 from py4gw.win32 import Win32  # noqa: E402
 
-REPORT_PATH = "live_reports/pathing_live.json"
+REPORT_PATH = "tests/live_reports/pathing_live.json"
 
 #: How far the search's goal sits from the player, in game units. Far enough to leave the trapezoid
 #: the player stands in, near enough to be a route the client's own finder can answer.
@@ -161,23 +161,26 @@ def reads_stage(win32: Win32, process: dict[str, Any], report: dict[str, Any]) -
                 if isinstance(here, int):
                     report["neighbours"] = _ask(lambda: len(navmesh.get_neighbors(here)))
                 # ``IsPointInPathing`` is the source's own loop over **every** trapezoid, and each
-                # ``Pathing.Quad`` projects through ``Map.MissionMap`` — a context this port acquires by
-                # walking the client's frame array, with no frame loop to hold it for (the
-                # ``@frame_cache`` decision). One ``Quad`` is timed here and the loop's cost is
-                # reported instead of paid: on a 3,361-trapezoid map one call is ~0.26 s, so the whole
-                # member is ~15 minutes. Its actual answer is measured once, by hand, in
-                # ``live_reports/pathing_point_in_pathing.json``.
+                # ``Pathing.Quad`` projects through ``Map.MissionMap``: pan offset, zoom, and — inside
+                # ``GetScale`` — the client's own ``ui.get_root_frame_func``. **So a Quad cannot be
+                # built at all without a connection**, whatever it costs; measured when connected, one
+                # call is ~0.30 s, so the member over a 3,361-trapezoid map is ~1,014 s. The read is
+                # attempted and reported rather than crashing this stage, and the act stage is where it
+                # can actually run (`tests/live_reports/pathing_point_in_pathing.json` has the answer
+                # measured once: `True` in 801.1 s).
                 layers = _ask(Map.Pathing.GetPathingMaps)
                 if not isinstance(layers, str) and layers and layers[0].trapezoids:
                     trapezoids_total = sum(len(layer.trapezoids) for layer in layers)
                     started = time.monotonic()
-                    Map.Pathing.Quad(layers[0].trapezoids[0])
+                    quad = _ask(lambda: Map.Pathing.Quad(layers[0].trapezoids[0]))
                     quad_seconds = time.monotonic() - started
                     report["trapezoids_total"] = trapezoids_total
-                    report["quad_seconds"] = round(quad_seconds, 4)
-                    report["is_point_in_pathing_estimated_seconds"] = round(
-                        quad_seconds * trapezoids_total, 1
-                    )
+                    report["quad"] = "read" if not isinstance(quad, str) else quad
+                    if not isinstance(quad, str):
+                        report["quad_seconds"] = round(quad_seconds, 4)
+                        report["is_point_in_pathing_estimated_seconds"] = round(
+                            quad_seconds * trapezoids_total, 1
+                        )
 
                 astar = AStar(navmesh)
                 started = time.monotonic()

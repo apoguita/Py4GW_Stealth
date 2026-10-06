@@ -104,7 +104,7 @@ camera update *unpatched*, the writers that set the client's **outputs** (`posit
 while the client's **inputs** hold exactly (`pitch_to_go`, `yaw`/`yaw_to_go`, `dist_to_go`). With the
 unlock patch applied — which is what that patch is *for*, it skips the client's camera update — every
 writer landed on the client's own struct byte for byte: `look_at_target` (-6565.848, -2359.939, -420.808),
-`position` -6460.929, `yaw` 1.8798, `pitch_to_go` 0.4747191 (`live_reports/camera_writers2.txt`).
+`position` -6460.929, `yaw` 1.8798, `pitch_to_go` 0.4747191 (`tests/live_reports/camera_writers2.txt`).
 `max_distance2` and `field_of_view` are re-asserted by the client's own settings machinery either way;
 Native's `SetMaxDist`/`SetFieldOfView` are the same single field writes (``camera_methods.cpp:78-94``), so
 the port matches the source and the client's last word stands in both.

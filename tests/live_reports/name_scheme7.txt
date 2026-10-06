@@ -1,0 +1,97 @@
+{"stage": "client", "pid": 35416, "path": "F:\\GW\\GW1\\Gw.exe"}
+{"stage": "connected", "string_table_loaded": false, "table_status": "callback running"}
+{"stage": "decode_preconditions", "decoder_resolves": true, "decoder_stub_address": 66519040, "text_parser_address": 118570376}
+{"stage": "slots", "available": true, "language_id": 0, "entries_per_file": 1024, "slot_count": 99}
+{"stage": "slot", "index": 0, "present": true, "lang_id": 0, "start_index": 0, "end_index": 1024, "assumed_start_index": 0, "hash_code_units": 2, "hash_codepoints": [13485, 256]}
+{"stage": "slot", "index": 1, "present": true, "lang_id": 0, "start_index": 1024, "end_index": 2048, "assumed_start_index": 1024, "hash_code_units": 2, "hash_codepoints": [55119, 258]}
+{"stage": "slot", "index": 2, "present": true, "lang_id": 0, "start_index": 2048, "end_index": 3072, "assumed_start_index": 2048, "hash_code_units": 2, "hash_codepoints": [55120, 258]}
+{"stage": "slot", "index": 3, "present": true, "lang_id": 0, "start_index": 3072, "end_index": 4096, "assumed_start_index": 3072, "hash_code_units": 2, "hash_codepoints": [55121, 258]}
+{"stage": "slot", "index": 4, "present": true, "lang_id": 0, "start_index": 4096, "end_index": 5120, "assumed_start_index": 4096, "hash_code_units": 2, "hash_codepoints": [55122, 258]}
+{"stage": "slot", "index": 5, "present": true, "lang_id": 0, "start_index": 5120, "end_index": 6144, "assumed_start_index": 5120, "hash_code_units": 2, "hash_codepoints": [55123, 258]}
+{"stage": "slot", "index": 6, "present": true, "lang_id": 0, "start_index": 6144, "end_index": 7168, "assumed_start_index": 6144, "hash_code_units": 2, "hash_codepoints": [55124, 258]}
+{"stage": "slot", "index": 7, "present": true, "lang_id": 0, "start_index": 7168, "end_index": 8192, "assumed_start_index": 7168, "hash_code_units": 2, "hash_codepoints": [55125, 258]}
+{"stage": "cache_premise", "language_id": 0, "entries_per_file": 1024, "slot_count": 99, "readable_slots": 99, "client_version": 38888, "first_hash": [13485, 256], "last_hash": [50887, 261], "hash_digest": "ea659df27a21a5a09c66407a5f7bfca363c97c93660dbafca01dda697f0a68f2"}
+{"stage": "map", "ready": true, "map_id": 280, "region": "NotImplementedError: Map.GetRegion is declared but not built here yet: it needs the server-region context read and its name table are not ported yet. The source's member works; this port raises at the call site and names the work item instead of returning a wrong value.", "district": "NotImplementedError: Map.GetDistrict is declared but not built here yet: it needs the char context's district number is not ported yet. The source's member works; this port raises at the call site and names the work item instead of returning a wrong value."}
+{"stage": "player", "agent_id": 25, "position": [-6503.5595703125, -2829.119140625, -340.144775390625], "name": "<character name redacted>"}
+{"stage": "agents", "total": 41, "own_agent": 25}
+{"stage": "candidates", "ids": [15, 16, 26, 27, 28, 29]}
+{"stage": "agent", "agent_id": 15, "type": 512, "is_gadget": true, "model_id": 0, "position": [-1943.0, -1725.0, -254.02040100097656], "name_bytes": [110, 12, 0, 0], "pointer": 737082496}
+{"stage": "client_decode", "agent_id": 15, "label": "agent", "text": "", "call_started": true, "state": "FREE", "place_ms": 0.347, "call_ms": 141.085, "wait_ms": 21.12}
+{"stage": "compare", "agent_id": 15, "client_name": "", "port_name": "Random Arenas", "port_ms": 2776.079, "agree": false, "table_status": "slot 2: 1024 entries from one file (2 file(s) read, 2048 entries held)"}
+{"stage": "gadget_walk", "agent_id": 15, "available": true, "summary_valid": true, "summary_size": 188}
+{"stage": "gadget_walk_record", "agent_id": 15, "record": true, "extra_info_sub_ptr": 737132872}
+{"stage": "gadget_walk_sub", "agent_id": 15, "sub": true, "gadget_name_enc": 0, "gadget_id": 75, "composite_agent_id": 1739204988}
+{"stage": "gadget_walk_info", "agent_id": 15, "gadget_info_valid": true, "gadget_info_size": 9524, "gadget_id": 75, "agent_record_gadget_id": 75, "agent_record_agent_id": 15, "agent_record_extra_type": 645230373}
+{"stage": "gadget_walk_info_record", "agent_id": 15, "record": true, "name_enc": 737082496}
+{"stage": "agent", "agent_id": 16, "type": 512, "is_gadget": true, "model_id": 0, "position": [-6371.0, -2880.0, -339.8612060546875], "name_bytes": [158, 12, 0, 0], "pointer": 737083456}
+{"stage": "client_decode", "agent_id": 16, "label": "agent", "text": "", "call_started": true, "state": "FREE", "place_ms": 0.501, "call_ms": 151.292, "wait_ms": 10.387}
+{"stage": "compare", "agent_id": 16, "client_name": "", "port_name": "Great Temple of Balthazar", "port_ms": 24.199, "agree": false, "table_status": "slot 2: 1024 entries from one file (2 file(s) read, 2048 entries held)"}
+{"stage": "gadget_walk", "agent_id": 16, "available": true, "summary_valid": true, "summary_size": 188}
+{"stage": "gadget_walk_record", "agent_id": 16, "record": true, "extra_info_sub_ptr": 737133000}
+{"stage": "gadget_walk_sub", "agent_id": 16, "sub": true, "gadget_name_enc": 0, "gadget_id": 3651, "composite_agent_id": 1740253548}
+{"stage": "gadget_walk_info", "agent_id": 16, "gadget_info_valid": true, "gadget_info_size": 9524, "gadget_id": 3651, "agent_record_gadget_id": 3651, "agent_record_agent_id": 16, "agent_record_extra_type": 737377621}
+{"stage": "gadget_walk_info_record", "agent_id": 16, "record": true, "name_enc": 737083456}
+{"stage": "agent", "agent_id": 26, "type": 219, "is_gadget": false, "model_id": 5960, "position": [-6435.99462890625, -2902.394775390625, -338.5948791503906], "name_bytes": [2, 129, 79, 6, 0, 0], "pointer": 737097984}
+{"stage": "client_decode", "agent_id": 26, "label": "agent", "text": "", "call_started": true, "state": "FREE", "place_ms": 0.839, "call_ms": 145.186, "wait_ms": 10.261}
+{"stage": "compare", "agent_id": 26, "client_name": "", "port_name": "Vekk", "port_ms": 1981.525, "agree": false, "table_status": "slot 64: 1024 entries from one file (4 file(s) read, 4096 entries held)"}
+{"stage": "agent", "agent_id": 27, "type": 219, "is_gadget": false, "model_id": 4531, "position": [-6576.02880859375, -2760.689697265625, -342.0698547363281], "name_bytes": [1, 129, 170, 56, 0, 0], "pointer": 737098736}
+{"stage": "client_decode", "agent_id": 27, "label": "agent", "text": "", "call_started": true, "state": "FREE", "place_ms": 0.075, "call_ms": 151.315, "wait_ms": 31.243}
+{"stage": "compare", "agent_id": 27, "client_name": "", "port_name": "Dunkoro", "port_ms": 2064.34, "agree": false, "table_status": "slot 45: 1024 entries from one file (6 file(s) read, 6144 entries held)"}
+{"stage": "agent", "agent_id": 28, "type": 219, "is_gadget": false, "model_id": 1142, "position": [-6416.52734375, -2720.49267578125, -342.4106750488281], "name_bytes": [170, 11, 7, 1, 77, 0, 121, 0, 32, 0, 80, 0, 101, 0, 116, 0, 1, 0, 0, 0], "pointer": 737158984}
+{"stage": "client_decode", "agent_id": 28, "label": "agent", "text": "", "call_started": true, "state": "FREE", "place_ms": 0.328, "call_ms": 147.707, "wait_ms": 10.452}
+{"stage": "compare", "agent_id": 28, "client_name": "", "port_name": "Pet - %str1%", "port_ms": 25.154, "agree": false, "table_status": "slot 45: 1024 entries from one file (6 file(s) read, 6144 entries held)"}
+{"stage": "agent", "agent_id": 29, "type": 512, "is_gadget": true, "model_id": 0, "position": [-9346.0, -802.0, -1077.5821533203125], "name_bytes": [2, 129, 181, 55, 170, 233, 10, 235, 12, 92, 0, 0], "pointer": 736981768}
+{"stage": "client_decode", "agent_id": 29, "label": "agent", "text": "", "call_started": true, "state": "FREE", "place_ms": 0.241, "call_ms": 142.278, "wait_ms": 31.243}
+{"stage": "compare", "agent_id": 29, "client_name": "", "port_name": "Zaishen Chest", "port_ms": 1948.951, "agree": false, "table_status": "slot 77: 1024 entries from one file (8 file(s) read, 8192 entries held)"}
+{"stage": "gadget_walk", "agent_id": 29, "available": true, "summary_valid": true, "summary_size": 188}
+{"stage": "gadget_walk_record", "agent_id": 29, "record": true, "extra_info_sub_ptr": 737135816}
+{"stage": "gadget_walk_sub", "agent_id": 29, "sub": true, "gadget_name_enc": 0, "gadget_id": 9523, "composite_agent_id": 1692018892}
+{"stage": "gadget_walk_info", "agent_id": 29, "gadget_info_valid": true, "gadget_info_size": 9524, "gadget_id": 9523, "agent_record_gadget_id": 9523, "agent_record_agent_id": 29, "agent_record_extra_type": 737372341}
+{"stage": "gadget_walk_info_record", "agent_id": 29, "record": true, "name_enc": 736981768}
+{"stage": "client_decode", "agent_id": 25, "label": "player-control", "text": "", "call_started": true, "state": "FREE", "place_ms": 0.285, "call_ms": 135.001, "wait_ms": 20.93}
+{"stage": "control", "agent_id": 25, "bytes": [169, 11, 7, 1, 70, 0, 101, 0, 122, 0, 122, 0, 105, 0, 107, 0, 32, 0, 84, 0, 104, 0, 101, 0, 32, 0, 85, 0, 110, 0, 116, 0, 97, 0, 109, 0, 101, 0, 100, 0, 1, 0, 0, 0], "port_name": "<character name redacted>", "client_name": "", "agree": false}
+{"stage": "done", "compared": 6}
+{"stage": "viewer_table", "rows": 41}
+{"stage": "viewer_row", "agent_id": 15, "type": 512, "is_living": false, "is_gadget": true, "is_item": false, "name": "Random Arenas", "encoded": "\\\\x0C6E", "position": [-1943.0, -1725.0, -254.02040100097656]}
+{"stage": "viewer_row", "agent_id": 16, "type": 512, "is_living": false, "is_gadget": true, "is_item": false, "name": "Great Temple of Balthazar", "encoded": "\\\\x0C9E", "position": [-6371.0, -2880.0, -339.8612060546875]}
+{"stage": "viewer_row", "agent_id": 25, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "<character name redacted>", "encoded": "\\\\x0BA9\\\\x0107<character name redacted>\\\\x0001", "position": [-6503.5595703125, -2829.119140625, -340.144775390625]}
+{"stage": "viewer_row", "agent_id": 26, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Vekk", "encoded": "\\\\x8102\\\\x064F", "position": [-6435.99462890625, -2902.394775390625, -338.5948791503906]}
+{"stage": "viewer_row", "agent_id": 27, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Dunkoro", "encoded": "\\\\x8101\\\\x38AA", "position": [-6576.02880859375, -2760.689697265625, -342.0698547363281]}
+{"stage": "viewer_row", "agent_id": 28, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Pet - %str1%", "encoded": "\\\\x0BAA\\\\x0107My Pet\\\\x0001", "position": [-6416.52734375, -2720.49267578125, -342.4106750488281]}
+{"stage": "viewer_row", "agent_id": 29, "type": 512, "is_living": false, "is_gadget": true, "is_item": false, "name": "Zaishen Chest", "encoded": "\\\\x8102\\\\x37B5\\\\xE9AA\\\\xEB0A\\\\x5C0C", "position": [-9346.0, -802.0, -1077.5821533203125]}
+{"stage": "viewer_row", "agent_id": 30, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Master of Area Effects", "encoded": "\\\\x0D44\\\\xCC20\\\\x8964\\\\x6F4C", "position": [-7046.0, 1599.0, -339.94696044921875]}
+{"stage": "viewer_row", "agent_id": 31, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Master of Combat", "encoded": "\\\\x0D50\\\\xC2ED\\\\xC115\\\\x6782", "position": [-5832.0, 1761.0, -393.1875]}
+{"stage": "viewer_row", "agent_id": 32, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Suit of 60 Armor", "encoded": "\\\\x0BD8\\\\xA06E\\\\xC195\\\\x4292", "position": [-5915.0, 2079.0, -392.6928405761719]}
+{"stage": "viewer_row", "agent_id": 33, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Suit of 80 Armor", "encoded": "\\\\x0BD9\\\\xE564\\\\x5BF4", "position": [-5768.0, 1978.0, -410.43878173828125]}
+{"stage": "viewer_row", "agent_id": 34, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Suit of 100 Armor", "encoded": "\\\\x0BD7\\\\x82CB\\\\x0528", "position": [-5618.0, 1864.0, -420.14581298828125]}
+{"stage": "viewer_row", "agent_id": 35, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Suit of 60 Armor", "encoded": "\\\\x0BD8\\\\xA06E\\\\xC195\\\\x4292", "position": [-5483.0, 1751.0, -418.33331298828125]}
+{"stage": "viewer_row", "agent_id": 36, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Adjacent", "encoded": "\\\\x0D7F\\\\xB5A9\\\\x3373", "position": [-7649.0, 1618.0, -344.0]}
+{"stage": "viewer_row", "agent_id": 37, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Adjacent", "encoded": "\\\\x0D7F\\\\xB5A9\\\\x3373", "position": [-7428.0, 1703.0, -344.0]}
+{"stage": "viewer_row", "agent_id": 38, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Adjacent", "encoded": "\\\\x0D7F\\\\xB5A9\\\\x3373", "position": [-7438.0, 1468.0, -344.0]}
+{"stage": "viewer_row", "agent_id": 39, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Nearby", "encoded": "\\\\x0D83\\\\x8FB5\\\\xFA35\\\\x771A", "position": [-7509.0, 1828.0, -344.0]}
+{"stage": "viewer_row", "agent_id": 40, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Nearby", "encoded": "\\\\x0D83\\\\x8FB5\\\\xFA35\\\\x771A", "position": [-7552.0, 1369.0, -343.3541564941406]}
+{"stage": "viewer_row", "agent_id": 41, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Nearby", "encoded": "\\\\x0D83\\\\x8FB5\\\\xFA35\\\\x771A", "position": [-7292.0, 1501.0, -344.0]}
+{"stage": "viewer_row", "agent_id": 42, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Nearby", "encoded": "\\\\x0D83\\\\x8FB5\\\\xFA35\\\\x771A", "position": [-7732.0, 1555.0, -343.5520935058594]}
+{"stage": "viewer_row", "agent_id": 43, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "In the Area", "encoded": "\\\\x0D80\\\\xD7E3\\\\x96FB\\\\x5C39", "position": [-7751.0, 1416.0, -341.82769775390625]}
+{"stage": "viewer_row", "agent_id": 44, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "In the Area", "encoded": "\\\\x0D80\\\\xD7E3\\\\x96FB\\\\x5C39", "position": [-7728.0, 1795.0, -343.58331298828125]}
+{"stage": "viewer_row", "agent_id": 45, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "In the Area", "encoded": "\\\\x0D80\\\\xD7E3\\\\x96FB\\\\x5C39", "position": [-7409.0, 1309.0, -342.45831298828125]}
+{"stage": "viewer_row", "agent_id": 46, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "In the Area", "encoded": "\\\\x0D80\\\\xD7E3\\\\x96FB\\\\x5C39", "position": [-7211.0, 1697.0, -344.0]}
+{"stage": "viewer_row", "agent_id": 47, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "The Guide", "encoded": "\\\\x0D3B\\\\x9F59\\\\xD6DB\\\\x03D9", "position": [-8152.0, 515.0, -892.1770629882812]}
+{"stage": "viewer_row", "agent_id": 48, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Guard of the Isles", "encoded": "\\\\x0D39\\\\xCF3B\\\\xED6E\\\\x4EF1", "position": [-7780.0, 518.0, -893.978515625]}
+{"stage": "viewer_row", "agent_id": 49, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Guard of the Isles", "encoded": "\\\\x0D39\\\\xCF3B\\\\xED6E\\\\x4EF1", "position": [-8174.0, 890.0, -892.50830078125]}
+{"stage": "viewer_row", "agent_id": 50, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Guard of the Isles", "encoded": "\\\\x0D39\\\\xCF3B\\\\xED6E\\\\x4EF1", "position": [-7745.0, -1149.0, -891.9981689453125]}
+{"stage": "viewer_row", "agent_id": 51, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Guard of the Isles", "encoded": "\\\\x0D39\\\\xCF3B\\\\xED6E\\\\x4EF1", "position": [-8063.0, -1497.0, -890.8740844726562]}
+{"stage": "viewer_row", "agent_id": 52, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Master of Winds", "encoded": "\\\\x0D37\\\\xFD69\\\\xBCE0\\\\x266D", "position": [-3245.0, -2231.0, -341.2795715332031]}
+{"stage": "viewer_row", "agent_id": 53, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Master of Winds", "encoded": "\\\\x0D37\\\\xFD69\\\\xBCE0\\\\x266D", "position": [-6551.0, -2876.0, -339.16326904296875]}
+{"stage": "viewer_row", "agent_id": 55, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Master of Winds", "encoded": "\\\\x0D37\\\\xFD69\\\\xBCE0\\\\x266D", "position": [-6695.0, 382.0, -618.3648681640625]}
+{"stage": "viewer_row", "agent_id": 56, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Master of Resurrection", "encoded": "\\\\x0D76\\\\xB709\\\\xADFC\\\\x2B9D", "position": [-2852.0, 582.0, -343.0]}
+{"stage": "viewer_row", "agent_id": 57, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Master of Paths", "encoded": "\\\\x0D87\\\\xC64D\\\\xF6C5\\\\x0EF9", "position": [-5745.0, -2839.0, -341.5]}
+{"stage": "viewer_row", "agent_id": 59, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Razah", "encoded": "\\\\x8101\\\\x38FA", "position": [-7417.0, -2073.0, -343.0]}
+{"stage": "viewer_row", "agent_id": 60, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Zaishen Martial Weapon Master [Collector]", "encoded": "\\\\x8103\\\\x0B99\\\\x8A8A\\\\xE371\\\\x37D1", "position": [-7322.0, -1099.0, -617.1159057617188]}
+{"stage": "viewer_row", "agent_id": 61, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Zaishen Mesmeric Weapon Master [Collector]", "encoded": "\\\\x8103\\\\x0B9B\\\\xC740\\\\x4BD0", "position": [-7321.0, -978.0, -617.1901245117188]}
+{"stage": "viewer_row", "agent_id": 62, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Zaishen Elemental Weapon Master [Collector]", "encoded": "\\\\x8103\\\\x0B9A\\\\xC12E\\\\xC9EB\\\\x4C57", "position": [-7320.0, -853.0, -624.7911376953125]}
+{"stage": "viewer_row", "agent_id": 63, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Zaishen Necromantic Weapon Master [Collector]", "encoded": "\\\\x8103\\\\x0B9C\\\\xC3A5\\\\xFF69\\\\x2CEE", "position": [-7353.0, 96.0, -631.5359497070312]}
+{"stage": "viewer_row", "agent_id": 186, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Zaishen Divine Weapon Master [Collector]", "encoded": "\\\\x8103\\\\x0B9D\\\\xA3BA\\\\x9069\\\\x4C54", "position": [-7352.0, 216.0, -630.8103637695312]}
+{"stage": "viewer_row", "agent_id": 187, "type": 219, "is_living": true, "is_gadget": false, "is_item": false, "name": "Zaishen Spirit Weapon Master [Collector]", "encoded": "\\\\x8103\\\\x0B9E\\\\xE5DE\\\\xD223\\\\x3993", "position": [-7351.0, 332.0, -615.5208129882812]}
+{"stage": "finished"}
+{"stage": "disconnected"}

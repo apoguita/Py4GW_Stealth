@@ -36,7 +36,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-REPORT_PATH = "live_reports/pathing_finder_diagnostic.json"
+REPORT_PATH = "tests/live_reports/pathing_finder_diagnostic.json"
 
 #: Written into the count word before the call: only the client can turn this into a real count.
 SENTINEL = 0xDEADBEEF

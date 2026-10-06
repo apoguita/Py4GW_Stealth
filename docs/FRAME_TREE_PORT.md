@@ -53,7 +53,7 @@ package `py4gw/frame_tree/`).
 All five are transcription, not reasoning: none of them imports anything, calls anything or computes
 anything beyond the two derived tables the source itself builds (`NAME_TO_HASH` from `FRAME_NAMES`). So the
 body of each is the source's own bytes with the port's header
-(`live_reports/port_frame_tree_tables.py`), exactly as `mods_upgrades` and `model_enums` were done.
+(`tests/scratch\1port_frame_tree_tables.py`), exactly as `mods_upgrades` and `model_enums` were done.
 
 **Verification.** `tests/test_frame_tree_tables_offline.py`: the public names of all five modules against
 the sources, every table entry for entry, **dict key order included**, `FrameId` member for member and

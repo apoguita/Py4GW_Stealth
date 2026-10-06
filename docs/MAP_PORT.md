@@ -210,8 +210,8 @@ the type the port's `Quad` uses, and the member records it.
 
 `tests.test_map` **44 tests, `OK (skipped=2)`, 3.7 s**, elevated, against `Gw.exe` pid 34748 on map
 **55 (Lions Arch)**, instance type 0 (Outpost). `tests/probe_map_live.py` is the sectioned, timed
-version of the same pass and is now in the runner's default set; `live_reports/summary.txt`,
-`live_reports/tests.test_map.log` and `live_reports/map_live.json` are the reports. The client came
+version of the same pass and is now in the runner's default set; `tests/live_reports/summary.txt`,
+`tests/live_reports/tests.test_map.log` and `tests/live_reports/map_live.json` are the reports. The client came
 back clean: both hooked entry points read `original: true` again and the game window was responding.
 
 **What the pass confirmed, all cross-checked against the context each member claims to read:**

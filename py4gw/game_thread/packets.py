@@ -20,7 +20,7 @@ restore. The emitted stub that goes into the entry is ``payload.build_packet_stu
 produces. ``gs_codec`` sits at ``+0x8`` of the game server and ``handlers`` at ``+0x2C`` of the codec
 (``stoc.cpp:26-41``: ``h0000[12]``, the ``ls_codec`` pointer, ``h0010[12]``, ``client_codec_array[4]``,
 then ``handlers``). Read-only against the running client, this project's probe measured the whole
-chain and every merchant header (``tests/probe_stoc_handlers.py``, ``live_reports/stoc_handlers.json``):
+chain and every merchant header (``tests/probe_stoc_handlers.py``, ``tests/live_reports/stoc_handlers.json``):
 the server at ``0x1D6BC90``, the codec at ``0x1D63388``, 487 entries of which the five this port wants
 are all in range and hold real code.
 

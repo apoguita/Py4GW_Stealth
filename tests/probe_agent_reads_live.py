@@ -34,7 +34,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-REPORT_PATH = "live_reports/agent_reads_live.json"
+REPORT_PATH = "tests/live_reports/agent_reads_live.json"
 DEFAULT_SECONDS = 20.0
 SAMPLE_SECONDS = 0.25
 

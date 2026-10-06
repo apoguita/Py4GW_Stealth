@@ -412,4 +412,4 @@ Offline: **1073 tests OK**; `pyright` on the five touched files `0 errors`.
 
 **Still to measure, live:** the first-name latency at connect with the warm-up running (it should be
 the fetch + cached decode whenever the slot has already been read), and how long the whole 99-file
-warm-up takes in practice — `live_reports/name_scheme7*` and `tests/perf_access_cost.py --live`.
+warm-up takes in practice — `tests/live_reports/name_scheme7*` and `tests/perf_access_cost.py --live`.

@@ -71,9 +71,21 @@ class _FakeReader:
 class MapContextOfflineTests(unittest.TestCase):
     """Keep the root layout and spawn traversal fixed without a live client."""
 
+    def test_the_pan_offset_pair_carries_the_method_the_source_calls(self) -> None:
+        """``Map.py:1081`` calls ``mission_map_pan_offset.to_tuple()``.
+
+        In Reforged that name is the bound ``GW::Vec2f``'s; this port's record is the *target* layout,
+        so the method has to travel with it. Found live 2026-10-05: without it ``GetPanOffset`` raised
+        ``AttributeError`` and every member above it — ``GameMapToScreen``, ``WorldMapToScreen``,
+        ``Pathing.Quad`` — failed with it, which no offline test had reached.
+        """
+
+        pair = MapVec2fStruct()
+        pair.x, pair.y = 12.5, -7.25
+        self.assertEqual(pair.to_tuple(), (12.5, -7.25))
+
     def test_native_offsets_and_sizes(self) -> None:
         """The root and direct child records match the source layout."""
-
         self.assertEqual(ctypes.sizeof(MapVec2fStruct), 0x08)
         self.assertEqual(ctypes.sizeof(MapVec3fStruct), 0x0C)
         self.assertEqual(ctypes.sizeof(SpawnEntryStruct), 0x10)

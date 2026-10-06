@@ -297,7 +297,7 @@ bounded spawn arrays. The source data ports for callback-owned
 `MissionMapContext` and `WorldMapContext` are also complete, and both now acquire
 their root through the client's UI frame array, live-verified open and closed. The live GuildContext check resolved
 address `0x00AD42A0` and
-read player `Fezzik The Untamed`, 243 guild records, 42 roster entries, and 20
+read player `<character name redacted>`, 243 guild records, 42 roster entries, and 20
 history entries on the verified client build.
 The same client resolved `AccountContext` at `0x0257EBC8` with six maintained
 array headers. The latest live GadgetContext check resolved `0x00AC41D8` and

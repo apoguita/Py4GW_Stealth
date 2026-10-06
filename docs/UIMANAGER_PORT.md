@@ -21,7 +21,7 @@ the form `Player`, `Agent` and `Dialog` already carry — and set the verdict to
 port's purposes*, or (b) build one of the captures first. **Whichever is chosen, the evidence is in
 this document**, and nothing here needs re-reading a conversation to act on.
 
-**The one command owed.** `python tests/probe_ui_manager_live.py live_reports/ui_manager_live.json`
+**The one command owed.** `python tests/probe_ui_manager_live.py tests/live_reports/ui_manager_live.json`
 from an **elevated** shell (also in `tools/run_live_suites.ps1`'s default set) — read-only, no hook, no
 patch, no call. It covers every read this class answers, including the key-remap table whose `0x75`
 words exist only at runtime because the table sits in `.data`'s uninitialised tail.
@@ -326,7 +326,7 @@ class.** In the order the port doc's own queue puts them:
    is in the project's own runner (round 70)**: `tools/run_live_suites.ps1`'s default set now lists
    `tests/probe_ui_manager_live.py` second, so one `pwsh -NoProfile -File tools\run_live_suites.ps1`
    covers it beside the other read-only suites. Run alone, it is
-   `python tests/probe_ui_manager_live.py live_reports/ui_manager_live.json` from an **elevated**
+   `python tests/probe_ui_manager_live.py tests/live_reports/ui_manager_live.json` from an **elevated**
    shell (the connection asserts elevation). It connects with `game_thread=False` — no hook, no
    patch, no call — and asks the client for every read this class answers: the three state words, the
    tooltip address, the text language, the option list and the four typed getters, the frame limit,
@@ -344,7 +344,7 @@ class.** In the order the port doc's own queue puts them:
 `probe_agent_effects_live.py` established (a `ProcessMemoryReader` and a `RemoteScanner` over the
 client's main module, a stand-in registered where `require_client` looks) — ran against the live
 client **without elevation** (`elevated: false`, pid 31024) and answered every read it covers. Report:
-`live_reports/ui_manager_reads_live.json`.
+`tests/live_reports/ui_manager_reads_live.json`.
 
 | member | live answer |
 | --- | --- |
@@ -376,7 +376,7 @@ the dialog clicks — needs the game thread and the write path, i.e. an **elevat
 
 The same probe with the **write** connection (py4gw.connect(..., game_thread=True), elevated, pid 31024)
 runs the members that call the client through ConnectedClient.call_function. Report:
-live_reports/ui_manager_calls_live.json.
+tests/live_reports/ui_manager_calls_live.json.
 
 | member | live answer |
 | --- | --- |
@@ -385,7 +385,7 @@ live_reports/ui_manager_calls_live.json.
 | GetEnumPreference(FrameLimiter) | **2** |
 | GetIntPreference(NumberPreference.TextLanguage) | **0** |
 | GetBoolPreference(FlagPreference.IsWindowed) | **true** |
-| GetStringPreference(0) | **apoguita@gmail.com** - a real wide string, read from the client own pointer |
+| GetStringPreference(0) | **<email redacted>** - a real wide string, read from the client own pointer |
 
 **Two independent cross-checks, both of them the sources own arithmetic.** The frame-limiter
 preference reads 2, and GetFrameLimit own switch maps 2 to 60 (ui_methods.cpp:1840-1852) - which is
@@ -413,10 +413,10 @@ value it just read, so the call path is exercised end to end while the client st
 | SetEnumPreference(FrameLimiter, 2) | ok | 2 -> 2 |
 | SetIntPreference(TextLanguage, 0) | ok | 0 -> 0 |
 | SetBoolPreference(IsWindowed, true) | ok | true -> true |
-| SetStringPreference(0, ...) | ok | apoguita@gmail.com -> apoguita@gmail.com |
+| SetStringPreference(0, ...) | ok | <email redacted> -> <email redacted> |
 
 **unchanged: true** - the whole set read back byte-identical, and the connection installed and removed
-its hooks cleanly (exit 0, same pid). Report: live_reports/ui_manager_writes_live.json.
+its hooks cleanly (exit 0, same pid). Report: tests/live_reports/ui_manager_writes_live.json.
 
 **Still owed, and only these**: the members that change the game - SendUIMessage / SendUIMessageRaw,
 Keydown / Keyup / Keypress, SetWindowPosition, and the dialog clicks (ClickDialogButton /
@@ -446,7 +446,7 @@ unexercised surface is the two **message senders**.
 **Live evidence the class does have**: 22 members — the four pure reads, the six calling reads, the
 key-remap table (runtime-only), the dialog visibility pair, the window position/visibility pair, the
 preference options, and the six value-preserving writes. Reports:
-`live_reports/ui_manager_reads_live.json`, `ui_manager_calls_live.json`, `ui_manager_writes_live.json`.
+`tests/live_reports/ui_manager_reads_live.json`, `ui_manager_calls_live.json`, `ui_manager_writes_live.json`.
 
 ## Do not
 

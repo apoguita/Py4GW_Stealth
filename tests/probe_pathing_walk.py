@@ -34,7 +34,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-REPORT_PATH = "live_reports/pathing_walk.json"
+REPORT_PATH = "tests/live_reports/pathing_walk.json"
 
 #: How far in front of the player the goal sits, in game units.
 GOAL_DISTANCE = 500.0

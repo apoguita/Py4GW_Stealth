@@ -9,7 +9,7 @@ refused the write, and the flip stayed:
 * hero at position 1: skillbar slot 1 -> **disabled** (``disabled`` 0 -> 1)
 
 This tool reads the **recorded** pre-change state from a report whose ``before`` block was written
-before anything was called (``live_reports/party_act_flags_live.json`` — the `flags` step changes
+before anything was called (``tests/live_reports/party_act_flags_live.json`` — the `flags` step changes
 nothing about hero behaviour or skill AI, so its snapshot is the original), writes each hero's
 ``hero_behavior`` word and each skill slot back to those values with the port's own members, waits for
 the client to show each write, and prints the readings before and after.
@@ -32,7 +32,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-RECORDED = "live_reports/party_act_flags_live.json"
+RECORDED = "tests/live_reports/party_act_flags_live.json"
 
 
 def _recorded_state() -> dict[int, dict[str, int]]:
@@ -184,7 +184,7 @@ def main() -> int:
     print(f"difficulty: before={report.get('difficulty_before')} "
           f"unlocked={report.get('difficulty_unlocked')} -> "
           f"{json.dumps(report.get('difficulty_flip'), default=str)}")
-    with open("live_reports/party_restore_live.json", "w", encoding="utf-8") as handle:
+    with open("tests/live_reports/party_restore_live.json", "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2, ensure_ascii=False, default=str)
     return 0 if report["restored"] else 5
 

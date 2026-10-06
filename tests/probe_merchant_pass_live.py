@@ -50,7 +50,7 @@ from py4gw.win32 import Win32
 REPORT_PATH = (
     sys.argv[1]
     if len(sys.argv) > 1
-    else f"live_reports/merchant_pass_{int(time.time())}.jsonl"
+    else f"tests/live_reports/merchant_pass_{int(time.time())}.jsonl"
 )
 WINDOW_SECONDS = float(sys.argv[2]) if len(sys.argv) > 2 else 15.0
 

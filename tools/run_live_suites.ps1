@@ -14,7 +14,7 @@ param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Suites)
 $ErrorActionPreference = "Continue"
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
-$reports = Join-Path (Get-Location) "live_reports"
+$reports = Join-Path (Get-Location) "tests/live_reports"
 New-Item -ItemType Directory -Force -Path $reports | Out-Null
 
 if (-not $Suites -or $Suites.Count -eq 0) {
@@ -41,7 +41,7 @@ $summary += ""
 
 foreach ($suite in $Suites) {
     # One report file per suite, named for the suite itself — a module entry ("tests.test_x") and a
-    # probe path ("tests/probe_x.py") both land as a single flat name under live_reports\.
+    # probe path ("tests/probe_x.py") both land as a single flat name under tests/live_reports\.
     $log = Join-Path $reports ((Split-Path -Leaf $suite) + ".log")
     $started = Get-Date
     Write-Host "=== $suite ==="

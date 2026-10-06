@@ -106,7 +106,7 @@ def section_read_cost() -> None:
     """1. A cross-process read, by size, through the port's own reader."""
 
     print("== 1. host-side read (ReadProcessMemory, through py4gw.memory.ProcessMemoryReader) ==")
-    workdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "live_reports", "perf_tmp")
+    workdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "tests/live_reports", "perf_tmp")
     os.makedirs(workdir, exist_ok=True)
     info_path = os.path.join(workdir, "buffers.json")
     stop_path = os.path.join(workdir, "stop")

@@ -13,7 +13,7 @@ The call is ``Effects.ApplyDrunkEffect(3, 0)`` — the binding's own member for 
 
 Run it from an **elevated** shell, because connecting is a write:
 
-    python tests/probe_alcohol_live.py live_reports/alcohol_report.jsonl
+    python tests/probe_alcohol_live.py tests/live_reports/alcohol_report.jsonl
 
 It connects, watches, calls, reads, clears, and disconnects — restoring all three hooked functions'
 own bytes. It must be allowed to finish; a killed run leaves a hook in the client.

@@ -290,7 +290,7 @@ native's own route, and that work belongs to `Map.GetUnloadedMapInfo`, not to th
 - **Offline, per step**: member-shape AST checks (every member of the source's surface declared, in
   the source's nesting), value checks against fixture records, and the `@frame_cache` finding
   (three `ItemArray` members read when called).
-- **Live — the reads are verified (round 60: `tests/probe_items_live.py`, `live_reports/items_live.json`)**:
+- **Live — the reads are verified (round 60: `tests/probe_items_live.py`, `tests/live_reports/items_live.json`)**:
   connected **read-only** (`game_thread=False` — no hook, no patch, no call) and walked the client's own bags.
   `ItemArray.GetAllBags()` answered **20 bags**, `GetItemArray(bags)` **342 item ids**, and `Inventory`
   cross-checked the walk: `GetInventorySpace()` `[39, 60]` with `GetFreeSlotCount()` **21** (39 + 21 = 60).
@@ -301,7 +301,7 @@ native's own route, and that work belongs to `Map.GetUnloadedMapInfo`, not to th
   corrections were the *probe's*, not the port's: `Bag` members need `.value`, and **`CreateBagList()` with
   no ids is `[]` in the source's own body** (`ItemArray.py:9-26` — there is no default), so the walk passes
   `GetAllBags()`'s list.
-- **`UseItem` is live-verified — the owner's own experiment (round 61, `live_reports/use_item_live.json`).**
+- **`UseItem` is live-verified — the owner's own experiment (round 61, `tests/live_reports/use_item_live.json`).**
   A **Hard Apple Cider** stack (`ModelID.Hard_Apple_Cider` = `28435`, item **237**, slot 3) read **223**
   before the call and **222** after it, 0.79 s later, through two independent reads
   (`Inventory.GetModelCount` and `Item.Properties.GetQuantity`). One number proves the whole chain at once:

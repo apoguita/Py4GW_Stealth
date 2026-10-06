@@ -16,7 +16,7 @@ Two outputs, deliberately:
 
 Usage (elevated)::
 
-    python tests/probe_map_live.py live_reports/map_live_progress.txt
+    python tests/probe_map_live.py tests/live_reports/map_live_progress.txt
 """
 
 from __future__ import annotations

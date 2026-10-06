@@ -400,7 +400,7 @@ false;` (`:449-456`). Its teardown path would have logged `Shutting down ImGui.`
 (`Py4GW.cpp:489-490`), and that line appears **0 times**. So each line is one D3D9 device that was not
 ready plus the frame that recovered it.
 
-**What makes the device not ready was then measured, with a control** (`live_reports/suspend_experiment.txt`
+**What makes the device not ready was then measured, with a control** (`tests/live_reports/suspend_experiment.txt`
 and one deliberate prompt): 30 s idle **0**, a non-elevated console window **0**, the write handle opened
 and closed 5 times **0**, `_count_suspended_threads` 5 sweeps suspending and resuming every client thread
 **0**, a whole capability-layer connect attempt **0**, and **one UAC prompt +12**. The secure desktop is the
@@ -470,5 +470,5 @@ and byte-level evidence in [`RESEARCH.md`](RESEARCH.md) and
 **Verified live, elevated, on that same client:** `tests/test_live_coexistence.ReforgedFirstTests` is 3/3 —
 the connect **refuses**, all four entries read back byte-for-byte identical to a pre-attempt snapshot, and
 the client stays healthy. That is the direction the old repair damaged. Run: elevated
-`python -m unittest tests.test_live_coexistence -v` (`live_reports/live_coexistence_reforged_first.txt`,
-`live_reports/live_refusal_text.txt`).
+`python -m unittest tests.test_live_coexistence -v` (`tests/live_reports/live_coexistence_reforged_first.txt`,
+`tests/live_reports/live_refusal_text.txt`).

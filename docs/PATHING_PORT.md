@@ -103,7 +103,7 @@ The client shipped build 38974 on 2026-09-30 13:40, so every run above is **pre-
 were re-run against the updated client with **Reforged injected** (pid 4692, `Gw.exe` 10,506,432 bytes
 2026-09-30 13:40:06) — the arrangement the owner runs.
 
-**`reads` (unelevated, nothing connected, nothing called)** — `live_reports/pathing_reads_2026-10-05.json`:
+**`reads` (unelevated, nothing connected, nothing called)** — `tests/live_reports/pathing_reads_2026-10-05.json`:
 
 ```
 pathing maps live=24 raw=24   available map ids=404
@@ -127,7 +127,7 @@ cheap: the cost is the read-only frame-array route's, and nothing here caches a 
 hide it. The reads stage therefore **times one `Quad` and reports the extrapolation** instead of
 paying it (`trapezoids_total`, `quad_seconds`, `is_point_in_pathing_estimated_seconds`), and the
 member's own answer was measured once by hand
-(`live_reports/pathing_point_in_pathing.json`): **`True` in 801.1 s** for the player's own position —
+(`tests/live_reports/pathing_point_in_pathing.json`): **`True` in 801.1 s** for the player's own position —
 it is in pathing area, which is the right answer, and the run is the loop's full cost rather than a
 stall.
 
@@ -149,7 +149,7 @@ shared read-only stand-in did not offer the connection's frame-array-backed faca
 gap, never a port defect** (the real `ConnectedClient` has had the facades all along,
 `client.py:1387`).
 
-**`act` (elevated)** — `live_reports/pathing_act_2026-10-05.json`:
+**`act` (elevated)** — `tests/live_reports/pathing_act_2026-10-05.json`:
 
 | call | answer |
 | --- | --- |
@@ -173,7 +173,7 @@ the extraction. Both probes also compare the entries **against what they held be
 patched** (Reforged's jumps) instead of against the client's own prologue.
 
 **The client's own finder question is answered** — `tests/probe_pathing_finder.py`, written
-2026-10-01 and never run until now (`live_reports/pathing_finder_diagnostic.json`): the count word is
+2026-10-01 and never run until now (`tests/live_reports/pathing_finder_diagnostic.json`): the count word is
 pre-filled with `0xDEADBEEF` and the 30 records with `0xCC`, so "the client said no" is told apart
 from "the call never arrived".
 

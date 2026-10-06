@@ -589,7 +589,7 @@ class Agent:
         ``AsyncGetAgentName`` (``agent_methods.cpp:318-325``) hands the encoded string to the
         **client's own decoder** and takes the text from its callback -- and that route is live here at
         **~140 ms per name with no dat read at all**. Measured side by side on the same client
-        (``live_reports/name_scheme8.txt``): ``Random Arenas``, ``Great Temple of Balthazar``,
+        (``tests/live_reports/name_scheme8.txt``): ``Random Arenas``, ``Great Temple of Balthazar``,
         ``Vekk``, ``Dunkoro``, ``Zaishen Chest`` and the player's own name all agree with the table
         decode, and the client additionally resolves ``Pet - My Pet`` where the table decode stops at
         ``Pet - %str1%``.

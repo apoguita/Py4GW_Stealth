@@ -1,0 +1,31 @@
+{
+  "pid": 31024,
+  "controller_elevated": true,
+  "game_thread": true,
+  "before": {
+    "fps_limit": 60,
+    "window_visible": true,
+    "frame_limiter": 2,
+    "text_language": 0,
+    "is_windowed": true,
+    "string_pref": "<email redacted>"
+  },
+  "writes": {
+    "SetFPSLimit": null,
+    "SetWindowVisible": null,
+    "SetEnumPreference": null,
+    "SetIntPreference": null,
+    "SetBoolPreference": null,
+    "SetStringPreference": null
+  },
+  "after": {
+    "fps_limit": 60,
+    "window_visible": true,
+    "frame_limiter": 2,
+    "text_language": 0,
+    "is_windowed": true,
+    "string_pref": "<email redacted>"
+  },
+  "unchanged": true,
+  "note": "every write put back the value just read, so the call path is exercised and the client's state is unchanged. The game-changing members are a separate run with the owner watching."
+}

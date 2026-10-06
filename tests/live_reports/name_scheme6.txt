@@ -1,0 +1,37 @@
+{"stage": "client", "pid": 20496, "path": "F:\\GW\\GW1\\Gw.exe"}
+{"stage": "connected", "string_table_loaded": false, "table_status": "language 0: read on demand, one file per entry (0 file(s) read)"}
+{"stage": "decode_preconditions", "decoder_resolves": true, "decoder_stub_address": 66453504, "text_parser_address": 29357184}
+{"stage": "slots", "available": true, "language_id": 0, "entries_per_file": 1024, "slot_count": 99}
+{"stage": "slot", "index": 0, "present": true, "lang_id": 0, "start_index": 0, "end_index": 1024, "assumed_start_index": 0, "hash_code_units": 2}
+{"stage": "slot", "index": 1, "present": true, "lang_id": 0, "start_index": 1024, "end_index": 2048, "assumed_start_index": 1024, "hash_code_units": 2}
+{"stage": "slot", "index": 2, "present": true, "lang_id": 0, "start_index": 2048, "end_index": 3072, "assumed_start_index": 2048, "hash_code_units": 2}
+{"stage": "slot", "index": 3, "present": true, "lang_id": 0, "start_index": 3072, "end_index": 4096, "assumed_start_index": 3072, "hash_code_units": 2}
+{"stage": "slot", "index": 4, "present": true, "lang_id": 0, "start_index": 4096, "end_index": 5120, "assumed_start_index": 4096, "hash_code_units": 2}
+{"stage": "slot", "index": 5, "present": true, "lang_id": 0, "start_index": 5120, "end_index": 6144, "assumed_start_index": 5120, "hash_code_units": 2}
+{"stage": "slot", "index": 6, "present": true, "lang_id": 0, "start_index": 6144, "end_index": 7168, "assumed_start_index": 6144, "hash_code_units": 2}
+{"stage": "slot", "index": 7, "present": true, "lang_id": 0, "start_index": 7168, "end_index": 8192, "assumed_start_index": 7168, "hash_code_units": 2}
+{"stage": "map", "ready": true, "map_id": 280, "region": "NotImplementedError: Map.GetRegion is declared but not built here yet: it needs the server-region context read and its name table are not ported yet. The source's member works; this port raises at the call site and names the work item instead of returning a wrong value.", "district": "NotImplementedError: Map.GetDistrict is declared but not built here yet: it needs the char context's district number is not ported yet. The source's member works; this port raises at the call site and names the work item instead of returning a wrong value."}
+{"stage": "player", "agent_id": 25, "position": [-6036.0, -2519.0, -332.6656799316406], "name": "<character name redacted>"}
+{"stage": "agents", "total": 43, "own_agent": 25}
+{"stage": "candidates", "ids": [15, 16, 26, 27, 28, 29]}
+{"stage": "agent", "agent_id": 15, "type": 512, "is_gadget": true, "model_id": 0, "position": [-1943.0, -1725.0, -254.02040100097656], "name_bytes": [110, 12, 0, 0], "pointer": 672027352}
+{"stage": "client_decode", "agent_id": 15, "text": "", "event_arrived": true, "state": "FREE", "elapsed_ms": 136.491}
+{"stage": "compare", "agent_id": 15, "client_name": "", "client_ms": 136.491, "client_call_started": true, "port_name": "Random Arenas", "port_ms": 2083.071, "agree": false, "table_status": "slot 2: 1024 entries from one file (1 file(s) read, 1024 entries held)"}
+{"stage": "gadget_walk", "agent_id": 15, "available": true, "summary_valid": true, "summary_size": 1010}
+{"stage": "gadget_walk_record", "agent_id": 15, "record": true, "extra_info_sub_ptr": 663221008}
+{"stage": "gadget_walk_sub", "agent_id": 15, "sub": true, "gadget_name_enc": 0, "gadget_id": 75, "composite_agent_id": 3266593668}
+{"stage": "gadget_walk_info", "agent_id": 15, "gadget_info_valid": true, "gadget_info_size": 9524, "gadget_id": 75, "agent_record_gadget_id": 75, "agent_record_agent_id": 15, "agent_record_extra_type": 1187470605}
+{"stage": "gadget_walk_info_record", "agent_id": 15, "record": true, "name_enc": 672027352}
+{"stage": "agent", "agent_id": 16, "type": 512, "is_gadget": true, "model_id": 0, "position": [-6371.0, -2880.0, -339.8612060546875], "name_bytes": [158, 12, 0, 0], "pointer": 672027304}
+{"stage": "client_decode", "agent_id": 16, "text": "", "event_arrived": true, "state": "FREE", "elapsed_ms": 121.437}
+{"stage": "compare", "agent_id": 16, "client_name": "", "client_ms": 121.437, "client_call_started": true, "port_name": "Great Temple of Balthazar", "port_ms": 20.929, "agree": false, "table_status": "slot 2: 1024 entries from one file (1 file(s) read, 1024 entries held)"}
+{"stage": "gadget_walk", "agent_id": 16, "available": true, "summary_valid": true, "summary_size": 1010}
+{"stage": "gadget_walk_record", "agent_id": 16, "record": true, "extra_info_sub_ptr": 663223568}
+{"stage": "gadget_walk_sub", "agent_id": 16, "sub": true, "gadget_name_enc": 0, "gadget_id": 3651, "composite_agent_id": 3287564868}
+{"stage": "gadget_walk_info", "agent_id": 16, "gadget_info_valid": true, "gadget_info_size": 9524, "gadget_id": 3651, "agent_record_gadget_id": 3651, "agent_record_agent_id": 16, "agent_record_extra_type": 1187474445}
+{"stage": "gadget_walk_info_record", "agent_id": 16, "record": true, "name_enc": 672027304}
+{"stage": "agent", "agent_id": 26, "type": 219, "is_gadget": false, "model_id": 5960, "position": [-6135.07568359375, -2505.4365234375, -332.07623291015625], "name_bytes": [2, 129, 79, 6, 0, 0], "pointer": 672041352}
+{"stage": "client_decode", "agent_id": 26, "text": "", "event_arrived": true, "state": "FREE", "elapsed_ms": 126.421}
+{"stage": "compare", "agent_id": 26, "client_name": "", "client_ms": 126.421, "client_call_started": true, "port_name": "Vekk", "port_ms": 1060.867, "agree": false, "table_status": "slot 64: 1024 entries from one file (2 file(s) read, 2048 entries held)"}
+{"stage": "agent", "agent_id": 27, "type": 219, "is_gadget": false, "model_id": 4531, "position": [-5936.92431640625, -2532.5634765625, -328.8797912597656], "name_bytes": [1, 129, 170, 56, 0, 0], "pointer": 672041368}
+{"stage": "client_decode", "agent_id": 27, "text": "", "event_arrived": true, "state": "FREE", "elapsed_ms": 132.121}

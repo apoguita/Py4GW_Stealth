@@ -58,7 +58,7 @@ from py4gw.context.mission_map_context import MissionMapContext
 from py4gw.win32 import Win32
 
 #: Where the read stage's report goes, and where the elevated stages' does.
-REPORT_PATH = "live_reports/party_live.json"
+REPORT_PATH = "tests/live_reports/party_live.json"
 
 #: Every step the acting stage knows, in the order it would run them: the reversible ones first, the
 #: party-changing ones after, and the two that leave the map last. The owner names what may run.

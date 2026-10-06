@@ -34,7 +34,7 @@ class _Outer(TargetStruct):
 
 def _sample() -> _Outer:
     value = _Outer()
-    for index, code in enumerate("Fezzik"):
+    for index, code in enumerate("Player"):
         value.name[index] = ord(code)
     value.tag = b"GW\x00\x00"
     value.counts = (c_uint32 * 3)(7, 8, 9)
@@ -55,9 +55,9 @@ class DescribeValueTests(unittest.TestCase):
 
     def test_wide_character_array_becomes_text(self) -> None:
         buffer = (c_uint16 * 8)()
-        for index, code in enumerate("Fezzik"):
+        for index, code in enumerate("Player"):
             buffer[index] = ord(code)
-        self.assertEqual(describe_value(buffer), "Fezzik")
+        self.assertEqual(describe_value(buffer), "Player")
 
     def test_narrow_character_bytes_become_text(self) -> None:
         # ctypes returns c_char array fields as bytes, so bytes is the input.
@@ -99,7 +99,7 @@ class TargetStructApiTests(unittest.TestCase):
 
     def test_to_dict_decodes_every_field_completely(self) -> None:
         data = _sample().to_dict()
-        self.assertEqual(data["name"], "Fezzik")
+        self.assertEqual(data["name"], "Player")
         self.assertEqual(data["tag"], "GW")
         self.assertEqual(data["counts"], [7, 8, 9])
         self.assertEqual(data["blob"], list(range(20)))
@@ -144,10 +144,10 @@ class DescribableTests(unittest.TestCase):
             name: str
             flags: tuple[int, ...]
 
-        record = _Record(agent_id=7, name="Fezzik", flags=(1, 2, 3))
+        record = _Record(agent_id=7, name="Player", flags=(1, 2, 3))
         self.assertEqual(
             record.to_dict(),
-            {"agent_id": 7, "name": "Fezzik", "flags": (1, 2, 3)},
+            {"agent_id": 7, "name": "Player", "flags": (1, 2, 3)},
         )
         self.assertEqual(
             [n for n, _ in record.iter_fields()], ["agent_id", "name", "flags"]
@@ -266,7 +266,7 @@ class ReprTests(unittest.TestCase):
 
     def test_repr_decodes_values(self) -> None:
         text = repr(_sample())
-        self.assertIn("'Fezzik'", text)
+        self.assertIn("'Player'", text)
         self.assertIn("'GW'", text)
         self.assertIn("item_id=449", text)
 
