@@ -14,7 +14,7 @@ helpers are typed with. The methods fall into groups, and this file follows the 
   naming its work item**.
 
 **What is ported, and how it reads.** The ported half is the source's own bodies over the ported
-``ItemArray``, ``Item`` and the bag surface in ``py4gw/py_inventory.py``: ``GetItemArray`` supplies the
+``ItemArray``, ``Item`` and the bag surface in ``py4gw/native_src/item/py_inventory.py``: ``GetItemArray`` supplies the
 ids, ``ItemArray.Filter.ByCondition`` the selections, and ``Item.*`` the per-item answers. Every one of
 those members answers.
 
@@ -42,8 +42,8 @@ from .enums_src.item_enums import Bags
 from .frame_tree import Frame, FrameId, FrameKeyError, FrameTree
 from .item import Item
 from .item_array import ItemArray
-from .py_inventory import Bag as PyInventoryBag
-from .py_inventory import PyInventory
+from .native_src.item.py_inventory import Bag as PyInventoryBag
+from .native_src.item.py_inventory import PyInventory
 
 #: The three records the salvage-choice dialog's helpers are typed with (``Inventory.py:12-40``).
 

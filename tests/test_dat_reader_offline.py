@@ -19,7 +19,7 @@ import unittest
 from typing import Any
 from unittest import mock
 
-from py4gw import dat_reader
+from py4gw.native_src.textures import dat_reader
 from py4gw.game_thread.shared_block import (
     DATA_SIZE,
     CallForm,

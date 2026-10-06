@@ -40,7 +40,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from .game_thread.shared_block import CallForm
+from ...game_thread.shared_block import CallForm
 
 #: The catalog names every call here resolves. They are ``gw_dat_reader_patterns.cpp``'s
 #: eight resolvers' names, whose patterns live in ``offsets/gw_dat_reader.json``.
@@ -161,7 +161,7 @@ def read_file_by_hash(file_hash: str) -> Optional[bytes]:
     why that is this module's own constant rather than a parameter here.
     """
 
-    from .client import require_client
+    from ...client import require_client
 
     client = require_client()
     if not file_hash or not file_hash[0]:
@@ -185,7 +185,7 @@ def read_file_by_hash(file_hash: str) -> Optional[bytes]:
 def read_file_by_id(file_id: int, stream_id: int = 1) -> Optional[bytes]:
     """``PyDatReader.read_file_by_id``: the same read, addressed by sequential id."""
 
-    from .client import require_client
+    from ...client import require_client
 
     client = require_client()
     if not file_id:

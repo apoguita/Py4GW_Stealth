@@ -29,7 +29,7 @@ from unittest import mock
 
 from py4gw import item as item_module
 from py4gw import mods_core
-from py4gw import py_inventory
+from py4gw.native_src.item import py_inventory
 from py4gw.context.item_context import DyeInfoStruct, ItemModifierStruct, ItemStruct
 from py4gw.enums_src.game_data_enums import Attribute, DyeColor
 from py4gw.enums_src.item_enums import ItemType, Rarity

@@ -2,7 +2,7 @@
 
 ``GW::chat::SendChat`` builds a ``wchar_t buffer[140]`` on its own stack and hands its address to
 ``g_send_chat_func`` (``chat_methods.cpp:88-142``). Nothing of this project's runs in the client,
-so ``py4gw/chat.py`` builds the same buffer in the block's data region and calls the same
+so ``py4gw/native_src/chat/chat.py`` builds the same buffer in the block's data region and calls the same
 function through the capability layer. The offline suite pins the buffer's bytes; what no offline
 test can show is that **the client accepts it**.
 
@@ -29,7 +29,7 @@ import sys
 from typing import Any
 
 import py4gw
-from py4gw import chat
+from py4gw.native_src.chat import chat
 from py4gw.player import Player
 from py4gw.win32 import Win32
 

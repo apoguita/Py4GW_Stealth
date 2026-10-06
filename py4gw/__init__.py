@@ -1,6 +1,7 @@
 """Small external library for Guild Wars process and memory research."""
 
-from . import chat, context, ui, win32
+from .native_src.chat import chat
+from . import context, ui, win32
 from .client import ConnectedClient, connect, current_client, disconnect
 from .scanner import (
     Pattern,
@@ -12,7 +13,7 @@ from .scanner import (
     SectionRange,
 )
 from .memory import ProcessMemoryReader
-from .perf_counter import MAX_SAMPLES, MetricSummary, PerfCounter
+from .native_src.base.perf_counter import MAX_SAMPLES, MetricSummary, PerfCounter
 from .agent_array import AgentArray
 from .enums_src.game_data_enums import Allegiance
 from .enums_src.map_enums import InstanceType, InstanceTypeName

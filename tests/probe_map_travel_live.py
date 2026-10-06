@@ -14,7 +14,7 @@ every step, because the map id is the only evidence that a send reached the clie
 acted on it.
 
 **The sends themselves are the port's own members, unmodified** - `Map.TravelGH`/`Map.Travel` ->
-`MapMethods.TravelGH`/`Travel` (`py4gw/map_methods.py`) -> `UIManager.SendUIMessageRaw` with
+`MapMethods.TravelGH`/`Travel` (`py4gw/native_src/methods/map_methods.py`) -> `UIManager.SendUIMessageRaw` with
 `kGuildHall` / `kTravel`; `Map.LeaveGH` -> `MapMethods.LeaveGH` -> `UIManager.SendUIMessage` with
 `kLeaveGuildHall`. Nothing here re-implements a send or picks a different message id.
 

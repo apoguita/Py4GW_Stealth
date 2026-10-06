@@ -28,7 +28,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Optional, List
 
-from .context.map_context import (
+from ...context.map_context import (
     PathingMap, PathingTrapezoid, Portal, Node, SpawnPoint,
     TravelPortal, _PORTAL_MODEL_FILE_IDS,
 )
@@ -99,7 +99,7 @@ class FfnaMapMethods:
         file_id = _MAP_ID_TO_DAT_FILE_ID.get(map_id)
         if not file_id:
             return None
-        from .dat_reader import read_file_by_id
+        from ..textures.dat_reader import read_file_by_id
 
         data = read_file_by_id(file_id, stream_id=1)
         return bytes(data) if data else None

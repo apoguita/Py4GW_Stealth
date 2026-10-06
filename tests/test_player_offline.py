@@ -133,7 +133,7 @@ ACTION_MEMBERS = (
     ("SendRawDialog", lambda: Player.SendRawDialog(1)),
     ("SendDialog", lambda: Player.SendDialog(1)),
     ("SendAutomaticDialog", lambda: Player.SendAutomaticDialog(0)),
-    # The chat senders reach the client's own sender through :mod:`py4gw.chat`; the opcode is
+    # The chat senders reach the client's own sender through :mod:`py4gw.native_src.chat.chat`; the opcode is
     # ``/`` for the command form, and the source's own guard refuses anything else.
     ("SendChatCommand", lambda: Player.SendChatCommand("help")),
     ("SendChat", lambda: Player.SendChat("/", "hi")),
@@ -634,7 +634,7 @@ class ActionMemberTests(unittest.TestCase):
         """The members that used to refuse are now 18 that act and 2 that refuse.
 
         The count moved four times. The three chat senders were ported onto ``GW::chat``
-        (``py4gw/chat.py``): ``SendChatCommand``, ``SendChat`` and ``SendWhisper`` act now, which is
+        (``py4gw/native_src/chat/chat.py``): ``SendChatCommand``, ``SendChat`` and ``SendWhisper`` act now, which is
         what the source's own chain does — the binding calls ``GW::chat::SendChat``. Then the two
         log writers joined them: ``SendFakeChat`` and ``SendFakeChatColored`` publish the
         UI-message form through ``chat.WriteChat``, which is ``GW::chat::WriteChat``. Then

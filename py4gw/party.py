@@ -291,7 +291,7 @@ def _controlled_character_id() -> int:
 
     The native line is ``world && world->playerControlledChar ? world->playerControlledChar->agent_id
     : 0``; this is ``Player.GetAgentID()``, which reads that same field — the third module here to
-    express it that way (``py4gw/skillbar.py:368-373``, ``py4gw/py_inventory.py:173-178``), because
+    express it that way (``py4gw/skillbar.py:368-373``, ``py4gw/native_src/item/py_inventory.py:173-178``), because
     one scheme is the point. The port's member gates on ``Player.IsPlayerLoaded`` first, which the
     native line does not: when that gate refuses, this answers ``0`` and the guard below then passes
     for any nonzero agent id — the same outcome native's own ``0`` produces.
@@ -576,7 +576,7 @@ def _send_chat_command(command: str) -> bool:
     own bound, kept where the source keeps it: at the buffer, before the send.
     """
 
-    from .chat import SendChat
+    from .native_src.chat.chat import SendChat
 
     if len(command) >= 32:
         return False

@@ -1,4 +1,4 @@
-"""Offline tests for ``py4gw/chat.py``: the send half of ``GW::chat``.
+"""Offline tests for ``py4gw/native_src/chat/chat.py``: the send half of ``GW::chat``.
 
 No client is involved. ``GW::chat::SendChat`` builds a ``wchar_t buffer[140]`` and hands its
 address to the client's sender (``chat_methods.cpp:88-142``); this port builds the same buffer in
@@ -23,7 +23,7 @@ import unittest
 from typing import Any, cast
 from unittest import mock
 
-from py4gw import chat
+from py4gw.native_src.chat import chat
 from py4gw.game_thread.shared_block import CallForm
 
 PLACED_ADDRESS = 0x00A00000

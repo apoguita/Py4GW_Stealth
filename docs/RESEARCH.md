@@ -2927,7 +2927,7 @@ client restored.
 
 ### The second crash: an address that is not code, and the hole that let it through — 2026-09-25
 
-`py4gw/chat.py` was written to close the four `Player` chat senders — the source's `SendChat`
+`py4gw/native_src/chat/chat.py` was written to close the four `Player` chat senders — the source's `SendChat`
 builds a `wchar_t buffer[140]` and hands its address to `g_send_chat_func`
 (``chat_methods.cpp:88-142``), and the port can now do the same thing with the block's data
 region, which is what that region is for. The offline suite passed (16 tests, pinning the buffer's
@@ -3032,7 +3032,7 @@ because it starts reading at byte 4 (`string_table.py:1054`).
 **The names that are *not* player names are string-table indices**, e.g.
 `\x8102\x3B6F\xFFB8\xE4A2\x4112` for a gadget and `\x8103\x0A65\xC1D9\x8C63\x4697` for a living
 agent. Their text needs the table GW.dat fills, which is filled by a call **into the client**
-(`py4gw/dat_reader.py`), so that half is the elevated suite's:
+(`py4gw/native_src/textures/dat_reader.py`), so that half is the elevated suite's:
 `tests/test_live_agent_effects.py`.
 
 **The skill timer is the client's own clock.** `GetSkillTimer()` answered `2202888165` and then
@@ -3235,7 +3235,7 @@ system DLLs.
 
 **What caused it.** The assertion is the client's own invariant: at teardown it expects no dat record
 open. Exactly one thing in this project opens one — the GW.dat chain behind the string table
-(`py4gw/dat_reader.py`, native's `ReadDatFile`, `gw_dat_reader.cpp:1441-1461`):
+(`py4gw/native_src/textures/dat_reader.py`, native's `ReadDatFile`, `gw_dat_reader.cpp:1441-1461`):
 
 ```text
 FileHashToRecObj(hash, 1, 0) | OpenFileByFileId(0, id, 1, 1, 0)   <- a record is open from here

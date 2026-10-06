@@ -938,7 +938,7 @@ class LoadTests(unittest.TestCase):
         """``_load_dat_file`` is the source's one line over the ported ``PyDatReader``."""
 
         with patch(
-            "py4gw.dat_reader.read_file_by_hash", return_value=b"\x08\x00payload"
+            "py4gw.native_src.textures.dat_reader.read_file_by_hash", return_value=b"\x08\x00payload"
         ) as read:
             data = string_table._load_dat_file("hash")
 
@@ -948,10 +948,10 @@ class LoadTests(unittest.TestCase):
     def test_a_dat_read_that_answers_nothing_is_no_file(self) -> None:
         """The source's ``return bytes(data) if data else None``."""
 
-        with patch("py4gw.dat_reader.read_file_by_hash", return_value=None):
+        with patch("py4gw.native_src.textures.dat_reader.read_file_by_hash", return_value=None):
             self.assertIsNone(string_table._load_dat_file("hash"))
 
-        with patch("py4gw.dat_reader.read_file_by_hash", return_value=b""):
+        with patch("py4gw.native_src.textures.dat_reader.read_file_by_hash", return_value=b""):
             self.assertIsNone(string_table._load_dat_file("hash"))
 
     def test_a_read_the_client_refused_is_counted_and_the_rest_still_loads(self) -> None:

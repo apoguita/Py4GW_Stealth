@@ -21,7 +21,7 @@ carries every section of that file:
 - ``decode`` / ``decode_plain`` and the single background worker behind the first of them.
 
 **The whole pipeline is ported.** The table comes out of ``gw.dat`` through
-``py4gw/dat_reader.py``, which is the port of Native's ``PyDatReader`` and the client call
+``py4gw/native_src/textures/dat_reader.py``, which is the port of Native's ``PyDatReader`` and the client call
 chain behind it: ``FileHashToFileId`` → ``FileHashToRecObj`` (or ``OpenFileByFileId``) →
 ``ReadFileBuffer`` → the bounded copy → ``FreeFileBuffer`` → ``CloseRecObj``. Each of those
 is issued on the client's own thread by the capability layer.
@@ -751,14 +751,14 @@ def _decode_formatted_codepoints(
 def _load_dat_file(file_hash: str) -> Optional[bytes]:
     """Load a single dat file by its hash string. Must run on game thread.
 
-    ``PyDatReader.read_file_by_hash``, which is ``py4gw/dat_reader.py`` here: the hash string
+    ``PyDatReader.read_file_by_hash``, which is ``py4gw/native_src/textures/dat_reader.py`` here: the hash string
     is placed in the block, the client's own file functions are called on the client's thread
     to hand the entry over, its bytes are copied out, and the buffer and the record are
     released. The one difference from the source is that the call this runs on happens at the
     point of request rather than at the next game frame — see :func:`load_string_table`.
     """
 
-    from ..dat_reader import read_file_by_hash
+    from ..native_src.textures.dat_reader import read_file_by_hash
 
     data = read_file_by_hash(file_hash)
     return bytes(data) if data else None

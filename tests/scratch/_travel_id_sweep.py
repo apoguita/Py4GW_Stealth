@@ -39,7 +39,7 @@ if str(ROOT) not in sys.path:
 import py4gw  # noqa: E402
 from py4gw import Win32  # noqa: E402
 from py4gw.map import Map  # noqa: E402
-from py4gw.map_methods import MapMethods  # noqa: E402
+from py4gw.native_src.methods.map_methods import MapMethods  # noqa: E402
 
 STEP_SETTLE = 10.0        # seconds to wait for a map change after one send
 BETWEEN_STEPS = 2.0       # seconds between attempts, so the client is quiet before the next

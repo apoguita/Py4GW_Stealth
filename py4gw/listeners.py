@@ -25,7 +25,7 @@ order kept.
 from __future__ import annotations
 
 from .game_thread.shared_block import EventKind, EventRecord
-from .timer import Timer
+from .native_src.base.timer import Timer
 
 #: The StoC headers this listener replaces, as native's packet names them. Their values are
 #: ``GW/common/opcodes.h``'s, which is where native reads them:

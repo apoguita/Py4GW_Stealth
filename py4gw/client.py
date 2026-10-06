@@ -73,7 +73,7 @@ from .context import (
     AgentStruct,
 )
 from .memory import MemoryManager, ProcessMemoryReader
-from .perf_counter import PerfCounter
+from .native_src.base.perf_counter import PerfCounter
 from .scanner import PatternCatalog, RemoteScanner
 from .ui import CurrentTooltip, FrameArray, FrameTree, TooltipInfoStruct
 from .win32 import Win32
@@ -87,7 +87,7 @@ from .game_thread.hooker import (
     is_relative_jump,
 )
 from .game_thread.patcher import Patcher
-from . import chat
+from .native_src.chat import chat
 from . import dialog
 from .internals import string_table
 from .dialog import DialogTables

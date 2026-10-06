@@ -328,7 +328,7 @@ def _name_walk_section(client: _LiveClient, reader: ProcessMemoryReader) -> dict
     section["string_table_names_sample"] = sample
     section["table_note"] = (
         "every name that is not player-prefixed is string-table indices; decoding it needs the "
-        "table GW.dat fills, which is a call into the client (py4gw/dat_reader.py), so it is the "
+        "table GW.dat fills, which is a call into the client (py4gw/native_src/textures/dat_reader.py), so it is the "
         "elevated suite that proves that half"
     )
     return section

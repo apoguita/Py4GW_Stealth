@@ -732,11 +732,11 @@ class Item:
         The source walks ``[Bag.Backpack, Bag.Belt_Pouch, Bag.Bag_1, Bag.Bag_2]``, takes each bag's
         ``GetItems()`` and answers the first element whose ``model_id`` matches, or ``0``. Those elements
         are :class:`~py4gw.item.PyItem` objects — Reforged's callers read ``item.item_id`` off each, and
-        the bag surface this port serves is in ``py4gw/py_inventory.py``, where that shape decision is
+        the bag surface this port serves is in ``py4gw/native_src/item/py_inventory.py``, where that shape decision is
         recorded.
         """
 
-        from .py_inventory import Bag as PyInventoryBag
+        from .native_src.item.py_inventory import Bag as PyInventoryBag
 
         bags_to_check = [Bag.Backpack, Bag.Belt_Pouch, Bag.Bag_1, Bag.Bag_2]
 
@@ -754,7 +754,7 @@ class Item:
     def GetItemByAgentID(agent_id):
         """``Item.GetItemByAgentID`` (``Item.py:253-271``): the first bag element with that agent id."""
 
-        from .py_inventory import Bag as PyInventoryBag
+        from .native_src.item.py_inventory import Bag as PyInventoryBag
 
         bags_to_check = [Bag.Backpack, Bag.Belt_Pouch, Bag.Bag_1, Bag.Bag_2]
 

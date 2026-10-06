@@ -29,7 +29,7 @@ from typing import Any, cast
 from unittest import mock
 
 from py4gw import agent
-from py4gw import chat
+from py4gw.native_src.chat import chat
 from py4gw import client as client_module
 from py4gw import dialog
 from py4gw.client import ConnectedClient, current_client

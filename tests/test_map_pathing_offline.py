@@ -2,7 +2,7 @@
 
 `Map.Pathing` reaches three classes that are not its own, and this file is their gate:
 
-* **``py4gw/ffna_map_methods.py``** — the port of Reforged's ``native_src/methods/FfnaMapMethods.py``,
+* **``py4gw/native_src/methods/ffna_map_methods.py``** — the port of Reforged's ``native_src/methods/FfnaMapMethods.py``,
   the ``gw.dat`` FFNA reader the offline pathing branch calls. Its two things are checked against
   the source itself: the whole top-level surface name for name, and its **404-entry**
   ``_MAP_ID_TO_DAT_FILE_ID`` table **value for value**. The parsers are then driven on synthetic
@@ -26,7 +26,7 @@ from typing import Any
 from unittest import mock
 
 from py4gw.context.map_context import Node, PathingMap, PathingTrapezoid
-from py4gw.ffna_map_methods import (
+from py4gw.native_src.methods.ffna_map_methods import (
     CHUNK_TYPE_SPAWN,
     CHUNK_TYPE_TRAPEZOID,
     FFNA_MAGIC,
@@ -104,7 +104,7 @@ class FfnaSurfaceTests(unittest.TestCase):
             return names
 
         source = surface(REFORGED_METHODS)
-        port = surface(PORT_DIR.joinpath("ffna_map_methods.py"))
+        port = surface(PORT_DIR.joinpath("native_src/methods/ffna_map_methods.py"))
         self.assertEqual(port, source)
 
     def test_the_map_id_table_is_the_sources_own(self) -> None:
@@ -172,7 +172,7 @@ class FfnaParserTests(unittest.TestCase):
     def test_build_pathing_maps_offsets_ids_per_plane(self) -> None:
         """Two planes of two trapezoids: the second plane's ids start where the first's ended."""
 
-        from py4gw.ffna_map_methods import GWPathingTrapezoid
+        from py4gw.native_src.methods.ffna_map_methods import GWPathingTrapezoid
 
         def gw(adj=(0, -1, -1, -1)) -> GWPathingTrapezoid:
             return GWPathingTrapezoid(

@@ -19,7 +19,7 @@ import json
 import sys
 
 import py4gw
-from py4gw import dat_reader
+from py4gw.native_src.textures import dat_reader
 
 REPORT_PATH = sys.argv[1] if len(sys.argv) > 1 else ""
 

@@ -640,9 +640,9 @@ Recorded so they are **not** mistaken for defects:
   are the accounted-for divergences — nine mouse members (`PyImGui.get_io()`, the injected runtime's
   own ImGui, which nothing here installs) and `Pathing.WorldToScreen` (`PyOverlay.Overlay()`, and this
   class has no render process) — and each says so in its own body. **No member of `Map` is a work
-  item.** Dependencies ported with it: `MapMethods` (`py4gw/map_methods.py`, with `Travel`, `TravelGH`
+  item.** Dependencies ported with it: `MapMethods` (`py4gw/native_src/methods/map_methods.py`, with `Travel`, `TravelGH`
   and `LeaveGH` live-verified), `Checks.Map` (`py4gw/routines_src/Checks.py`), `FfnaMapMethods`
-  (`py4gw/ffna_map_methods.py`) and `Pathing`'s navmesh half (`py4gw/pathing.py`). The live checks
+  (`py4gw/native_src/methods/ffna_map_methods.py`) and `Pathing`'s navmesh half (`py4gw/pathing.py`). The live checks
   still open need a game state, not code. [`MAP_PORT.md`](MAP_PORT.md) is the plan and the progress
   record.
 - `py4gw/dialog.py` — Reforged's 10-member `Dialog.py` plus the native `PyDialog`

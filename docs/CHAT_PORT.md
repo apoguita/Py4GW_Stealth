@@ -3,7 +3,7 @@
 **Source:** `src/GW/chat/chat_methods.cpp` and `include/GW/chat/chat.h`, with the channel
 constants from `include/GW/common/constants/chat.h`. `chat.cpp` is the module's hooking and
 callback half; `chat_patterns.cpp` resolves its function pointers. The port's file is
-`py4gw/chat.py`.
+`py4gw/native_src/chat/chat.py`.
 
 **Verdict: INCOMPLETE.** What is ported is the send path, because that is what the ported
 `Player` members reach; the rest of the module is named below with what each piece needs.
@@ -12,18 +12,18 @@ callback half; `chat_patterns.cpp` resolves its function pointers. The port's fi
 
 | Member | Source | Where |
 | --- | --- | --- |
-| `ChatChannel` | `Channel` (`common/constants/chat.h:17-35`); Reforged's Python spells it `ChatChannel` (`enums_src/UI_enums.py:35-55`) | `py4gw/chat.py`, re-exported as `Player.ChatChannel` — one declaration, so the two names cannot drift |
+| `ChatChannel` | `Channel` (`common/constants/chat.h:17-35`); Reforged's Python spells it `ChatChannel` (`enums_src/UI_enums.py:35-55`) | `py4gw/native_src/chat/chat.py`, re-exported as `Player.ChatChannel` — one declaration, so the two names cannot drift |
 | `GetChannel(opcode)` | the `char` overload and the `wchar_t` one that casts to it (`chat_methods.cpp:53-68`) | seven opcodes, `CHANNEL_UNKNOWN` otherwise |
 | `SendChat(channel, message)` | `bool SendChat(char, const wchar_t*)` and `bool SendChat(char, const char*)` (`88-113`) | the buffer is the opcode then the text, clamped to 120 code units, placed in the block's data region; the call is `g_send_chat_func(buffer, 0)`, two words |
 | `SendChat(name, message)` | `bool SendChat(const wchar_t*, const wchar_t*)` and its `char` sibling (`115-142`) | the whisper form, `L"\"%s,%s"`, bounded at the source's 140 code units |
 | `GetChatLog()` | `Context::ChatBuffer* GetChatLog()` (`70-73`) — `*chat_buffer_addr`, or null | the ported `ChatBuffer` context's struct, whose `messages` ring and per-record encoded line are what `Player.RequestChatHistory` walks; landed with the chat-history trio (2026-09-26) |
-| the watched history | `OnUICallback_ChatLogLine` (`chat.cpp:205-230`) registers the module's own callback for `kWriteToChatLog` — for the transient marker and its subscribers | the same message is watched by the connection, and `py4gw/chat.py` decodes each announced line as it arrives into the buffer `Player.GetChatHistory` answers from. **This is the one deliberate divergence in the module, at the owner's direction**: native's callback does not keep the lines (its history is filled only by a request), while a post-mortem read here needs no request. The decode is *started* on the listener and completed by the `STRING_DECODED` event, so nothing blocks that thread. |
+| the watched history | `OnUICallback_ChatLogLine` (`chat.cpp:205-230`) registers the module's own callback for `kWriteToChatLog` — for the transient marker and its subscribers | the same message is watched by the connection, and `py4gw/native_src/chat/chat.py` decodes each announced line as it arrives into the buffer `Player.GetChatHistory` answers from. **This is the one deliberate divergence in the module, at the owner's direction**: native's callback does not keep the lines (its history is filled only by a request), while a post-mortem read here needs no request. The decode is *started* on the listener and completed by the `STRING_DECODED` event, so nothing blocks that thread. |
 
 **The one adaptation, and it is the execution model rather than a choice.** The source builds
 `wchar_t buffer[140]` on its own stack and passes its address; nothing of this project's runs in
 the client, so the buffer is built with the same contents in the block's data region
 (`shared_block.DATA_REGION_OFFSET`, which exists for exactly this) and its address is passed as
-the call's first word. `py4gw/dat_reader.py` already hands the client a UTF-16 string the same way
+the call's first word. `py4gw/native_src/textures/dat_reader.py` already hands the client a UTF-16 string the same way
 for the GW.dat chain, live-verified, so this is the established mechanism and not a new one.
 
 **One divergence, in the overload dispatch.** C++ resolves `SendChat("A", "hi")` to the *whisper*
@@ -38,7 +38,7 @@ reachable is lost.
 | `WriteChat`, `WriteChatEnc` | `156-202` — the line is encoded (`L"\x108\x107%s\x1"`) and handed to the client in a `ui::UIChatMessage` packet over `kWriteToChatLog` | the encoding is pure string work; the packet needs the block's data region (available) **and** `g_transient_chat_message`, the client global the source sets around the send — that address is not in the offsets catalog yet, and without it the transient flag cannot be raised |
 | `SendFakeChat`, `SendFakeChatColored` | `262-275`, through `WriteChat` | the two members above; `Player`'s two members wait on them, and `FormatChatMessage` (the colour half) is already ported and works |
 | `AddToChatLog` | `75-81` — a `kLogChatMessage` packet over `ui::SendUIMessage` | `chat.add_to_chat_log_func` is in the catalog and the UI message form exists; the member is not wired yet |
-| `GetChatLog` and the `ChatBuffer` it walks | `70-73` | **ported 2026-09-26** — `py4gw.chat.GetChatLog()` answers the ported `ChatBuffer` struct, and `Player.RequestChatHistory`/`IsChatHistoryReady`/`GetChatHistory` are its first consumers (`player_bindings.cpp:276-325`, `docs/PLAYER_PORT.md`) |
+| `GetChatLog` and the `ChatBuffer` it walks | `70-73` | **ported 2026-09-26** — `py4gw.native_src.chat.chat.GetChatLog()` answers the ported `ChatBuffer` struct, and `Player.RequestChatHistory`/`IsChatHistoryReady`/`GetChatHistory` are its first consumers (`player_bindings.cpp:276-325`, `docs/PLAYER_PORT.md`) |
 | `RecvWhisper` | `chat.cpp`'s handler | the receive side, and the callback it needs |
 | the channel colours, `ToggleTimestamps`, `SetTimestampsFormat`, `SetTimestampsColor`, `ForceRedrawChatLog` | `204-249` | `chat.get_sender_color_func`/`get_message_color_func` are in the catalog; the patch-and-preference parts are not ported |
 | the command registry (`CreateCommand`, `DeleteCommand`) | `251-260` | the command callback ABI, and the runtime's callback table — `py4gw/game_thread/callbacks` is this project's own and not a substitute |

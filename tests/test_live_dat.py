@@ -42,7 +42,8 @@ import unittest
 from typing import Any
 
 import py4gw
-from py4gw import dat_reader, dialog
+from py4gw.native_src.textures import dat_reader
+from py4gw import dialog
 from py4gw.context.agent_array import Allegiance
 from py4gw.game_thread.shared_block import EventKind, EventRecord, EventTextState
 from py4gw.internals import string_table

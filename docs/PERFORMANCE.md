@@ -5,7 +5,7 @@ current context-read cost should be interpreted.
 
 ## The performance counters
 
-`py4gw/perf_counter.py` is a port of Reforged Native's ``PyProfiler`` module
+`py4gw/native_src/base/perf_counter.py` is a port of Reforged Native's ``PyProfiler`` module
 (`include/profiler/profiler.h`, `src/profiler/profiler.cpp`,
 `src/profiler/profiler_bindings.cpp`). It is the **timing** instrument: named
 stopwatches over a rolling history, reported as
@@ -92,7 +92,7 @@ reason every ported context reader is an instance.
 
 Reforged has two performance systems and they answer different questions:
 
-- **`py4gw/perf_counter.py`** (ported) — *how long did this operation take?*
+- **`py4gw/native_src/base/perf_counter.py`** (ported) — *how long did this operation take?*
 - **`Py4GWCoreLib/py4gwcorelib_src/Profiling.py`** (**not yet ported**) — *what
   ran, and what called it?* A `sys.setprofile` tracer (`SimpleProfiler`) with
   caller→callee edges, plus `ProfileScope` and a per-frame `ProfilingRegistry`.

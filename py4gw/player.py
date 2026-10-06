@@ -52,7 +52,7 @@ from .context.char_context import CharContextStruct
 from .context.world_context import PlayerStruct, TitleStruct, WorldContextStruct
 from .game_thread.shared_block import CallForm, DecodeState, float_bits
 from . import dialog
-from . import chat
+from .native_src.chat import chat
 from .py4gwcorelib_src.utils import Utils
 
 _T = TypeVar("_T")
@@ -67,7 +67,7 @@ from .enums_src.player_enums import PlayerStatus
 
 #: Reforged's Python reaches the channel values as ``Player.ChatChannel``
 #: (``enums_src/UI_enums.py:35-55``) while Native declares them in ``GW::chat``
-#: (``common/constants/chat.h``), so the class is declared in :mod:`py4gw.chat` and re-exported
+#: (``common/constants/chat.h``), so the class is declared in :mod:`py4gw.native_src.chat.chat` and re-exported
 #: here: one declaration, both names.
 ChatChannel = chat.ChatChannel
 
@@ -1468,7 +1468,7 @@ class Player:
         ``GetChannel`` maps to ``CHANNEL_COMMAND`` (``chat_methods.cpp:53-64``). The facade's
         own body hands the call to Reforged's ``ActionQueueManager``; that manager belongs to the
         injected runtime and has no ported home, so this calls the same function the manager's
-        action would have called — :func:`py4gw.chat.SendChat` — which is the port of
+        action would have called — :func:`py4gw.native_src.chat.chat.SendChat` — which is the port of
         ``GW::chat``'s sender (``chat_methods.cpp:88-103``).
         """
 
@@ -1512,7 +1512,7 @@ class Player:
         which is ``WriteChat`` with ``transient = true`` (``chat_methods.cpp:262-267``): the line is
         *encoded* (``L"\\x108\\x107%s\\x1"``, ``chat_methods.cpp:159``) and handed to the client in a
         ``ui::UIChatMessage {channel, message, channel2}`` packet over ``kWriteToChatLog``
-        (``173-202``). :func:`py4gw.chat.WriteChat` is that walk, so this member is the delegation
+        (``173-202``). :func:`py4gw.native_src.chat.chat.WriteChat` is that walk, so this member is the delegation
         its binding is — nothing is sent to the server.
         """
 
@@ -1527,7 +1527,7 @@ class Player:
         ``GW::chat::SendFakeChatColored`` (``chat_methods.cpp:269-275``) formats the line with
         ``FormatChatMessage`` — the clamping and the ``<c=#RRGGBB>`` wrap this class already
         carries — and writes it as a transient line, which is what
-        :func:`py4gw.chat.SendFakeChatColored` does.
+        :func:`py4gw.native_src.chat.chat.SendFakeChatColored` does.
         """
 
         chat.SendFakeChatColored(channel, message, r, g, b)

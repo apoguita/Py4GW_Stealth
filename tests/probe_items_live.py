@@ -22,7 +22,7 @@ import sys
 from typing import Any
 
 import py4gw
-from py4gw import py_inventory
+from py4gw.native_src.item import py_inventory
 from py4gw.inventory import Inventory
 from py4gw.item import Item
 from py4gw.item_array import ItemArray

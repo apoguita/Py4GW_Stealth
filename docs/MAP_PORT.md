@@ -137,7 +137,7 @@ the client. `Frame.is_mouse_over`/`Frame.io_events` carry the same divergence.
 ## `MapMethods`
 
 `Map`'s eight action bodies are Reforged's `native_src/methods/MapMethods.py` (135 lines), and
-they are ported where the source keeps them: **`py4gw/map_methods.py`**. The whole class is
+they are ported where the source keeps them: **`py4gw/native_src/methods/map_methods.py`**. The whole class is
 there — `GetMapInfo`, `SkipCinematic`, `Travel`, `TravelGH`, `LeaveGH`, `EnterChallenge`,
 `LogouttoCharacterSelect`, and the `_GHKEY_SCRATCH` class attribute.
 
@@ -187,7 +187,7 @@ There is no porting work left in `Map`. Ten members raise, and each names the th
 | what | where | what it is |
 | --- | --- | --- |
 | `Checks.Map` | `py4gw/routines_src/Checks.py` | The namespace `GetPathingMaps`/`GetPathingMapsRaw` guard on (`Map.py:2107, 2117`): all seven members, every one a guard over the ported `Map` and `Party`. The other seven namespaces `Checks` declares (`Player`, `Party`, `Inventory`, `Items`, `Effects`, `Agents`, `Skills`) are **that class's own migration** — `Map` reaches none of them, and `CLASS_PORT_MAP.md` carries a row saying so |
-| `FfnaMapMethods` | `py4gw/ffna_map_methods.py` | The source's 681-line module whole: the FFNA parser (13 module functions, 3 dataclasses) and the **404-entry** `_MAP_ID_TO_DAT_FILE_ID` table, checked value for value against the source by `tests/test_map_pathing_offline.py`. Its archive read is the already-ported, live-verified `dat_reader.read_file_by_id` |
+| `FfnaMapMethods` | `py4gw/native_src/methods/ffna_map_methods.py` | The source's 681-line module whole: the FFNA parser (13 module functions, 3 dataclasses) and the **404-entry** `_MAP_ID_TO_DAT_FILE_ID` table, checked value for value against the source by `tests/test_map_pathing_offline.py`. Its archive read is the already-ported, live-verified `dat_reader.read_file_by_id` |
 | the navmesh half of `Pathing` | `py4gw/pathing.py` | `AABB`, the BSP helpers, `TrapezoidBSP`, `NavMesh` (its whole class), `PATHING_MAP_GROUPS` and `AutoPathing` (its whole class), extracted from the source's own line ranges. `AutoPathing.get_path`/`get_path_to` are declared and name what they need — `PyPathing.PathPlanner` and the `Routines` coroutine driver — because they are the two members that need the injected planner and the frame loop, and neither is on `Map.Pathing`'s path. `PySystem.Console.Log` in `NavMesh.load_from_file` (`:439`) is the injected console: recorded on the member, not replaced |
 
 **One thing ports that is worth naming**: `Quad`'s corners are `PyOverlay.Vec2f(...)` in the source,

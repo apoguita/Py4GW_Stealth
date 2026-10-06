@@ -10,7 +10,7 @@ of them is driven against **real agents**, and every answer is checked against t
 claims to read plus the enum tables the source maps through: this is the source's own arithmetic
 evaluated on this client's data.
 
-**The chat-log write path** (``py4gw/chat.py`` + ``Player.SendFakeChat``/``SendFakeChatColored``).
+**The chat-log write path** (``py4gw/native_src/chat/chat.py`` + ``Player.SendFakeChat``/``SendFakeChatColored``).
 The port writes a line into the client's own chat log through ``kWriteToChatLog``, and it has never
 been observed doing it. The verification is the client's own: the connection watches that message id
 (``_WATCHED_MESSAGES`` gains ``(0x1000007F, 4)`` for this run), and the observer — code running
@@ -38,7 +38,7 @@ import unittest
 from typing import Any
 
 import py4gw
-from py4gw import chat
+from py4gw.native_src.chat import chat
 from py4gw.agent import Agent
 from py4gw.agent_array import AgentArray
 from py4gw.client import (

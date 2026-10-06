@@ -226,7 +226,7 @@ def section_ring(live: bool) -> None:
         return
 
     import py4gw
-    from py4gw import dat_reader
+    from py4gw.native_src.textures import dat_reader
     from py4gw.agent import Agent
     from py4gw.context.text_parser_context import TextParser
     from py4gw.game_thread.shared_block import Operation

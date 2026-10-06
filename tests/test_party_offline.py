@@ -1196,7 +1196,7 @@ class PartyPlayersTests(unittest.TestCase):
         self.addCleanup(self.number.stop)
         self.sent: list[tuple[Any, str]] = []
         chat = mock.patch(
-            "py4gw.chat.SendChat",
+            "py4gw.native_src.chat.chat.SendChat",
             lambda channel, message: self.sent.append((channel, message)) or True,
         )
         chat.start()

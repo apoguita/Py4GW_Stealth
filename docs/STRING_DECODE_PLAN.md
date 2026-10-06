@@ -53,7 +53,7 @@ chain, exactly as the source runs it:
 | Step | Source | What it needs from us |
 | --- | --- | --- |
 | 1. language + file slots | `TextParser` context: `language_id`, `entries_per_file`, `language_slots[language]`, `get_file_slot(slot_idx, language)` → `file_hash` (`string_table.py:700-722`) | **ported** — `py4gw/context/text_parser_context.py`, live: 11 languages × 99 slots, `entries_per_file` 1024 |
-| 2. read a dat file | `_load_dat_file` → `PyDatReader.read_file_by_hash(file_hash)` (`string_table.py:665-666`) | **ported** — `py4gw/dat_reader.py`, live: 91,114 bytes read from the client |
+| 2. read a dat file | `_load_dat_file` → `PyDatReader.read_file_by_hash(file_hash)` (`string_table.py:665-666`) | **ported** — `py4gw/native_src/textures/dat_reader.py`, live: 91,114 bytes read from the client |
 | 3. parse entries | `_parse_string_file(file_data, slot_idx * epf, table)` → `{table_index: bytes}` | **ported** — `py4gw/internals/string_table.py`, live: 1024 entries |
 | 4. decode | `decode(raw)` → `_parse_codepoints` → `_decode_entry` (RC4 + bit-unpack) | **ported**, live: a real dialog body rendered |
 | 5. formatted strings | the grammar above, plus `GWStringEncoded.decode_with_amount/plain/rarity/singular` (`encoded_strings.py`) | **the grammar is ported**; `encoded_strings.py` is not |
@@ -85,7 +85,7 @@ resolvers, and two pure-Python ports. It does not need a callback stub, and it d
 the client to decode anything.**
 
 **What is now ported, and what it proved live.** The whole of Route A except
-`encoded_strings.py`: `py4gw/internals/string_table.py` (89 offline tests) and `py4gw/dat_reader.py`
+`encoded_strings.py`: `py4gw/internals/string_table.py` (89 offline tests) and `py4gw/native_src/textures/dat_reader.py`
 (the port of `PyDatReader` and the chain behind it, 31 offline tests), with
 `py4gw/internals/helpers.py` for the substitute fallback's string read. `tests/test_live_dat.py`
 ran the whole path against pid 39188 on 2026-09-25: one file read through the client (91,114
@@ -190,7 +190,7 @@ Superseding the F-numbers in the Dialog plan where they overlap:
 | # | Work | Route | Kind |
 | --- | --- | --- | --- |
 | **S1** | The encoded-string constants + `EncStrToUInt32` / `UInt32ToEncStr` / `IsValidEncStr` | D | **pure Python, done** — `py4gw/ui/encoded_str.py`, 20 offline tests, and the client's own dialog strings accepted live |
-| **S2** | The eight DAT functions through the call path: `FileHashToRecObj` / `OpenFileByFileId` → `ReadFileBuffer(rec,&size)` → bounded copy → `FreeFileBuffer` → `CloseRecObj`, plus `FileHashToFileId` | A | **ported and live** — `py4gw/dat_reader.py`; the five calls each ran in the client, and the bytes came back |
+| **S2** | The eight DAT functions through the call path: `FileHashToRecObj` / `OpenFileByFileId` → `ReadFileBuffer(rec,&size)` → bounded copy → `FreeFileBuffer` → `CloseRecObj`, plus `FileHashToFileId` | A | **ported and live** — `py4gw/native_src/textures/dat_reader.py`; the five calls each ran in the client, and the bytes came back |
 | **S3** | The decompressor (`gw_dat_unpack.cpp` → `UnpackGWDat`) if entries are compressed | A | **not on this path** — nothing in `ReadDatFile`/`ReadDatRecord` decompresses, and the bytes the client handed over parsed as a string table directly. `UnpackGWDat` belongs to the direct-file path (`ReadDecodedMftBytes`), which reads `gw.dat` as a file for linked icon textures |
 | **S4** | `_parse_string_file` + `_parse_codepoints` + `_decode_entry` + the formatted grammar | A | **pure Python, done** — `py4gw/internals/string_table.py`, 89 offline tests (the postprocessors, the grammar, the slot walk and `decode`/`decode_plain` are in it too) |
 | **S5** | The game-thread load discipline: enqueue, load once per language, `switch_language` invalidation | A | **ported with one adaptation** — there is no frame loop, so the load runs at the point of request; the client calls inside it go through the capability layer, which executes on the client's own thread |

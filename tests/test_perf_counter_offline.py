@@ -10,7 +10,7 @@ from __future__ import annotations
 import unittest
 
 from py4gw import MAX_SAMPLES, MetricSummary, PerfCounter
-from py4gw.perf_counter import RECORD_EVERY, _MetricData
+from py4gw.native_src.base.perf_counter import RECORD_EVERY, _MetricData
 
 
 def _seed(counter: PerfCounter, name: str, samples: list[float]) -> None:

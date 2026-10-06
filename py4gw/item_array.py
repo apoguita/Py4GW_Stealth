@@ -35,7 +35,7 @@ the source's behaviour, pinned by a test.
 from __future__ import annotations
 
 from .item import Bag, Item
-from .py_inventory import Bag as PyInventoryBag
+from .native_src.item.py_inventory import Bag as PyInventoryBag
 
 
 class ItemArray:

@@ -150,7 +150,7 @@ before the step that needs it, and each step is its own round with its own tests
    element and its stub declares `List[PyItem]`. That is the Inventory step's question, so they raise
    naming it rather than guessing.
 
-4a. **`py4gw/py_inventory.py`** — **ported (2026-09-27)**: Native's ``PyInventory`` module
+4a. **`py4gw/native_src/item/py_inventory.py`** — **ported (2026-09-27)**: Native's ``PyInventory`` module
    (`inventory_bindings.cpp`, 216 lines) — the bag surface, and where the two classes still to come get
    their bags from. It is a module of its own because in both sources it *is* one, and because three
    ported modules need it while `Inventory.py` imports `ItemArray`, so hosting it in either would make
@@ -252,7 +252,7 @@ member spelled `None_`, which is the sources' own Python spelling for such a mem
 `enums_src/Item_enums.py:25,34,155`), giving `BagStruct`'s and `ItemStruct`'s predicates native's own
 bodies, and deleting the snake_case duplicates from the two context structs: those names are the
 *binding's* fields, and this port already carries them where the binding declares them (`py4gw/item.py`,
-`py4gw/py_inventory.py`). Pinned by `tests/test_item_records_offline.py` (all six `BagType` values against
+`py4gw/native_src/item/py_inventory.py`). Pinned by `tests/test_item_records_offline.py` (all six `BagType` values against
 all five predicates, plus the id-is-not-a-type regression) and by the corrected fixture values in
 `tests/test_inventory_offline.py`.
 

@@ -35,7 +35,7 @@ if str(ROOT) not in sys.path:
 import py4gw  # noqa: E402
 from py4gw import Win32  # noqa: E402
 from py4gw.map import Map  # noqa: E402
-from py4gw.map_methods import MapMethods  # noqa: E402
+from py4gw.native_src.methods.map_methods import MapMethods  # noqa: E402
 
 #: The port's own pacing constant: the client processes one command at a time.
 ACTION_INTERVAL_SECONDS = 0.75

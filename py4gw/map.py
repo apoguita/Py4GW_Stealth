@@ -50,7 +50,7 @@ from .enums_src.region_enums import (
 from .enums_src.ui_enums import FlagPreference, UIMessage
 from .frame_tree import Frame, FrameId
 from .internals.types import Vec2f
-from .map_methods import MapMethods
+from .native_src.methods.map_methods import MapMethods
 from .ui_manager import UIManager
 
 #: Where ``Pregame.InCharacterSelectScreen``'s ``ui_state`` word lives. Native keeps it on its own
@@ -741,7 +741,7 @@ class Map:
         """Return ``AreaInfoStruct`` for any map id, even if not loaded. (source 696)
 
         ``MapMethods.GetMapInfo`` (``native_src/methods/MapMethods.py:41-55``), ported in
-        ``py4gw/map_methods.py``: the array base is the catalog's ``map.area_info_addr`` —
+        ``py4gw/native_src/methods/map_methods.py``: the array base is the catalog's ``map.area_info_addr`` —
         the same ``imul eax, esi, 0x7C`` scan native's ``NativeSymbol`` makes at ``:27-33``
         — and the record is indexed by ``map_id * sizeof(AreaInfoStruct)``.
         """
@@ -2207,7 +2207,7 @@ class Map:
                     return []
                 return MapContext.GetPathingMaps()
 
-            from .ffna_map_methods import FfnaMapMethods
+            from .native_src.methods.ffna_map_methods import FfnaMapMethods
 
             return FfnaMapMethods.GetPathingMapsForMap(map_id)
 
@@ -2234,7 +2234,7 @@ class Map:
             source's too (``Map.py:2134``).
             """
 
-            from .ffna_map_methods import FfnaMapMethods
+            from .native_src.methods.ffna_map_methods import FfnaMapMethods
 
             FfnaMapMethods.ClearCache(map_id)
             if include_live:
@@ -2256,7 +2256,7 @@ class Map:
         def GetAvailableMapIds() -> set[int]:
             """Return the set of map IDs that offline pathing can be loaded for. (source 2146)"""
 
-            from .ffna_map_methods import FfnaMapMethods
+            from .native_src.methods.ffna_map_methods import FfnaMapMethods
 
             return FfnaMapMethods.GetAvailableMapIds()
 
@@ -2271,7 +2271,7 @@ class Map:
 
                 return MapContext.GetSpawns()
 
-            from .ffna_map_methods import FfnaMapMethods
+            from .native_src.methods.ffna_map_methods import FfnaMapMethods
 
             return FfnaMapMethods.GetSpawnData(map_id)
 
@@ -2284,7 +2284,7 @@ class Map:
 
                 return MapContext.GetTravelPortals()
 
-            from .ffna_map_methods import FfnaMapMethods
+            from .native_src.methods.ffna_map_methods import FfnaMapMethods
 
             return FfnaMapMethods.GetTravelPortalsForMap(map_id)
 

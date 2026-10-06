@@ -32,10 +32,10 @@ from __future__ import annotations
 import struct
 from typing import TYPE_CHECKING
 
-from .game_thread.shared_block import CallForm
+from ...game_thread.shared_block import CallForm
 
 if TYPE_CHECKING:
-    from .client import ConnectedClient
+    from ...client import ConnectedClient
 
 #: ``GW::chat::SendChatFn`` (``chat_methods.cpp:19``): the client's own sender. Its first
 #: argument is the wide chat buffer and its second the agent id the source always passes as
@@ -68,7 +68,7 @@ BUFFER_OFFSET = 16
 #: its last member ``CHANNEL_UNKNOW`` — a typo this port does not carry, because Reforged's own
 #: ``CHANNEL_UNKNOWN`` names the same value. ``py4gw/player.py`` re-exports the class, so
 #: ``Player.ChatChannel`` is the same object and the two names cannot drift apart.
-from .enums_src.ui_enums import ChatChannel
+from ...enums_src.ui_enums import ChatChannel
 
 
 def GetChannel(opcode: str | int) -> ChatChannel:
@@ -127,7 +127,7 @@ def SendChat(channel: ChatChannel | int | str, message: str) -> bool:
     buffer is what is bounded, because that is the buffer ``swprintf`` writes.
     """
 
-    from .client import require_client
+    from ...client import require_client
 
     client = require_client()
     if not message:
@@ -304,7 +304,7 @@ def WriteChatEnc(
     same guarantee reached by the container instead of by a return code.
     """
 
-    from .client import require_client
+    from ...client import require_client
 
     client = require_client()
     line = (
@@ -370,7 +370,7 @@ def GetChatLog():
     answer.
     """
 
-    from .client import require_client
+    from ...client import require_client
 
     return require_client().read_chat_buffer()
 
@@ -431,7 +431,7 @@ def _on_chat_log_line(event: object) -> None:
     if not text:
         return
 
-    from .ui.async_decode import async_decode_str, begin_string_decode
+    from ...ui.async_decode import async_decode_str, begin_string_decode
 
     encoded = b"".join(int(unit).to_bytes(2, "little") for unit in text)
     if not encoded.endswith(b"\x00\x00"):
@@ -452,7 +452,7 @@ def _on_string_decoded(event: object) -> None:
         return
     _live_pending.remove(slot)
 
-    from .ui.async_decode import decoded_text
+    from ...ui.async_decode import decoded_text
 
     text, _ = decoded_text(slot)
     _append_live_line(text)
@@ -470,7 +470,7 @@ def _append_live_line(text: str) -> None:
     # The buffer the ported ``Player`` members answer from is native's own
     # (``player_bindings.cpp:273``), so a watched line goes into it — which is the one divergence
     # of that trio and is recorded on ``Player.GetChatHistory``.
-    from . import player
+    from ... import player
 
     player._chat_history.append(text)
     if len(player._chat_history) > CHAT_LOG_LENGTH:
@@ -497,6 +497,6 @@ def SendFakeChatColored(
     as a transient one.
     """
 
-    from .player import Player
+    from ...player import Player
 
     WriteChat(ChatChannel(int(channel)), Player.FormatChatMessage(message, r, g, b), None, True)

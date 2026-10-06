@@ -20,7 +20,8 @@ from pathlib import Path
 from typing import Any, cast
 from unittest import mock
 
-from py4gw import item_array, py_inventory
+from py4gw.native_src.item import py_inventory
+from py4gw import item_array
 from py4gw.context.gw_array import GWArray
 from py4gw.context.item_context import BagStruct, InventoryStruct, ItemStruct
 from py4gw.item import Bag, Item

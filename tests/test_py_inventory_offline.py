@@ -18,7 +18,7 @@ from typing import Any, cast
 from unittest import mock
 
 from py4gw import item as item_module
-from py4gw import py_inventory
+from py4gw.native_src.item import py_inventory
 from py4gw.context.gw_array import GWArray
 from py4gw.context.instance_info_context import AreaInfoStruct, Region
 from py4gw.context.item_context import BagStruct, BagType, InventoryStruct, ItemStruct

@@ -46,12 +46,12 @@ import ctypes
 import struct
 from typing import Optional
 
-from .context.guild_context import GHKey, GuildContextStruct
-from .context.gw_context import GWContext
-from .context.instance_info_context import AreaInfoStruct
-from .enums_src.ui_enums import UIMessage
-from .game_thread.shared_block import CallForm, Operation
-from .ui_manager import UIManager
+from ...context.guild_context import GHKey, GuildContextStruct
+from ...context.gw_context import GWContext
+from ...context.instance_info_context import AreaInfoStruct
+from ...enums_src.ui_enums import UIMessage
+from ...game_thread.shared_block import CallForm, Operation
+from ...ui_manager import UIManager
 
 #: The two things the source resolves at import (``MapMethods.py:13-35``), as the catalog names
 #: the same pattern and mask are carried under.
@@ -84,7 +84,7 @@ class MapMethods:
     def GetMapInfo(map_id: int):
         """Return AreaInfoStruct for any map_id (not just the current map). (source 41-55)"""
 
-        from .client import require_client
+        from ...client import require_client
 
         if map_id <= 0:
             return None
@@ -108,7 +108,7 @@ class MapMethods:
     def SkipCinematic() -> bool:
         """Skip the current map cinematic. (source 57-64)"""
 
-        from .client import require_client
+        from ...client import require_client
 
         client = require_client()
         if not client.resolves(SKIP_CINEMATIC_FUNC):
@@ -127,7 +127,7 @@ class MapMethods:
         language)`` and the memory order is not, which is the source's own shape and is kept.
         """
 
-        from .client import require_client
+        from ...client import require_client
 
         client = require_client()
         payload = struct.pack(
@@ -166,7 +166,7 @@ class MapMethods:
 
         # If a custom key was provided, stuff its value into the real GH key
         if key is not None:
-            from .client import require_client
+            from ...client import require_client
 
             client = require_client()
             value = bytes(key.key_data)

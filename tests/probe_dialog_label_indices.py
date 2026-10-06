@@ -38,7 +38,7 @@ import sys
 from typing import Any
 
 import py4gw
-from py4gw import dat_reader
+from py4gw.native_src.textures import dat_reader
 from py4gw.internals import string_table
 from py4gw.win32 import Win32
 

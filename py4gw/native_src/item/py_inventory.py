@@ -55,14 +55,14 @@ import ctypes
 import struct
 from typing import Any
 
-from .client import require_client
-from .context.gw_context import GWContext
-from .context.instance_info_context import Region
-from .context.item_context import BagStruct, BagType
-from .enums_src.item_enums import MAX_GOLD_CHARACTER, MAX_GOLD_STORAGE
-from .enums_src.map_enums import InstanceType
-from .game_thread.shared_block import CallForm
-from .item import PyItem
+from ...client import require_client
+from ...context.gw_context import GWContext
+from ...context.instance_info_context import Region
+from ...context.item_context import BagStruct, BagType
+from ...enums_src.item_enums import MAX_GOLD_CHARACTER, MAX_GOLD_STORAGE
+from ...enums_src.map_enums import InstanceType
+from ...game_thread.shared_block import CallForm
+from ...item import PyItem
 
 #: ``ui::UIMessage::kSendInteractItem`` (``constants/ui.h:190``): what ``GW::item::PickUpItem`` sends.
 _K_SEND_INTERACT_ITEM = 0x3000000F
@@ -120,7 +120,7 @@ def _can_access_xunlai_chest() -> bool:
     member asks ``IsMapDataLoaded()`` first, and native asks nothing of the sort here.
     """
 
-    from .map import Map
+    from ...map import Map
 
     if Map.GetInstanceType() != InstanceType.Outpost:
         return False
@@ -173,7 +173,7 @@ def _can_interact_with_item(client: Any, item: Any) -> bool:
 def _controlled_character_id() -> int:
     """``agent::GetControlledCharacterId()`` (``agent_methods.cpp:60``), through the ported member."""
 
-    from .player import Player
+    from ...player import Player
 
     return int(Player.GetAgentID())
 
@@ -280,7 +280,7 @@ class Bag:
     def GetContext(self) -> None:
         """``Bag::GetContext`` (``:31-40``)."""
 
-        from .map import Map
+        from ...map import Map
 
         if not Map.IsMapReady():
             return
@@ -296,7 +296,7 @@ class Bag:
     def GetSize(self) -> int:
         """``Bag::GetSize`` (``:42-46``): the array's size, not the item count."""
 
-        from .map import Map
+        from ...map import Map
 
         if not Map.IsMapReady():
             return 0
@@ -316,7 +316,7 @@ class Bag:
         slot whose pointer is null is skipped, exactly as native skips it.
         """
 
-        from .map import Map
+        from ...map import Map
 
         result: list[PyItem] = []
         if not Map.IsMapReady():
@@ -622,7 +622,7 @@ def get_bag(bag_id: int) -> dict[str, Any]:
         "is_material_storage": False,
         "items": [],
     }
-    from .map import Map
+    from ...map import Map
 
     if not Map.IsMapReady():
         return out

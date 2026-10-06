@@ -584,20 +584,20 @@ class BlockRegionTests(unittest.TestCase):
     #: Transcribed, so adding a region means adding a row; the sizes are the ones the owning module
     #: uses, read from it rather than assumed.
     REGIONS: tuple[tuple[str, str, int, int], ...] = (
-        ("py4gw.dat_reader", "_HASH_OFFSET/_SIZE_OFFSET", 0x000, 0x0C),
+        ("py4gw.native_src.textures.dat_reader", "_HASH_OFFSET/_SIZE_OFFSET", 0x000, 0x0C),
         ("py4gw.camera", "_WRITE_REGION_OFFSET", 0x200, 0x0C),
-        ("py4gw.chat", "LOG_MESSAGE_OFFSET", 0x200, 0x400),
+        ("py4gw.native_src.chat.chat", "LOG_MESSAGE_OFFSET", 0x200, 0x400),
         ("py4gw.ui.preferences", "_PREFERENCE_WORD_OFFSET", 0x280, 0x04),
         ("py4gw.frame_tree.frame", "_MOUSE_ACTION_OFFSET", 0x300, 0x10),
         ("py4gw.frame_tree.frame", "_BUTTON_PARAM_OFFSET", 0x320, 0x0C),
         ("py4gw.frame_tree.frame", "_LABEL_OFFSET (a lookup's wide label)", 0xE40, 0xC0),
-        ("py4gw.map_methods", "_TRAVEL_OFFSET", 0xF00, 0x10),
-        ("py4gw.map_methods", "_GHKEY_OFFSET", 0xF20, 0x04),
+        ("py4gw.native_src.methods.map_methods", "_TRAVEL_OFFSET", 0xF00, 0x10),
+        ("py4gw.native_src.methods.map_methods", "_GHKEY_OFFSET", 0xF20, 0x04),
         ("py4gw.map", "_UI_STATE_OFFSET", 0xF40, 0x04),
         ("py4gw.ui_manager", "_COMPASS_POINTS_OFFSET", 0x400, 0x200),
-        ("py4gw.chat", "LOG_SENDER_OFFSET", 0x600, 0x400),
+        ("py4gw.native_src.chat.chat", "LOG_SENDER_OFFSET", 0x600, 0x400),
         ("py4gw.ui_manager", "_KEY_MAPPINGS_OFFSET", 0x900, 0x1D4),
-        ("py4gw.chat", "LOG_PARAM_OFFSET", 0xA00, 0x0C),
+        ("py4gw.native_src.chat.chat", "LOG_PARAM_OFFSET", 0xA00, 0x0C),
         ("py4gw.ui_manager", "_LABEL_ARGUMENT_OFFSET", 0xB00, 0x200),
         ("py4gw.ui_manager", "_WINDOW_POSITION_OFFSET", 0xC00, 0x14),
         ("py4gw.ui_manager", "_KEY_ACTION_OFFSET", 0xC20, 0x04),
@@ -617,13 +617,13 @@ class BlockRegionTests(unittest.TestCase):
     #: synchronous call — and each belongs to the module that owns the constant. This suite reports
     #: them; changing another class's offsets is that class's change.
     KNOWN_OTHER_MODULE_OVERLAPS: tuple[tuple[str, str], ...] = (
-        ("py4gw.camera._WRITE_REGION_OFFSET", "py4gw.chat.LOG_MESSAGE_OFFSET"),
-        ("py4gw.chat.LOG_MESSAGE_OFFSET", "py4gw.frame_tree.frame._MOUSE_ACTION_OFFSET"),
-        ("py4gw.chat.LOG_MESSAGE_OFFSET", "py4gw.frame_tree.frame._BUTTON_PARAM_OFFSET"),
-        ("py4gw.chat.LOG_MESSAGE_OFFSET", "py4gw.ui.preferences._PREFERENCE_WORD_OFFSET"),
-        ("py4gw.chat.LOG_MESSAGE_OFFSET", "py4gw.ui_manager._COMPASS_POINTS_OFFSET"),
-        ("py4gw.chat.LOG_SENDER_OFFSET", "py4gw.ui_manager._KEY_MAPPINGS_OFFSET"),
-        ("py4gw.ui_manager._KEY_MAPPINGS_OFFSET", "py4gw.chat.LOG_PARAM_OFFSET"),
+        ("py4gw.camera._WRITE_REGION_OFFSET", "py4gw.native_src.chat.chat.LOG_MESSAGE_OFFSET"),
+        ("py4gw.native_src.chat.chat.LOG_MESSAGE_OFFSET", "py4gw.frame_tree.frame._MOUSE_ACTION_OFFSET"),
+        ("py4gw.native_src.chat.chat.LOG_MESSAGE_OFFSET", "py4gw.frame_tree.frame._BUTTON_PARAM_OFFSET"),
+        ("py4gw.native_src.chat.chat.LOG_MESSAGE_OFFSET", "py4gw.ui.preferences._PREFERENCE_WORD_OFFSET"),
+        ("py4gw.native_src.chat.chat.LOG_MESSAGE_OFFSET", "py4gw.ui_manager._COMPASS_POINTS_OFFSET"),
+        ("py4gw.native_src.chat.chat.LOG_SENDER_OFFSET", "py4gw.ui_manager._KEY_MAPPINGS_OFFSET"),
+        ("py4gw.ui_manager._KEY_MAPPINGS_OFFSET", "py4gw.native_src.chat.chat.LOG_PARAM_OFFSET"),
         ("py4gw.ui_manager._LABEL_ARGUMENT_OFFSET", "py4gw.ui_manager._WINDOW_POSITION_OFFSET"),
         ("py4gw.ui_manager._LABEL_ARGUMENT_OFFSET", "py4gw.ui_manager._KEY_ACTION_OFFSET"),
         ("py4gw.ui_manager._LABEL_ARGUMENT_OFFSET", "py4gw.ui_manager._SETTINGS_OFFSET"),
@@ -633,7 +633,7 @@ class BlockRegionTests(unittest.TestCase):
         """The transcribed table cannot drift from the modules it describes."""
 
         import py4gw.map as map_module
-        from py4gw import map_methods
+        from py4gw.native_src.methods import map_methods
         from py4gw import party as party_module
         from py4gw.game_thread import packets as packets_module
         from py4gw import merchant as merchant_module
@@ -680,7 +680,7 @@ class BlockRegionTests(unittest.TestCase):
         first version of these constants got wrong.
         """
 
-        mine = ("py4gw.map", "py4gw.map_methods")
+        mine = ("py4gw.map", "py4gw.native_src.methods.map_methods")
         others = sorted(
             (row for row in self.REGIONS if row[0] not in mine), key=lambda row: row[2]
         )
