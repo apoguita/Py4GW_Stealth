@@ -5,7 +5,7 @@ serves it: ``Bag``'s snapshot and item list over **real** ported records (``BagS
 built from bytes behind a reader, the same construction the item-record tests use), the reads
 (``GetIsStorageOpen``, the gold pair, ``GetHoveredItemID`` over the tooltip payload), the actions that
 call this port's catalog resolvers (recorded through a fake client, because offline there is no client
-to call), the dict snapshot ``get_bag``, and â€” member by member â€” the exact piece each raising member
+to call), the dict snapshot ``get_bag``, and — member by member — the exact piece each raising member
 names, so a missing guard cannot quietly become a wrong action.
 """
 
@@ -67,7 +67,7 @@ class _FakeItemContext:
     """The client's item-context **reader**: its state reads, and `read()` for the record.
 
     The shape matters: the port reaches the item array and the inventory relationship through the
-    record `read()` hands out (``ItemContextStruct``), not through the reader itself â€” the item record
+    record `read()` hands out (``ItemContextStruct``), not through the reader itself — the item record
     tests and pyright both caught that when this fake had them flat.
     """
 
@@ -154,7 +154,7 @@ class _TradeLookup:
     """Stand in for the trade context, as the item-record tests use it.
 
     ``ItemStruct.IsOfferedInTrade`` reads the player's trade offer through the trade context, so a
-    record that is not bound to one refuses â€” which is why every record here is bound to this.
+    record that is not bound to one refuses — which is why every record here is bound to this.
     """
 
     def __init__(self, offered_ids: set[int]) -> None:
@@ -226,7 +226,7 @@ class _FixtureCase(unittest.TestCase):
         self.patchers = [
             mock.patch.object(py_inventory, "require_client", lambda: self.client),
             # `Bag.GetItems` answers `PyItem`s, and constructing one reads the record through `item.py`'s
-            # own import of `require_client` â€” the same port, a second name.
+            # own import of `require_client` — the same port, a second name.
             mock.patch.object(item_module, "require_client", lambda: self.client),
             mock.patch.object(Map, "IsMapReady", staticmethod(lambda: True)),
         ]
@@ -261,7 +261,7 @@ class BagTests(_FixtureCase):
         self.assertEqual(bag.GetItemCount(), 2)
 
     def test_the_items_are_pyitem_objects_with_the_records_fields(self) -> None:
-        """`GetItems` answers `PyItem`s â€” Reforged's callers read attributes off them."""
+        """`GetItems` answers `PyItem`s — Reforged's callers read attributes off them."""
 
         bag = py_inventory.Bag(1)
         items = bag.GetItems()
@@ -347,7 +347,7 @@ class InventoryReadTests(_FixtureCase):
         self.assertEqual(py_inventory.PyInventory().GetHoveredItemID(), ITEM_A_ID)
 
     def test_a_two_word_item_tooltip_answers_the_first_non_zero_id(self) -> None:
-        """Payload length 0xC, three words: `{item_id, item_id, 0xff}` â€” first non-zero wins."""
+        """Payload length 0xC, three words: `{item_id, item_id, 0xff}` — first non-zero wins."""
 
         self.client.reader.add(0x00600000, struct.pack("<III", 0, ITEM_B_ID, 0xFF))
         self.client.tooltip = _Tooltip(0x00600000, 0xC)
@@ -452,7 +452,7 @@ class InventoryActionTests(_FixtureCase):
         self.assertEqual(self.client.calls, [])
 
     def test_change_gold_requires_the_totals_to_add_up(self) -> None:
-        """`(storage + character) == (new_character + new_storage)` â€” the methods layer's check."""
+        """`(storage + character) == (new_character + new_storage)` — the methods layer's check."""
 
         py_inventory.PyInventory()._change_gold(1, 1)
         self.assertEqual(self.client.calls, [])

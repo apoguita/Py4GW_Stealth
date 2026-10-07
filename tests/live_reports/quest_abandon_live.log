@@ -1,0 +1,427 @@
+=== quest abandon (single permitted run): start Tue 10/06/2026 17:59:32.78 === 
+RequestQuestInfo(1098) -> None
+  name         ready=True  0.0   s value='Fort Aspenwood'
+  description  ready=True  0.0   s value='Balthazar is watching over the Luxon and Kurzick forces in F'
+  objectives   ready=True  0.0   s value='{s}Win 3 PvP battles in Fort Aspenwood.{s}*BONUS* Win 5 PvP '
+  location     ready=True  0.0   s value='Zaishen Combat'
+  npc          ready=True  0.0   s value='Zaishen Combat'
+AbandonQuest(1432): log 23 entries -> -1, gone=False, others_untouched=False (NOT settled, or another entry moved — see the fields above)
+{
+  "stage": "act",
+  "pid": 16972,
+  "controller_elevated": true,
+  "entry_decisions": [
+    "game_thread.leave_game_thread_func: place its own patch on the client's own bytes",
+    "ui.send_ui_message_func: place its own patch on the client's own bytes",
+    "effects.post_process_effect_func: place its own patch on the client's own bytes",
+    "render.end_scene_func: place its own patch on the client's own bytes"
+  ],
+  "quest_log_ids": [
+    167,
+    169,
+    194,
+    354,
+    400,
+    720,
+    722,
+    754,
+    782,
+    805,
+    818,
+    830,
+    842,
+    851,
+    860,
+    873,
+    890,
+    918,
+    957,
+    1048,
+    1098,
+    1329,
+    1432
+  ],
+  "active_quest_id": 1098,
+  "mission_map_quest_available": false,
+  "quest_log": [
+    {
+      "quest_id": 167,
+      "log_state": "0x1",
+      "map_from": 29,
+      "map_to": 33,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 169,
+      "log_state": "0x20",
+      "map_from": 33,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 194,
+      "log_state": "0x0",
+      "map_from": 20,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 354,
+      "log_state": "0x0",
+      "map_from": 301,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 400,
+      "log_state": "0x0",
+      "map_from": 77,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 720,
+      "log_state": "0x0",
+      "map_from": 403,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 722,
+      "log_state": "0x0",
+      "map_from": 414,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 754,
+      "log_state": "0x0",
+      "map_from": 474,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 782,
+      "log_state": "0x0",
+      "map_from": 493,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 805,
+      "log_state": "0x0",
+      "map_from": 651,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 818,
+      "log_state": "0x40",
+      "map_from": 661,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 830,
+      "log_state": "0x0",
+      "map_from": 643,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 842,
+      "log_state": "0x0",
+      "map_from": 644,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 851,
+      "log_state": "0x0",
+      "map_from": 553,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 860,
+      "log_state": "0x0",
+      "map_from": 625,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 873,
+      "log_state": "0x0",
+      "map_from": 642,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 890,
+      "log_state": "0x0",
+      "map_from": 641,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 918,
+      "log_state": "0x0",
+      "map_from": 644,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 957,
+      "log_state": "0x0",
+      "map_from": 248,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 1048,
+      "log_state": "0x0",
+      "map_from": 248,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 1098,
+      "log_state": "0x1",
+      "map_from": 248,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 1329,
+      "log_state": "0x0",
+      "map_from": 248,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 1432,
+      "log_state": "0x0",
+      "map_from": 642,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    }
+  ],
+  "is_completed": {
+    "167": false,
+    "169": false,
+    "194": false,
+    "354": false,
+    "400": false,
+    "720": false,
+    "722": false,
+    "754": false,
+    "782": false,
+    "805": false,
+    "818": false,
+    "830": false,
+    "842": false,
+    "851": false,
+    "860": false,
+    "873": false,
+    "890": false,
+    "918": false,
+    "957": false,
+    "1048": false,
+    "1098": false,
+    "1329": false,
+    "1432": false
+  },
+  "is_primary": {
+    "167": false,
+    "169": true,
+    "194": false,
+    "354": false,
+    "400": false,
+    "720": false,
+    "722": false,
+    "754": false,
+    "782": false,
+    "805": false,
+    "818": false,
+    "830": false,
+    "842": false,
+    "851": false,
+    "860": false,
+    "873": false,
+    "890": false,
+    "918": false,
+    "957": false,
+    "1048": false,
+    "1098": false,
+    "1329": false,
+    "1432": false
+  },
+  "first_quest_data": {
+    "quest_id": 167,
+    "log_state": "0x1",
+    "map_from": 29,
+    "map_to": 33,
+    "marker": [
+      Infinity,
+      Infinity
+    ],
+    "is_completed": false,
+    "is_primary": false,
+    "name_is_empty_here": true
+  },
+  "decode_target": 1098,
+  "decode_target_is_the_active_quest": true,
+  "request_quest_info": {
+    "quest_id": 1098,
+    "called": null
+  },
+  "decode_trios": {
+    "name": {
+      "ready": true,
+      "seconds": 0.0,
+      "value": "Fort Aspenwood"
+    },
+    "description": {
+      "ready": true,
+      "seconds": 0.0,
+      "value": "Balthazar is watching over the Luxon and Kurzick forces in Fort Aspenwood. Join with one faction and win at least three battles before you return to Zehnchu.\n\nReward:<brx>\u00a2khki)<\u0081T\u009ca\u00a5\u008cnpg5,000 Imperial Faction<brx>Complete the Base Objective for 15 Zaishen Copper Coins.\nComplete the first *BONUS* Objective for an additional 30 Zaishen Copper Coins.\nComplete the second *BONUS* Objective for an additional 60 Zaishen Copper Coins."
+    },
+    "objectives": {
+      "ready": true,
+      "seconds": 0.0,
+      "value": "{s}Win 3 PvP battles in Fort Aspenwood.{s}*BONUS* Win 5 PvP battles in Fort Aspenwood.{s}*BONUS* Win 9 PvP battles in Fort Aspenwood."
+    },
+    "location": {
+      "ready": true,
+      "seconds": 0.0,
+      "value": "Zaishen Combat"
+    },
+    "npc": {
+      "ready": true,
+      "seconds": 0.0,
+      "value": "Zaishen Combat"
+    }
+  },
+  "set_active": null,
+  "restore_active": null,
+  "set_active_via_call": null,
+  "abandon": {
+    "quest_id": 1432,
+    "in_log_before": true,
+    "log_before": [
+      167,
+      169,
+      194,
+      354,
+      400,
+      720,
+      722,
+      754,
+      782,
+      805,
+      818,
+      830,
+      842,
+      851,
+      860,
+      873,
+      890,
+      918,
+      957,
+      1048,
+      1098,
+      1329,
+      1432
+    ],
+    "called": null,
+    "settled": true,
+    "settle_seconds": 0.1,
+    "log_after": false,
+    "gone": false,
+    "others_untouched": false,
+    "verdict": "NOT settled, or another entry moved \u2014 see the fields above"
+  },
+  "entries_before": {
+    "game_thread.leave_game_thread_func": "55 8b ec 81 ec 20 02 00 00 a1 00 a5 ee 00 33 c5",
+    "ui.send_ui_message_func": "55 8b ec 8b 45 08 83 f8 56 73 16 68 3d 0f 00 00",
+    "effects.post_process_effect_func": "55 8b ec 83 ec 08 8b 45 0c db 45 08 89 45 f8 8b",
+    "render.end_scene_func": "55 8b ec 83 ec 48 a1 00 a5 ee 00 33 c5 89 45 fc"
+  },
+  "entries_after_disconnect": {
+    "game_thread.leave_game_thread_func": "55 8b ec 81 ec 20 02 00 00 a1 00 a5 ee 00 33 c5",
+    "ui.send_ui_message_func": "55 8b ec 8b 45 08 83 f8 56 73 16 68 3d 0f 00 00",
+    "effects.post_process_effect_func": "55 8b ec 83 ec 08 8b 45 0c db 45 08 89 45 f8 8b",
+    "render.end_scene_func": "55 8b ec 83 ec 48 a1 00 a5 ee 00 33 c5 89 45 fc"
+  },
+  "hooks_original_after_disconnect": true
+}
+abandon_exit=0 

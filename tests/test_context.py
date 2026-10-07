@@ -53,8 +53,8 @@ class LiveContextTests(unittest.TestCase):
         """Read the complete maintained structure and expose its name."""
 
         snapshot = self.context.read()
-        self.assertEqual(ctypes.sizeof(CharContextStruct), 0x448)
-        self.assertEqual(len(bytes(snapshot)), 0x448)
+        self.assertEqual(ctypes.sizeof(CharContextStruct), 0x450)
+        self.assertEqual(len(bytes(snapshot)), 0x450)
         self.assertEqual(
             snapshot.is_logged_in,
             bool(snapshot.player_name_str and snapshot.player_name_str.strip()),

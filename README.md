@@ -223,9 +223,11 @@ py4gw.connect(py4gw.win32.list_processes()[0])
 print(Player.GetName(), Player.GetLevel(), Player.GetXY())
 ```
 
-`Map`, `Player`, `Party`, `Scanner` and `Dialog` are ported, and each one carries a
+`Map`, `Player`, `Party`, `Scanner`, `Dialog` and `Quest` are ported, and each one carries a
 verdict in [`docs/CLASS_PORT_MAP.md`](docs/CLASS_PORT_MAP.md): **FULL** when every member
-works, **INCOMPLETE** with the remaining members named. **`Map` is done** — the project
+works, **INCOMPLETE** with the remaining members named. **`Quest` is FULL and live-verified** —
+26 of 26 members, run end to end against a client whose log holds 23 quests, including the two
+members that change the game. **`Map` is done** — the project
 owner's ruling of 2026-09-29 put it at the same *complete for this port's purposes* verdict
 `UIManager`, `Agent`, `Player` and `Inventory` carry: 168 of its 178 members answer, and the ten
 that do not are accounted for — nine need the injected runtime's own ImGui (which nothing here
@@ -403,6 +405,7 @@ inside Guild Wars.
 - [Skill port](docs/SKILL_PORT.md) — the ported `Skill` class over the client's skill constant table: 79 of 87 members working, native's three generated name tables, and the offline byte-level verification of the record
 - [Skillbar port](docs/SKILLBAR_PORT.md) — the ported `SkillBar` class: every read working over the client's skillbar array and tooltip, the control-action members that name their mechanism, and the tooltip indirection measured against the running client
 - [Party port](docs/PARTY_PORT.md) — the complete `Party` surface and the four members that can only return a constant
+- [Quest port](docs/QUEST_PORT.md) — the `Quest` class whole (26 of 26 members) and the `PyQuest` binding ported behind it: the log walk, the five decoders, the two members that call the client's own quest functions, and the mission-map constants. **Live-verified 2026-10-06** on a character with 23 quests: every read, all five decode trios, `SetActiveQuest` (167 → 1098 in 0.0 s) and one `AbandonQuest` (1432 out of the log in 0.1 s, nothing else moved)
 - [Dialog port](docs/DIALOG_PORT.md) — the whole `Dialog` class and the state behind it: all 32 of `PyDialog`'s members answering, the button caption produced where the source produces it, both journals, and the one recorded build divergence
 - [Dialog migration plan](docs/DIALOG_MIGRATION_PLAN.md) — the seven features to port first, in dependency order, and what each unblocks beyond `Dialog`
 - [Agent port](docs/AGENT_PORT.md) — the queue for Reforged's 147-member `Agent`, prepared ahead of the point it is reached at: `Player.GetInstanceUptime` delegates to it

@@ -1,0 +1,336 @@
+{
+  "stage": "reads",
+  "pid": 16972,
+  "controller_elevated": false,
+  "module": {
+    "base": "0x6f0000",
+    "size": "0xf4c000"
+  },
+  "map": {
+    "id": 642,
+    "ready": true
+  },
+  "quest_log_ids": [
+    167,
+    169,
+    194,
+    354,
+    400,
+    720,
+    722,
+    754,
+    782,
+    805,
+    818,
+    830,
+    842,
+    851,
+    860,
+    873,
+    890,
+    918,
+    957,
+    1048,
+    1098,
+    1329,
+    1432
+  ],
+  "active_quest_id": 1098,
+  "mission_map_quest_available": false,
+  "quest_log": [
+    {
+      "quest_id": 167,
+      "log_state": "0x0",
+      "map_from": 29,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 169,
+      "log_state": "0x20",
+      "map_from": 33,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 194,
+      "log_state": "0x0",
+      "map_from": 20,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 354,
+      "log_state": "0x0",
+      "map_from": 301,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 400,
+      "log_state": "0x0",
+      "map_from": 77,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 720,
+      "log_state": "0x0",
+      "map_from": 403,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 722,
+      "log_state": "0x0",
+      "map_from": 414,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 754,
+      "log_state": "0x0",
+      "map_from": 474,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 782,
+      "log_state": "0x0",
+      "map_from": 493,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 805,
+      "log_state": "0x0",
+      "map_from": 651,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 818,
+      "log_state": "0x40",
+      "map_from": 661,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 830,
+      "log_state": "0x0",
+      "map_from": 643,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 842,
+      "log_state": "0x0",
+      "map_from": 644,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 851,
+      "log_state": "0x0",
+      "map_from": 553,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 860,
+      "log_state": "0x0",
+      "map_from": 625,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 873,
+      "log_state": "0x0",
+      "map_from": 642,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 890,
+      "log_state": "0x0",
+      "map_from": 641,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 918,
+      "log_state": "0x0",
+      "map_from": 644,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 957,
+      "log_state": "0x0",
+      "map_from": 248,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 1048,
+      "log_state": "0x0",
+      "map_from": 248,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 1098,
+      "log_state": "0x1",
+      "map_from": 248,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 1329,
+      "log_state": "0x0",
+      "map_from": 248,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 1432,
+      "log_state": "0x0",
+      "map_from": 642,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    }
+  ],
+  "is_completed": {
+    "167": false,
+    "169": false,
+    "194": false,
+    "354": false,
+    "400": false,
+    "720": false,
+    "722": false,
+    "754": false,
+    "782": false,
+    "805": false,
+    "818": false,
+    "830": false,
+    "842": false,
+    "851": false,
+    "860": false,
+    "873": false,
+    "890": false,
+    "918": false,
+    "957": false,
+    "1048": false,
+    "1098": false,
+    "1329": false,
+    "1432": false
+  },
+  "is_primary": {
+    "167": false,
+    "169": true,
+    "194": false,
+    "354": false,
+    "400": false,
+    "720": false,
+    "722": false,
+    "754": false,
+    "782": false,
+    "805": false,
+    "818": false,
+    "830": false,
+    "842": false,
+    "851": false,
+    "860": false,
+    "873": false,
+    "890": false,
+    "918": false,
+    "957": false,
+    "1048": false,
+    "1098": false,
+    "1329": false,
+    "1432": false
+  },
+  "first_quest_data": {
+    "quest_id": 167,
+    "log_state": "0x0",
+    "map_from": 29,
+    "map_to": 898,
+    "marker": [
+      Infinity,
+      Infinity
+    ],
+    "is_completed": false,
+    "is_primary": false,
+    "name_is_empty_here": true
+  },
+  "note": "read stage: no connection, nothing called. The quest log, the active quest and each entry's data are reads; the five string trios need the client's decoder, so they run in the act stage."
+}

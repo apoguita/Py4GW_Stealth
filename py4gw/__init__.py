@@ -21,6 +21,7 @@ from .map import Map
 from .merchant import PyMerchant, Trading
 from .party import HERO_NAME_TO_ID, Hero, HeroType, Party
 from .player import ChatChannel, Player, PlayerStatus
+from .quest import Quest, QuestData
 from .context import (
     BlockingPropStruct,
     MapPropStruct,
@@ -327,6 +328,8 @@ __all__ = [
     "PlayerAgentId",
     "PlayerAgentIdStruct",
     "Player",
+    "Quest",
+    "QuestData",
     "PlayerStatus",
     "ChatChannel",
     "Map",

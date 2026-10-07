@@ -1,0 +1,415 @@
+{
+  "stage": "act",
+  "pid": 16972,
+  "controller_elevated": true,
+  "entry_decisions": [
+    "game_thread.leave_game_thread_func: place its own patch on the client's own bytes",
+    "ui.send_ui_message_func: place its own patch on the client's own bytes",
+    "effects.post_process_effect_func: place its own patch on the client's own bytes",
+    "render.end_scene_func: place its own patch on the client's own bytes"
+  ],
+  "quest_log_ids": [
+    167,
+    169,
+    194,
+    354,
+    400,
+    720,
+    722,
+    754,
+    782,
+    805,
+    818,
+    830,
+    842,
+    851,
+    860,
+    873,
+    890,
+    918,
+    957,
+    1048,
+    1098,
+    1329,
+    1432
+  ],
+  "active_quest_id": 167,
+  "mission_map_quest_available": false,
+  "quest_log": [
+    {
+      "quest_id": 167,
+      "log_state": "0x1",
+      "map_from": 29,
+      "map_to": 33,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 169,
+      "log_state": "0x20",
+      "map_from": 33,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 194,
+      "log_state": "0x0",
+      "map_from": 20,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 354,
+      "log_state": "0x0",
+      "map_from": 301,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 400,
+      "log_state": "0x0",
+      "map_from": 77,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 720,
+      "log_state": "0x0",
+      "map_from": 403,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 722,
+      "log_state": "0x0",
+      "map_from": 414,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 754,
+      "log_state": "0x0",
+      "map_from": 474,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 782,
+      "log_state": "0x0",
+      "map_from": 493,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 805,
+      "log_state": "0x0",
+      "map_from": 651,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 818,
+      "log_state": "0x40",
+      "map_from": 661,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 830,
+      "log_state": "0x0",
+      "map_from": 643,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 842,
+      "log_state": "0x0",
+      "map_from": 644,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 851,
+      "log_state": "0x0",
+      "map_from": 553,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 860,
+      "log_state": "0x0",
+      "map_from": 625,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 873,
+      "log_state": "0x0",
+      "map_from": 642,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 890,
+      "log_state": "0x0",
+      "map_from": 641,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 918,
+      "log_state": "0x0",
+      "map_from": 644,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 957,
+      "log_state": "0x0",
+      "map_from": 248,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 1048,
+      "log_state": "0x0",
+      "map_from": 248,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 1098,
+      "log_state": "0x1",
+      "map_from": 248,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 1329,
+      "log_state": "0x0",
+      "map_from": 248,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    },
+    {
+      "quest_id": 1432,
+      "log_state": "0x0",
+      "map_from": 642,
+      "map_to": 898,
+      "marker": [
+        Infinity,
+        Infinity
+      ]
+    }
+  ],
+  "is_completed": {
+    "167": false,
+    "169": false,
+    "194": false,
+    "354": false,
+    "400": false,
+    "720": false,
+    "722": false,
+    "754": false,
+    "782": false,
+    "805": false,
+    "818": false,
+    "830": false,
+    "842": false,
+    "851": false,
+    "860": false,
+    "873": false,
+    "890": false,
+    "918": false,
+    "957": false,
+    "1048": false,
+    "1098": false,
+    "1329": false,
+    "1432": false
+  },
+  "is_primary": {
+    "167": false,
+    "169": true,
+    "194": false,
+    "354": false,
+    "400": false,
+    "720": false,
+    "722": false,
+    "754": false,
+    "782": false,
+    "805": false,
+    "818": false,
+    "830": false,
+    "842": false,
+    "851": false,
+    "860": false,
+    "873": false,
+    "890": false,
+    "918": false,
+    "957": false,
+    "1048": false,
+    "1098": false,
+    "1329": false,
+    "1432": false
+  },
+  "first_quest_data": {
+    "quest_id": 167,
+    "log_state": "0x1",
+    "map_from": 29,
+    "map_to": 33,
+    "marker": [
+      Infinity,
+      Infinity
+    ],
+    "is_completed": false,
+    "is_primary": false,
+    "name_is_empty_here": true
+  },
+  "decode_target": 167,
+  "decode_target_is_the_active_quest": true,
+  "request_quest_info": {
+    "quest_id": 167,
+    "called": null
+  },
+  "decode_trios": {
+    "name": {
+      "ready": true,
+      "seconds": 0.051,
+      "value": "Deliver a Message to My Wife"
+    },
+    "description": {
+      "ready": true,
+      "seconds": 0.0,
+      "value": "Everyday I watch more and more of my comrades die at the hands of the Charr. Now that they've breached the Wall, I fear that my time may be running out. I haven't seen my wife for over three months. I'm not scared of dying, but I hate the thought of leaving her without at least a final message.<p>My wife lives just outside of Ascalon City. Her name is <c=@Quest>Melka</c>. Please, if you find her, tell her that I love her. It would mean a lot to me. Can you find her and give her that <c=@Quest>message</c>?\n\nReward:<brx>500 Experience<brx>¢khki)<Ta¥npg"
+    },
+    "objectives": {
+      "ready": true,
+      "seconds": 0.0,
+      "value": "{s}Find Melka Blanston, outside of Ascalon City, and tell her that Gurn loves her."
+    },
+    "location": {
+      "ready": true,
+      "seconds": 0.051,
+      "value": "Ascalon"
+    },
+    "npc": {
+      "ready": true,
+      "seconds": 0.051,
+      "value": "Gurn Blanston"
+    }
+  },
+  "quest_names": {
+    "167": "Deliver a Message to My Wife",
+    "169": "The Krytan Ambassador",
+    "194": "The Hero's Journey",
+    "354": "Naga Oil",
+    "400": "Song and Stone",
+    "720": "Norgu's Nightfall",
+    "722": "Brains or Brawn",
+    "754": "Mallyx the Unyielding",
+    "782": "All for One and One for Justice",
+    "805": "Kathandrax's Crusher",
+    "818": "Finding the Bloodstone",
+    "830": "Anything You Can Do",
+    "842": "Round 1: Fight!",
+    "851": "The Great Norn Alemoot",
+    "860": "The Destroyer Challenge",
+    "873": "Service: In Defense of the Eye",
+    "890": "The Cipher of Kormir",
+    "918": "Kilroy's Punchout Tournament",
+    "957": "Thunderhead Keep",
+    "1048": "Ilsundur, Lord of Fire",
+    "1098": "Fort Aspenwood",
+    "1329": "The Path to Combat: Random Arena",
+    "1432": "Wayfarer's Reverie: The Far North"
+  },
+  "set_active": {
+    "quest_id": 1098,
+    "called": null,
+    "active_before": 167,
+    "active_after": 1098,
+    "settled": true,
+    "settle_seconds": 0.0
+  },
+  "restore_active": null,
+  "set_active_via_call": null,
+  "abandon": null,
+  "entries_before": {
+    "game_thread.leave_game_thread_func": "55 8b ec 81 ec 20 02 00 00 a1 00 a5 ee 00 33 c5",
+    "ui.send_ui_message_func": "55 8b ec 8b 45 08 83 f8 56 73 16 68 3d 0f 00 00",
+    "effects.post_process_effect_func": "55 8b ec 83 ec 08 8b 45 0c db 45 08 89 45 f8 8b",
+    "render.end_scene_func": "55 8b ec 83 ec 48 a1 00 a5 ee 00 33 c5 89 45 fc"
+  },
+  "entries_after_disconnect": {
+    "game_thread.leave_game_thread_func": "55 8b ec 81 ec 20 02 00 00 a1 00 a5 ee 00 33 c5",
+    "ui.send_ui_message_func": "55 8b ec 8b 45 08 83 f8 56 73 16 68 3d 0f 00 00",
+    "effects.post_process_effect_func": "55 8b ec 83 ec 08 8b 45 0c db 45 08 89 45 f8 8b",
+    "render.end_scene_func": "55 8b ec 83 ec 48 a1 00 a5 ee 00 33 c5 89 45 fc"
+  },
+  "hooks_original_after_disconnect": true
+}
