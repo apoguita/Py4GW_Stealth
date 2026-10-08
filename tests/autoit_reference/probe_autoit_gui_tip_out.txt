@@ -1,0 +1,16 @@
+pid=25732
+gui=0x022C0A68
+input=0x02840A4C
+button=0x01CB0C88
+children before SetTip=2
+  child 0x02840A4C class=Edit
+  child 0x01CB0C88 class=Button
+tooltips_class32 in process before SetTip=0
+children after SetTip=2
+  child 0x02840A4C class=Edit
+  child 0x01CB0C88 class=Button
+tooltip 0x01400E8A: parent=0x022C0A68 style=0x84000053 exstyle=0x00080088
+tooltip 0x01620EB2: parent=0x022C0A68 style=0x84000013 exstyle=0x00080088
+tooltips_class32 in process after SetTip=2
+tooltip 0x01400E8A tool count=1
+tooltip 0x01620EB2 tool count=1

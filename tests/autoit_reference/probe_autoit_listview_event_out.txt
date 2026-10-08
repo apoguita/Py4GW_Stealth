@@ -1,0 +1,9 @@
+list box window class : ListBox
+listview class        : SysListView32
+listview item ids     : item one=5 item two=6 listview=4
+click the List row 1  : at 170,168 -> 
+click the List row 2  : at 170,184 -> list(@GUI_CtrlId=3) 
+click the ListView r1 : at 450,168 -> listview(@GUI_CtrlId=4) 
+click the ListView r2 : at 450,184 -> listview(@GUI_CtrlId=4) 
+GUICtrlRead(list)     : beta
+GUICtrlRead(listview) : 0

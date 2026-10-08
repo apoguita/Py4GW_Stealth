@@ -1,0 +1,16 @@
+listview rows before      : 3
+item 2 text               : two|2|
+GUICtrlDelete(item 2)     : 1
+listview rows after       : 2
+item 1 text still reads   : one|1|
+item 3 text still reads   : three|3|
+deleted item 2 reads      : 0
+row 0 / row 1 text        : one / three
+GUICtrlDelete(item 2) again: 0
+treeview items before     : 3
+GUICtrlDelete(tree item 1): 1
+treeview items after      : 2
+tree item 2 text          : 256
+plain list reads          : 
+GUICtrlDelete(list id)    : 1
+after deleting the list   : 0

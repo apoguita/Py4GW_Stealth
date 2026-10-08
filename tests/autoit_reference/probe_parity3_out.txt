@@ -1,0 +1,14 @@
+[ud] default: read=[] input=[5]
+[ud] handle=0x00040EE6 at 1633,573 size 18x22 | input at 1531,573 size 104x22
+[ud] getstate=80
+[ud] SetData(12) ret=-1 read=[] input=[5]
+[ud] SetLimit(30,3) ret=1 input=[5]
+[ud] after UDM_SETPOS32(20): read=[] input=[20]
+[ud] UDM_GETPOS32=20
+[ud] SetPos ret=1 at 1571,613 size 18x22
+[ud] hide ret=1 state=96
+[ud] show ret=1 state=80
+[ud] disable ret=1 state=144
+[ud] input after all=[20]
+[ud] delete ret=1 read=[0]
+[ud2] horz handle=0x00040EE2 at 1633,623 size 18x22

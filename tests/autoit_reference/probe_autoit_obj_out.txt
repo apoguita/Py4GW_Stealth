@@ -1,0 +1,28 @@
+ObjCreate(Shell.Explorer.2): isobj=1 name='WebBrowser' error=0
+ObjCreate(No.Such.Class.Here): isobj=0 value=0 error=0
+ObjCreate(Scripting.Dictionary): isobj=1 name='Dictionary'
+GUICtrlCreateObj(ie, 10, 10, 200, 150) -> 3 (error=0)
+GUICtrlGetHandle -> 0
+  before show: class=no window parentclass=no window rect=no window visible=0 style=0x00000000 exstyle=0x00000000
+  children before show: no child windows
+  after show: class=no window parentclass=no window rect=no window visible=0 style=0x00000000 exstyle=0x00000000
+  children after show: no child windows
+  children of the GUI: 1 child windows
+   Shell Embedding rect=no rect visible=1 style=0x50010000
+  GUICtrlRead        = ''
+  GUICtrlGetState    = 80
+  IsHWnd(handle)     = 0  IsHWnd(controlID) = 0
+  after GUICtrlSetPos(50, 60, 120, 80): class=no window parentclass=no window rect=no window visible=0 style=0x00000000 exstyle=0x00000000
+  children after SetPos: no child windows
+  after GUICtrlSetState(GUI_HIDE): class=no window parentclass=no window rect=no window visible=0 style=0x00000000 exstyle=0x00000000
+  after GUICtrlSetState(GUI_SHOW): class=no window parentclass=no window rect=no window visible=0 style=0x00000000 exstyle=0x00000000
+  GUICtrlGetState after showing = 80
+  GUICtrlSetData(obj, 'text') -> 1 (error=0)
+  GUICtrlSetStyle(obj, WS_BORDER) -> 1 (error=0)
+  after the window grew to 700x500: class=no window parentclass=no window rect=no window visible=0 style=0x00000000 exstyle=0x00000000
+  children after the resize: no child windows
+second window: first object with no size -> no window
+second window: object 60x40               -> no window
+second window: object with no size after  -> no window
+after GUICtrlDelete(first): handle still a window = 0 IsWindow(handle) = 0
+GUICtrlCreateObj(Scripting.Dictionary) -> 0 (error=1)

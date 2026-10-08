@@ -1,0 +1,17 @@
+=== Part 1: GUICtrlSetPos before a resize (dock = $GUI_DOCKAUTO) ===
+client at creation=398x275
+  kept  before resize -> 60,45,100,30
+  moved before resize -> 200,100,100,30
+client after =684x461
+  kept  after resize -> 103,75,171,50  (creation box would give 103,75,171,50)
+  moved after resize -> 343,167,171,50  (from 200,100 it would be 343,167,171,50; from 60,45 it would be 103,75,171,50)
+
+=== Part 2: GUIResizeMode set after the control was created ===
+  button created with GUIResizeMode=0, option set to AUTO before the resize:
+    -> 103,75,100,30  (AUTO would be 103,75,171,50; the Button default is 103,75,100,30)
+
+=== Part 3: a control created after the window was resized ===
+  window client now 684x461; control created then at 60,45 100x30
+  after resizing back to a 484x361 client -> 41,34,70,22
+  (from the 398x275 creation client the ratio would be 1.216 x, giving 60*ratio=72)
+  (from the 684x461 client the ratio would be 0.708 x, giving 60*ratio=42)

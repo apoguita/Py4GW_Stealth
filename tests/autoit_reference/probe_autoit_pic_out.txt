@@ -1,0 +1,10 @@
+bmp argument = C:\Users\Apo\AppData\Local\Temp\dsh-aBZ1Tx\py4gw_pic_probe_6x4.bmp (given as 6x4)
+bmp file = C:\Users\Apo\AppData\Local\Temp\dsh-aBZ1Tx\py4gw_pic_probe_6x4.bmp (6x4)
+bmp, no width/height       : 10,10,150,150
+bmp, width=0 height=0      : 10,100,6,4
+bmp, width=40 height=30    : 10,200,40,30
+bmp reads                  : 
+jpg file = C:\Program Files (x86)\..\Program Files (x86)\AutoIt3\Examples\GUI\mslogo.jpg
+jpg, no width/height       : 200,10,40,30
+jpg, width=0 height=0      : 200,100,255,40
+jpg reads                  : 

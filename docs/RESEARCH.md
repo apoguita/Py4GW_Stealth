@@ -441,7 +441,7 @@ and live verification remain unfinished.
 The current implementation is intentionally narrower than the long-term
 research question: it is a project-owned `Win32` boundary, a reusable
 read-only scanner consuming the copied offsets definitions, and a small
-NiceGUI window for exercising process discovery. The UI does not expand the
+window built with `py4gw/gui` for exercising process discovery. The UI does not expand the
 library's process or memory capabilities.
 
 The current source inventory for the native and Reforged context surfaces is
@@ -776,7 +776,7 @@ Status: verified from the current source, Pyright run, and focused tests.
 The current project surface is:
 
 ```text
-main.py                 NiceGUI native test window
+main.py                 Root window, built with py4gw/gui
 py4gw/                  project package
   win32/win32.py        Win32 process-discovery class
   memory/memory.py      Read-only process-memory transport
@@ -809,7 +809,7 @@ tests/test_party_context.py live PartyContext integration test
 tests/test_guild_context.py live GuildContext integration test
 tests/test_acc_agent_context.py live AccAgentContext integration test
 tests/test_context.py   live CharContext integration test
-tests/nicegui_probe.py  manual NiceGUI dependency check
+tests/autoit_reference/ AutoIt probe scripts and their readings (see docs/AUTOIT_GUI.md)
 ```
 
 The `Win32` class currently provides `list_processes`,
@@ -835,15 +835,15 @@ and verified. `AvailableCharacterArray`, `PartyContext`, `GuildContext`, and
 against one live client build. This does not establish compatibility with
 other builds.
 
-The root `main.py` window has a client-selection tab and read-only context
-tabs for a connected client. NiceGUI is a presentation
-dependency only; it does not own Windows API declarations, process handles,
+The root `main.py` window has a client-selection tab and a read-only context
+browser for a connected client. It is built with `py4gw.gui`, the AutoIt v3-compatible layer;
+that layer is presentation only and owns no Windows API declarations, process handles,
 memory operations, or Guild Wars-specific rules.
 
 The project enforces this code boundary with `pyrightconfig.json`: Pyright
 checks `main.py`, `py4gw/`, and `tests/`, while excluding the local research
 checkouts under `external/`. The selected Pyright/Pylance interpreter must be
-the same interpreter where NiceGUI and the editable project are installed.
+the same interpreter where the editable project is installed.
 
 ## Confirmed Research
 
@@ -956,7 +956,7 @@ Important distinction: an external process can ask Windows to start code in anot
 The first read-only runtime exists in the `py4gw` package. It lists Windows
 processes, finds `Gw.exe` candidates by executable filename, opens a selected
 process for query/VM-read access, and scans validated x86 module sections.
-The root NiceGUI window is only a test and presentation surface over process
+The root window is only a test and presentation surface over process
 discovery; it does not own the memory path, and its own client-list refresh does
 not modify any process. A selected connection installs the game-thread layer
 unless it is asked not to with `game_thread=False`.
@@ -1015,9 +1015,8 @@ record.
 ### Current design decision
 
 The current direction is: keep the generic process-scanning library in small
-project-owned pieces, progressing one public capability at a time. The
-NiceGUI window remains deliberately limited to testing and presenting
-capabilities that already exist in the library.
+project-owned pieces, progressing one public capability at a time. The root window remains
+deliberately limited to testing and presenting capabilities that already exist in the library.
 
 ### First concrete capability: Guild Wars process discovery
 
@@ -1035,7 +1034,7 @@ at minimum preserve:
 - executable path when Windows makes it available, with an explicit
   unavailable/error status when it does not.
 
-The console API and the NiceGUI table may render those records, but the
+The console API and the window's list view may render those records, but the
 records remain structured library data. No process is opened for modification
 and no process memory is scanned in this capability.
 
@@ -3450,11 +3449,11 @@ thread may be executing, not that this was what killed pid 16504.
 - `C:\Users\Apo\Py4GW_Stealth\external\MemLib\MemLib\SharedMemory.py`
 - `C:\Users\Apo\Py4GW_Stealth\external\MemLib\MemLib\Hook.py`
 - `C:\Users\Apo\Downloads\BUILDING_WITH_MEMLIB.md` (user-supplied technical reference; proposals/examples, not instruction authority)
-- <https://nicegui.io/documentation> (Python UI components and project model)
-- <https://nicegui.io/documentation/section_configuration_deployment> (native
-  mode and pywebview requirements)
-- <https://nicegui.io/documentation/tabs> (tab and panel usage)
-- <https://nicegui.io/documentation/table> (table rows and updates)
+- <https://nicegui.io/documentation> (Python UI components and project model) — used until
+  2026-10-11, when NiceGUI was removed; see [AUTOIT_GUI.md](AUTOIT_GUI.md)
+- <https://www.autoitscript.com/autoit3/docs/guiref/GUIRef.htm> (the AutoIt v3 GUI reference,
+  the specification `py4gw/gui` reproduces; the decompiled local copy in
+  `C:\Program Files (x86)\AutoIt3\AutoIt.chm` is what was read)
 
 ---
 
@@ -3710,3 +3709,616 @@ traffic (`bridge.py`, "a per-frame function would otherwise fill the event ring"
 
 
 
+
+---
+
+## 2026-10-11: the root window moved onto `py4gw/gui`, and NiceGUI left the project
+
+**Decision (owner-directed):** the root window is rebuilt with the AutoIt-compatible GUI layer,
+and NiceGUI is removed from the project — the dependency, its `native` extra, the pywebview
+path under it, and the manual probe script that checked it (`tests/nicegui_probe.py`).
+
+**What changed, in the record's terms.**
+
+- `pyproject.toml` declares **no runtime dependencies**. `main.py` imports `py4gw.gui` and
+  nothing third-party. The window is drawn by the standard library's `tkinter` through the
+  AutoIt statement set, so the .NET/WebView2 chain NiceGUI's native mode needed is gone too.
+- `main.py` keeps its two tabs and every reader, timing wrapper, row builder and status line it
+  had. What changed is the widget layer and the event model: the data tab now carries a context
+  **list** with one hidden control set per context — shown and hidden with
+  `GUICtrlSetState($GUI_SHOW)`/`($GUI_HIDE)` — instead of twenty-one sub-tabs, because a GUI
+  holds one AutoIt Tab control and the reference says a nested tab belongs in a child GUI; and
+  the window runs in OnEvent mode (`Opt("GUIOnEventMode", 1)`, idle loop `Sleep(50)`) rather
+  than polling `GUIGetMsg()`.
+- The readers were not rewritten. Their calls to the old table objects
+  (`.rows = …` / `.update()` / `.filter = …`) were rewritten mechanically onto the window's own
+  view objects (`.set_rows(…)` / `.refresh()` / `.set_filter(…)`), which the port's own test
+  suite and a headless drive of every control then exercised: 22 context views switch
+  exclusively, a context's own Refresh button runs that context's reader, the filter box narrows
+  its table, the client list refreshes through `Win32.find_guild_wars`, and `Connect selected`
+  reports "Select a client row first" with nothing selected.
+- `tests/nicegui_probe.py` is deleted: its subject was the NiceGUI/pywebview dependency, which
+  no longer exists. The GUI layer's own tests are `tests/test_gui_offline.py` (64 cases), and the
+  readings they assert are the AutoIt interpreter's, kept with their probes in
+  `tests/autoit_reference/`.
+
+**Not claimed:** the window was verified to build, show, and answer every control event without
+a client running (no `Gw.exe` was up), and its readers were exercised through the new views. No
+live client connection was made in this change, so the connected-context path is unchanged in
+code and still awaits a live run under its own tests.
+
+## 2026-10-11: `GUICtrlCreateObj` is ported, and no AutoIt GUI function is a named gap any more
+
+**What was added.** `GUICtrlCreateObj` was the last function of the GUI reference that raised for a
+missing mechanism: its parameter is "a variable pointing to a previously opened object", the port had
+no object to give it and nothing to host one in. Both halves exist now, and both are AutoIt's own
+names:
+
+- `py4gw/gui/objects.py` is the object variable: `ObjCreate` (a class name or a CLSID string, over
+  `CoCreateInstance`), `IsObj`, `ObjName`, and the `ComObject` those functions return. Its members
+  are resolved against the object's own type information -- a property with no arguments is read as
+  its value, a method (or a property with arguments) is called through `IDispatch::Invoke` -- so an
+  AutoIt script's `$oIE.Navigate("...")` is `browser.Navigate("...")` and `$oIE.LocationURL` is
+  `browser.LocationURL`.
+- `py4gw/gui/native.py` gained the COM boundary (GUIDs, `VARIANT`/`DISPPARAMS`, `IDispatch`,
+  `ITypeInfo`, `ITypeLib`, `IPersist`) and the host: `AtlAxWinInit` + `AtlAxAttachControl` attach the
+  caller's own `IUnknown` to the tkinter frame's real HWND, and `AtlAxGetControl` reads it back.
+
+**The identity is what the tests assert.** The control the host window holds is the same interface
+pointer `ObjCreate` returned, pointer for pointer, so a call on the caller's variable is a call on
+the embedded control. Verified in the port's own process: navigating the caller's object to a URL
+loaded that control's own child windows (`Shell DocObject View`, `Internet Explorer_Server`) inside
+the frame, and `browser.LocationURL` read the URL back.
+
+**Measured from the interpreter before any of it was written** (`tests/autoit_reference/`, probes
+`obj` through `obj4` and `zero_size`): the object control's window is a child of the GUI whose class
+is the *object's own* in-place window ("Shell Embedding" for `Shell.Explorer.2`, style `0x50010000`,
+exStyle `0x00010000`); it is created with the control and hidden until `GUISetState` shows the
+window; `GUICtrlGetHandle` on it is 0 (its page's own list); `GUICtrlRead` is `""`; `GUICtrlSetData`
+and `GUICtrlSetStyle` return 1 and change nothing; `GUICtrlGetState` is 80 shown and 96 hidden; its
+default size is **8x8** and that 8x8 passes to the next control as the "previously used" size; its
+default resizing is `$GUI_DOCKSIZE`; `GUICtrlDelete` takes the hosted object with it; `ObjName` is
+the object's **coclass** name ("WebBrowser", "Dictionary"), not its ProgID; and an object that merely
+has an `IDispatch` -- `Scripting.Dictionary` -- makes the function return 0 while `ObjCreate` itself
+succeeded, which the port matches by requiring `IOleObject` of the object before it hosts it.
+
+**Found on the way, and fixed:** an explicit `width=0`/`height=0` is 0x0 for every control in the
+interpreter, and the next control with no size inherits that 0x0 (`probe_autoit_zero_size_out.txt`).
+The port had been substituting the kind's default for any size of 0 or less, so a control explicitly
+made 0x0 came out at the kind's default size instead. The window's "size last used" now starts unset
+rather than at 0, which is what makes the two cases distinct.
+
+**Divergences, stated rather than hidden.** The port hosts through the platform's ActiveX host
+(`atl.dll`), where AutoIt implements its own OLE site; the window tree therefore has one extra level
+(the port's GUI holds the control's frame, the frame holds "Shell Embedding"), and a machine without
+that host is reported by `native.object_host_error()` by name instead of appearing to have a control.
+`ObjCreate`'s remote parameters (`servername`/`username`/`password`) use the documented DCOM
+mechanism and are **inferred, not measured** -- this machine has no DCOM peer. `ObjEvent` and
+`ObjGet` are not ported: neither is a GUI function and neither is needed to create or embed an
+object. An object variable embedded twice leaves one host window in the interpreter, measured both
+ways round, so the port claims no rule for it.
+
+**Parity status.** Every function of the AutoIt GUI reference is backed. `tests/test_gui_offline.py`
+carries 126 cases (the whole offline suite is 1965), `pyright` is clean, and `docs/AUTOIT_GUI.md`
+carries the function-by-function table, the object-control readings above and the remaining
+divergences.
+
+## 2026-10-11: the root window was inert -- three defects, all in the layer under it
+
+The owner's report: pressing **Refresh** in `main.py` added rows instead of replacing them; the
+client list said a client was "in selection menus" while it was in game; no context displayed
+anything when it was clicked; "that window seems inert". Driven headlessly, the window reproduced
+all of it, and every cause turned out to be one layer down, in `py4gw/gui`:
+
+1. **`GUICtrlDelete` did not delete an item.** A ListViewItem is registered with no widget of its
+   own (the Treeview lives in the control's ``value``), so deleting it destroyed nothing and left
+   the row in the control. A table that clears itself by deleting its items and refilling them
+   therefore grew a duplicate row on every redraw -- the client list went 1, 2, 3, 4 rows across
+   three refreshes. Measured from the interpreter before fixing
+   (`probe_autoit_delete_item.au3`): deleting an item returns 1 and takes its row out of the
+   control (3 -> 2), the neighbours keep their text, the deleted item reads 0 afterwards, and
+   deleting it again returns 0.
+2. **A List's event was bound on the wrong window.** `GUICtrlCreateList` and `GUICtrlCreateEdit`
+   give tkinter a frame holding the list box or text box plus a scrollbar; `bind` went on the
+   frame, so `<<ListboxSelect>>` never fired and clicking a context in the list did *nothing at
+   all* -- the visible symptom the owner described as an inert window. The same mistake kept
+   `GUICtrlSetFont`, enable/disable, colours and cursor from reaching a List's or an Edit's own
+   widget. `probe_autoit_listview_event.au3` settled what the event must be: clicking a row of a
+   **List** calls the function registered on the List with `@GUI_CtrlId` = the List's ID, and
+   clicking a row of a **ListView** calls the function registered on the *ListView* -- the port had
+   been delivering the clicked item's identifier instead, so a handler registered on a ListView
+   never ran either.
+3. **A failed read was reported as a state.** The client list printed "in selection menus" both
+   when the client really was at the login screen and when the read had *failed*. The window now
+   reports "read failed: <the failure's first line>" (with "(unread)" in the character column) and
+   keeps "in selection menus" for a read that succeeded and found no character. A read the library
+   refuses before it starts is no longer attempted at all: see the entry below on the elevation
+   precondition.
+
+**Also fixed in the window itself:** choosing a context now reads it (`view.refresh()`) instead of
+only redrawing whatever was captured at connect time, and the "Filter fields or values" label beside
+each filter box is part of its context's shown/hidden set -- it had been created once per context at
+the same position, 22 stacked copies, all of them always visible.
+
+**Verification.** `tests/test_gui_offline.py` gained five cases (132 now): a List selection reporting
+the List's ID, a ListView selection reporting the ListView's ID, an Edit change event, `GUICtrlDelete`
+on ListView and TreeView items with the clear-and-refill sequence, and a List's and an Edit's font
+and enabled state reaching the inner widget. The window itself is driven offline by
+`tests/test_main_window_offline.py` (4 cases; see the entry below for the elevation one). A real
+pointer click was used to confirm the List path end to end in the port's own process (the handler
+fired with the List's control ID, and the read answered the clicked row). The whole offline suite is
+1977 tests and `pyright` is clean.
+
+**Not claimed:** nothing here was run against the live client from this shell -- opening even a
+read-only connection requires elevation, which this session's shell does not have -- so the
+connected path is unchanged in code and still awaits a run from the owner's elevated shell. The
+"in selection menus" text remains the reader's own answer when a read *succeeds*: it is derived from
+`CharContext.player_name_str` being empty, so if an elevated run is in game and the window still says
+that, the thing to look at is that field's read rather than the window's reporting.
+
+## 2026-10-11: the elevation precondition -- reported as removed, found intact, and now pinned
+
+The owner reported that the library no longer refuses to connect without an elevated shell and that
+the check had been deprecated without approval. **It had not been removed, and this round changed no
+part of it.** What the investigation found, each piece checkable:
+
+- the check is `ConnectedClient.__init__` (`py4gw/client.py:255`): it asks
+  `Win32.is_elevated()` -- the documented `TokenElevation` query on this process's own token, no
+  caching -- and raises a `RuntimeError` naming the pid, the four rights Windows denies an
+  unelevated controller and what to do about it, **before** the module is resolved, the reader
+  opened or the write layer built;
+- `py4gw.connect()` reaches it (it constructs `ConnectedClient`), and the only consumer of
+  `WriteAccess` -- the invasive-rights open -- is that same constructor, so there is no path
+  around it in library code. `object.__new__(ConnectedClient)`, which skips it, appears only in
+  tests and probes, each of which says so in its docstring;
+- reproduced in this session's unelevated shell: `Win32().is_elevated()` is `False`, the window's
+  Connect button set its label to *"Connection failed: pid 22024: this controller is not elevated,
+  and connecting requires it..."* and held no connection (`window._connection is None`);
+- `git log -S "is_elevated" -- py4gw/` and `git log -S "not elevated, and connecting" -- py4gw/`
+  return exactly one commit, `9bb2abc`, which introduced the assertion; no later commit touched it,
+  and `py4gw/client.py` is unmodified in the working tree (`git status --short py4gw/` lists only
+  the new `py4gw/gui/`).
+
+**What had changed is the reporting, and that is what made it look gone.** The client-list refresh
+opens a **read-only** connection per client row to read its character name, and the refusal was
+shown as "read failed: ... this controller is not elevated ..." in every row (before this session it
+was silently rendered as "in selection menus"). A window that prints the refusal in a table column
+reads like a window that connects and merely reports it. The window also *asked* for a connection
+the library was going to refuse, once per row.
+
+**Two changes came out of it, both about the window, not the library.**
+
+1. **The window asks the precondition itself.** `MainWindow._may_connect()` is
+   `Win32.is_elevated()`, and an unelevated run now does not attempt a connection at all: the client
+   list is still built (that reads the process list and needs no elevation) with
+   "(elevation required)" in the character column and "not connected: needs an elevated shell" in
+   the status column, the client-status line carries `ELEVATION_REFUSAL`, and Connect refuses with
+   the same sentence before it looks at a client. Reproduced unelevated: no `ConnectedClient` is
+   constructed, `_connection` stays `None`.
+2. **The library's refusal is pinned by tests, which it was not before.** This was the real gap:
+   every offline suite that needs a connection builds it with `object.__new__` *because* `__init__`
+   asserts elevation, and every live suite skips itself unelevated -- so **no test would have failed
+   if the check had been deleted**. `tests/test_client_startup_offline.py` gained
+   `ElevationRefusalTests`: one case asserts that an unelevated controller is refused with the pid
+   and the rights named while `get_main_module`, `open_process` and `ProcessMemoryReader` are never
+   reached, and the other asserts that the *same* connection proceeds past the check once the
+   controller is elevated (the very next step, resolving the module, is reached) -- which is what
+   makes the first case's "never reached" assertions mean something.
+
+`tests/test_main_window_offline.py` was rewritten to drive the window through a stand-in Windows
+layer (two clients, elevation as the test chooses), so it needs no client and no elevation and pins
+four cases: a refresh replaces the client list; an unelevated shell connects nothing (the list, the
+status line and Connect, with `ConnectedClient` recorded and asserted never called); a failed read is
+reported as a failure and never as "in selection menus"; and choosing a context shows it and reads
+it. Suite: 1977 offline tests, `pyright` clean on `py4gw/gui`, `main.py` and both test files.
+
+## 2026-10-11: Connect crashed on the TextParser -- an additive member, and the audit that finds its family
+
+The owner's report: pressing Connect raised, out of the GUI's event handler,
+
+```
+File "main.py", line 738, in _connect_selected
+    self._show_text_parser(text_parser_snapshot)
+File "py4gw\context\text_parser_context.py", line 177, in sub_struct
+    return self._read_struct(self.sub_struct_ptr, TextParserSubStructStruct)
+OSError: [Errno 299] ReadProcessMemory(address=0x4C, size=0x4) failed with Windows error 299
+```
+
+and asked whether this is a byproduct of the GUI port or a library regression. **It is neither a GUI
+byproduct nor anything this session changed: it is a library defect of the port's own "additive
+member" class, and the window's display phase was what let it escape.** Each part, with its evidence:
+
+- **The member is in neither source's surface.** `sub_struct` (and `cache`, `cache_ptr`,
+  `dec_start`, `dec_end`, `h0000`, `h016c`, `h0184`, plus the `TextCacheStruct` and
+  `TextParserSubStructStruct` records that held their results) exists in Reforged's
+  `native_src/context/TextContext.py` **and** its `.pyi` -- the declaration surface -- in no form;
+  the spellings come from **Native's header** (`GW/context/text_parser.h`: `TextCache* cache`,
+  `SubStruct1* sub_struct`), and Native binds no text-parser struct at all (no `TextParserStruct`
+  anywhere in Native's C++ or bindings). For a class ported from Reforged's Python, Reforged's
+  Python is the shape authority and Native's header is only the layout authority -- the rule the
+  party rounds established (round 101) and applied twenty times (round 107).
+- **The value at that offset is not a pointer on this client.** `0x4C` is what
+  `TextParser + 0x180` holds here. Reforged's own record *declares* the field
+  (`sub_struct_ptr`, the raw word the port now carries) and never follows it; the port followed it
+  on a property read. In-process, Reforged would have read its own memory and answered garbage; an
+  external read raises, which is how the defect became visible at all.
+- **Not from this session.** `git log -- py4gw/context/text_parser_context.py` stops at `aa3927d`;
+  the same `snapshot.sub_struct` call is in the previous (NiceGUI) `main.py` at HEAD
+  (`git show HEAD:main.py`), and the window rewrite did not add it.
+- **The window's part is real too, and is this session's to fix.** `_connect_selected` wrapped its
+  *reads* in `try/except (OSError, RuntimeError, ValueError)` and then displayed 21 contexts with
+  no guard at all -- and a snapshot is a *lazy* view, so the pointer-following properties are read
+  during the display, not during the read. An exception raised inside a GUI event handler is Tk's to
+  print ("Exception in Tkinter callback"), and the window carries on with a half-filled tab.
+
+**Fixed.**
+
+1. `py4gw/context/text_parser_context.py` carries the source's surface and nothing else: the 17
+   declared fields, `TextFileSlotStruct` / `LanguageSlotStruct`, `file_hash`, `get_file_slot` and
+   the `TextParser` facade. The additive members and their two records are gone, the layout asserts
+   for them are gone, and `_read_struct` (which existed only for them) is gone. The `.pyi`, the
+   package re-exports in `py4gw/__init__.py` and `py4gw/context/__init__.py`, and
+   `tests/probe_dat_chain.py` (which read `parser.cache_ptr`) were updated with it.
+2. `tests/test_text_parser_context_offline.py` now asserts those members are **absent**
+   (`test_only_the_source_s_surface_is_declared`), the way the party rounds' tests assert their
+   removed aliases are absent -- so a re-added convenience fails the suite.
+3. `main.py` displays each context on its own: the 21 display steps in `_connect_selected` run one
+   per context inside the guard, the failures are named in the connected label (the rest still
+   show), and the connection is kept -- a display failure is a property of one context's read, not
+   of the connection. The context list and every Refresh button run their reader through the same
+   guard (`_run_context_reader`), because the buttons had the identical exposure.
+4. **The reproduced crash is now a test.**
+   `tests/test_main_window_offline.py::test_the_text_parser_row_reads_offset_0x180_as_the_word_it_is`
+   builds a `TextParserStruct` with `0x4C` at `+0x180`, binds a reader that refuses every address,
+   displays it, and asserts the row reads `sub_struct_ptr = 76` with no exception and no `sub_struct`
+   or `cache` row. A second test drives the guard with a display that raises the interpreter's own
+   error and asserts the label names the context while the contexts after it still display.
+
+**A second window defect, found while pinning the first.** Every context writes its status into one
+label, and the aliases (`_cinematic_status`, `_text_parser_status`, ...) were made in `__init__`,
+before `_build_data_tab` replaced `_data_status` with the real label -- so they pointed at a
+placeholder whose control ID is 0 and **every** "refreshed", "not available" and "read failed" line
+for **every** context was silently dropped. `_build_data_tab` now re-points them at the real label,
+and `test_every_context_status_reaches_the_one_visible_label` pins it.
+
+**The audit that finds this family, extended and run.** `tools/context_struct_audit.py` existed for
+exactly this question -- it compares a port record's fields and members against Reforged's Python
+declaration -- but it covered only PartyContext and WorldContext. It now covers **every** context
+module with a Reforged counterpart (16 pairs), reports a class only the port declares as a record in
+neither source, and adjudicates this port's external-reader glue once by category
+(`bind_reader`/`resolve_address`/`read`/`initialize`/`cached_*`/`address`-style accessors) with the
+reason the party rounds gave it. Run today:
+
+- the **TextParser classes are clean**: `TextParserStruct` 17 fields and its one member match, with
+  `bind_reader` adjudicated as glue; `TextFileSlotStruct` and `LanguageSlotStruct` match;
+- the rest of the context layer reports **41 classes that differ and 130 additions outside the
+  glue category**, plus 32 records only the port declares and 10 Reforged classes the port is
+  missing -- which is the work list, not a verdict. Two entries there are worth naming now because
+  they touch what the window shows: `CharContextStruct.is_logged_in` / `CharContext.read_player_name`
+  are additions (the window's "in selection menus" text is derived from `is_logged_in`, i.e. from an
+  invented member rather than from the source's own surface), and the `...Struct` suffix family
+  (`AgentInfo`/`AgentSummaryInfo`/`AgentMovement`/`CapeDesign`/`GHKey`/`Guild`/`GuildPlayer`/
+  `TownAlliance`/...) is the same naming inversion the party rounds removed from three records.
+
+**Verification.** Offline suite 1980 tests, `pyright` clean across `py4gw`, `main.py` and the touched
+test files, and the audit's own output quoted above. **Not claimed:** nothing here was run against
+the live client -- this shell cannot connect -- so the connected path is exercised by the stand-in
+window tests, and the owner's elevated run is what confirms it end to end.
+
+## 2026-10-11: the root window becomes the library's test surface
+
+**What was asked.** The owner: `main` is to be "a complete human readable, human driven test
+surface", outputting all data, with a button to test all methods, organized -- and no UAC prompt is
+to be assumed until the whole thing is finished and ready to be looked at. So every piece of this
+had to be built and verified **offline**, with no client and no elevation, and left ready.
+
+**The map, counted.** `test_surface.py` builds it from the package on disk -- 139 modules discovered,
+not a hand-written list (the first draft *was* a list, and it had already gone stale: `Agent` is not
+in `py4gw.__all__`, so the class was missing entirely). The map is ~20,000 entries: 179 expanded
+records (686 names) with 1,765 fields carrying offset and type, 5,734 enum members, 1,806 methods,
+743 properties, 7,118 module-level constants, 106 entries that reach for the selected client, 246
+classified as writes, 2,031 that nothing settles. Built in ~0.8 s.
+
+**Every member is classified from its own source, and the reason is kept.** The port's write
+vocabulary (`client.call_function`, `.bridge.write_data`, `.submit`, `WriteAccess`,
+`write_process_memory`, `send_ui_message`, the patcher) makes a member a write whatever it is named;
+the reader accessor (`require_client`, a context read) makes it a read; a docstring that says it
+writes settles it; anything else is `unknown` and is reported as such with that sentence as its
+reason. `Player.Move` reads "its own source calls call_function(", `Map.GetMapID` "its own source
+calls GWContext and no write marker" -- and the window shows that sentence beside the entry.
+
+**Running is safe by construction, and the safety is tested.** Writes run only with the tick box;
+unclassified members never run while a client is connected (they cannot be told apart from writes)
+and do run when nothing is connected, where the library refuses every client-facing call itself. The
+whole surface, run that way: **16,635 answered, 0 unexpected failures, 0.3 s**. What a member prints
+is captured with its result (`Utils.GenerateSkillbarTemplate` is the one that does) instead of
+falling on the console behind the window.
+
+**The window.** `main.py` now has four tabs: **Guild Wars clients** (unchanged), **Library surface**
+(the map: a module list with counts, an entry table of kind/access/name/owner/detail/doc, a detail
+pane carrying the classification *reason*, a search across the whole map, an argument box pre-filled
+with the parameter names, and **Run this entry**), **Client data** (the 22 context views plus
+**Refresh all**), and **Tests** (Test all methods, Test reads (connected), the include-writes tick
+box, Re-run failures, Show failures, Save report, Clear output, and one output pane that receives
+every result). Save report writes the whole surface -- every entry, why it is classified as it is,
+its result, and everything unanswered grouped by reason -- to
+`runtime/test_surface_report.txt`. `docs/TEST_SURFACE.md` is the record of that design.
+
+**Verified offline, end to end.** Driven headlessly with no client: the window builds in 0.9 s, lists
+130 module groups, shows a module's entries, finds `Player.GetPlayerStatusNameFromValue` by search,
+runs it with `0` and gets `'offline'`, runs the whole surface in 0.3 s (16,635 answers, 246 writes
+skipped, 1,197 needing arguments, **0 failures**), draws all 20,013 rows, writes the report, and
+refreshes all 22 contexts. `tests/test_main_window_offline.py` pins each of those (12 cases), and
+`tests/test_test_surface_offline.py` pins the map's completeness and the safety rules (14 cases).
+Whole offline suite: **1,999 tests OK**, `pyright` clean.
+
+**Still owed to the owner:** the live run -- connect, Test reads (connected), and the writes only if
+they decide to. Nothing in this round needed a UAC prompt, a client, or a decision from them.
+
+## 2026-10-11: the test surface becomes readable at 20,000 rows
+
+The engine and the window were done in the round above; this one is about a person actually reading
+the result of a run that produces 20,000 of them, and about checking one thing at a time.
+
+- **Subset testing.** The surface tab gained **Test this class** and **Test this group**: they run the
+  selected entry's class, or the chosen module, through the same flags as the big button and merge the
+  results into the running record. Checked headlessly: `Player` runs 71 entries, `py4gw.agent` 176,
+  and nothing outside the selection is touched.
+- **The run is now filterable.** The Tests tab's status list carries *every status with its count*
+  (`all (20012)`, `answered (16635)`, `not answered (3377)`, `skipped (classified as a write) (246)`,
+  ...) -- choosing one shows exactly those results, and the box beside it narrows by text inside that
+  status (the writes, filtered to `Map`: 25 rows). The counts are the run's own, so the list is also
+  how the run is read.
+- **The pane draws a capped number of rows, and says so.** Drawing 20,000 rows costs ~8 s *per
+  redraw*, which made every filter change unusable; the pane now draws at most 5,000 and notes
+  "showing 5000 of 20012 rows; Save report has them all", while the status list still counts all of
+  them. The whole run's cost fell from 8.1 s to 0.76 s and a filter change to 0.5 s. Nothing is
+  missing from the map or from the reports -- only from what one table draws at once.
+- **Two reports instead of one.** **Save reports** writes `runtime/test_surface_report.txt` (~55,000
+  lines, every entry with its classification reason and result) **and**
+  `runtime/test_surface_summary.txt` (counts, a module-by-module answered table, and every entry that
+  did not answer with its reason). Tested: the summary is less than half the full report's size, names
+  every status and every unanswered entry, and stays readable.
+- **Rebuild map**, for a library that changed while the window is open.
+- **A runbook.** `docs/TEST_SURFACE.md` now opens with what to press, in order, when someone sits down
+  -- including that ticking **include writes** is the only switch that lets a member act on the
+  client, and that it is off by default.
+
+Verified: `tests/test_main_window_offline.py` 14 cases and `tests/test_test_surface_offline.py` 16
+cases, whole offline suite **2,001 tests OK**, `pyright` clean.
+
+**The tests did not miss this member -- they asserted it was correct, and that is the finding.** The
+owner's question was why an obsessively tested library let this through, and the answer is specific:
+
+- **115 test files and 2297 test cases exist**, 1980 of them collected offline in ~12 s, plus the
+  live suites and ~100 probes. Coverage was not the problem.
+- `tests/test_text_parser_context_offline.py` had
+  `test_source_nested_properties_are_declared`, which asserted
+  `hasattr(TextParserStruct, name)` **for every added member by name** and then
+  `assertIsNone(parser.cache)` / `assertIsNone(parser.sub_struct)`; and
+  `test_source_cache_pointer_property_uses_inline_header`, which asserted
+  `parser.cache_ptr == 0x00200000` after writing that value into `_cache_header`. The live
+  `tests/test_text_parser_context.py` asserted `sizeof(TextCacheStruct) == 0x04` and
+  `sizeof(TextParserSubStructStruct) == 0x04` under the name
+  `test_layout_matches_native_text_parser` -- i.e. it pinned **Native's** records as the reference.
+  So the suite blessed the additions: a test that asserts the wrong contract is worse than no test,
+  because it makes the defect load-bearing.
+- The one place the dereference *was* exercised, it could not fire: `_read_struct` begins
+  `if not address: return None`, and every test built a **zeroed** record (`TextParserStruct()`), so
+  `sub_struct` returned `None` without reading. Reproducing the crash needs a non-null,
+  non-pointer value -- 0x4C -- which no test ever placed there. The live test had a real client in
+  hand and read the root record, but never followed that field.
+- **The window, the only consumer that dereferences, had no test at all.** `main.py` was not
+  imported by any test before this session, so the display path -- where a lazy property actually
+  reads -- ran only when a human pressed Connect. `tests/test_gui_offline.py` tested the toolkit,
+  not the application.
+- And the fact was **written down** without being acted on: `docs/PARITY_CERTIFICATION_CHECKLIST.md`
+  recorded "its first four bytes are exposed through an additive `cache_ptr` property" and listed
+  "Transport behavior: `get_file_slot`, `cache`, `sub_struct`, and `file_hash`". "Additive" is this
+  project's word for a defect; nothing consumed it.
+
+**What makes each of those five not recur.**
+
+1. The text-parser tests now assert the additions are **absent** (`test_only_the_source_s_surface_is_declared`),
+   so a re-added convenience fails; the live test asserts the **source's** layout and follows the
+   **source's own** helper (`get_file_slot`, bounded, with its guards) against a real client, and
+   reads `sub_struct_ptr` as the word it is.
+2. The crash is a test with the exact value: 0x4C at `+0x180` and a reader that refuses every
+   address (`tests/test_main_window_offline.py`). A zeroed record can no longer be the only case.
+3. The window has 8 tests of its own, including the display guard and the dead status-label defect.
+4. `tools/context_struct_audit.py` now covers all 16 context pairs, separates this port's
+   external-reader glue from everything else by category, and reports a record only the port
+   declares; the remaining 130 unadjudicated additions are its output, not a sentence in a
+   checklist.
+5. **`tests/test_import_surface_offline.py` (new)** resolves all **1738** names that the tests,
+   tools, examples and root import from `py4gw` and fails naming any that no longer exists -- which
+   is how the *live* text-parser test's stale import of the two removed records was found, since the
+   offline discovery never collects that file. It found 18 candidates on its first run; all 18 were
+   submodules the sweep had to resolve the second way, and it is 0 now.
+
+Offline suite: **1981 tests OK**.
+
+## 2026-10-12: the live data is tested by the window itself
+
+**What was asked, in the owner's words.** *"I absolutely don't need an offline test, I need to test
+live data, that's what this library is for ... stop with the offline made up tests and start working
+on testing the live data"*, and then: *"instrument `main.py` with interfaces that you can access and
+use the same test surface, I do not want separate files, if we test visually we can also test
+automatically."* Offline tests are not the goal; reading a running client and asking whether what
+came back is **correct** is. And there is one surface -- the window -- which a person clicks and a
+caller calls.
+
+**The offline checks are not the point; a returning call is not a reading.** The battery's live
+sections ask questions with answers that can be wrong: a non-zero map id, a region the enum knows,
+`min < max` on both axes, the player present in the agent array, `GetPartySize()` equal to the party
+context's own players + heroes + henchmen, `hp <= max_hp`, finite positions, `entries_per_file ==
+1024`, `language_slots == 11`, and -- the strongest of them -- **the same fact read two ways**
+agreeing: char context vs `Map.GetMapID`, context vs `Player.GetName`, the world record vs
+`Player.GetAgentID`, `Player.GetXY` vs the world record within a unit, the party context vs
+`Party.GetPartySize`. A wrong offset, a wrong pointer hop or a stale record shows up as two plausible
+readings that disagree; a "did the call raise" test cannot see any of that. Sections that could not
+read a context say so and skip their own questions rather than reporting zeroes.
+
+**Read-only by construction, not by intention.** While a live section runs, every member
+`test_surface` classifies as a write -- 246 of them -- is replaced by a recorder that fails the run if
+it is called (on its class, or on its module for module-level writes such as `py4gw.connect`), and the
+originals are put back in a `finally`. `live safety` then reports how many were blocked and what was
+called. The guard itself is tested without a client: `tests/test_self_test_offline.py` drives it
+directly, so "the battery cannot write" is a measurement rather than a promise.
+
+**One surface, two ways in.** Every button is now a one-line caller of a method that returns what it
+saw -- `connect(pid)`, `run_self_test(...)`, `read_live_data(...)`, `dump_live_data(...)` -- and the
+same methods are reachable with no window at all:
+
+```
+python main.py --self-test                      # the checks that need no client
+python main.py --self-test --client             # and the live sections (elevated shell + a client)
+python main.py --data                           # every live value -> runtime/live_data_report.txt (+ .json)
+python main.py --self-test --client --elevate   # relaunch elevated: one UAC prompt, approved by the user
+```
+
+Exit codes are the run's own result: `0` pass, `1` a check failed, `2` a client was needed and was
+refused (unelevated, or the UAC prompt declined), `3` none is running. `--elevate` starts a **second,
+elevated process** and prints where its report lands; a process cannot raise its own token, so the
+shell that asked still holds no rights over the client, and the prompt is the user's to approve --
+which is why it is a flag and never something the window does by itself.
+
+**A sixth tab: Live data.** Every field and property of every context, one row per value
+(`context | kind | name | value`), filterable, with `UNREADABLE` rows for the fields that could not be
+read -- an unreadable field is a reading too. The rows come from the same run the Self-test tab
+performs, so the screen, the report file, and a caller's return value are one set of readings and
+never three. **Write report** writes `runtime/live_data_report.txt` and the same values as JSON.
+
+**There is no separate live-verifier file.** An earlier `tests/live_verification.py` and
+`verify_live.cmd` were deleted on the owner's instruction: they were a second place for live checks to
+live, which is exactly what was asked against. The live checks are in `self_test.py`, run by the
+window's button and by the command line, and their values are shown in the Live data tab and written
+by the reports.
+
+**Verified without a client -- and the live run is the owner's.** 2,024 offline tests pass (`pyright`
+clean): the six tabs, the battery's 32 checks with every client and live check skipped as *"no client
+connected"*, the write guard blocking and restoring, the Live data tab and its two report files, the
+command line running named areas headlessly and refusing `--data` from an unelevated shell with exit
+code 2. Nothing in this round needed a client, elevation, or a decision from the owner; the live
+sections themselves run when they press the button and approve the prompt.
+
+**One defect found while wiring the tests, and fixed:** the window test classes destroyed the shared
+Tk interpreter in `tearDownClass` and left the layer holding a destroyed root, so a later class in the
+same process (`tests/test_self_test_offline.py`) failed to build its window with
+`TclError: can't invoke "toplevel" command: application has been destroyed`. Each of those classes now
+forgets the root after destroying it, so the next class gets a fresh interpreter. The whole offline
+suite is what found it -- which is the one thing the offline half is still good for.
+
+## 2026-10-12 (later): the first live run of the battery -- what it read and what it caught
+
+The owner ran it elevated against the running client (character *Fezzik The Untamed*, map 642, level
+20) and handed back both reports: **PASS 43, FAIL 7, SKIP 0**, with `live safety` reading *"246 write
+members were blocked and none was called"* and `live data dump` reading *"21 contexts, 604 values, 0
+unreadable"*. The readings themselves are the record: char context `current_map_id` 642 with
+`observe_map_id` 642, `player_name_str` "Fezzik The Untamed", a four-word uuid, `is_logged_in` True;
+map boundaries `[0, -15360, -33792, 15360, 33792]`; 913 map agents with the player present; party id
+34 with one player record; world experience 12,511,518, level 20, morale 100, 39 player records; text
+parser 1,024 entries per file. Every one of those is the client's own value, read externally.
+
+**Six of the seven failures were the checks' fault, and each one is a specific mistake worth keeping:**
+the checks were written against member names that do not exist, which is what "a returning call is not
+a reading" looks like from the other side -- a check can be wrong too, and the live run is what says so.
+
+| What failed | What the client actually holds | The mistake |
+| --- | --- | --- |
+| `pure members/refusal without a client`, saw `642` | `Map.GetMapID()` = 642 | the check asserted `== 0`: it assumed no client while the client was connected. Now it states both outcomes: a map id when a client is published, the library's refusal when one is not |
+| `live party/GetPartyLeaderID` and `/GetOwnPartyNumber`, `AttributeError: 'function' object has no attribute 'GetAgentIDByLoginNumber'` | the members work: they call `Party.Players.GetAgentIDByLoginNumber` (`party.py:834`) | **the battery's write guard replaced `Party.Players` itself.** The map classifies that nested class as a *write* -- "its name starts with a write prefix (Play)" -- so the guard swapped a namespace for a recorder and broke everything that reads through it. The guard now blocks only members that are **calls** (210 of the 246) and names the 36 that are not (22 frame-id strings such as `FrameId.PlayButton`, 14 namespace classes) |
+| `live world/the first skillbar's skills`, saw `()` | `skillbars[0].skills` is an array of eight `SkillbarSkillStruct`, each with `skill_id`; the skillbar belongs to agent 53, the player | the check read a `skill_ids` member that no record declares. It now reads `skill_id` per slot *and* checks the skillbar's `agent_id` is the player's |
+| `live camera/position`, `TypeError: 'Vec3fStruct' object is not iterable` | `position`, `look_at_target`, `camera_pos_to_go` are `Vec3fStruct` records (x, y, z); `yaw` 2.14764, `pitch` 0.419317, `field_of_view` 1.74533 -- all **radians** | the check iterated a record and called the angles degrees. It now reads x/y/z and states radians, and adds the look-at point |
+| `live instance`, `None x None` and `width None` | `current_map_info` is populated (region 19, min party 1, max party 8, `name_id` 62114); `terrain_info1/2` carry `start_x/start_y/end_x/end_y` (0..321, 0..705) | the check asked a map record for `width`/`height` and its own formatter printed `None` for members that do not exist, which read like an empty reading. It now checks the map record's party sizes and region, and `end > start` per axis |
+| `live items/bags`, saw `<bound method ItemContextStruct.bags of ...>` | `bags(limit=64)` is a **method** (`item_context.py:1532`) | the check read it as a property. It now calls it |
+| `live agreement`, two failures | `PartyContextStruct` publishes `player_party` (`players`/`heroes`/`henchmen` live on **that** record); and `PlayerPartyMember` has **no** `agent_id` (`login_number`, `called_target_id`, `state`) | the check read `party.players` and a party member's `agent_id`. It now counts the record's own three arrays against `Party.GetPartySize()`, and resolves each member's agent id the way the source does -- through `Party.Players.GetAgentIDByLoginNumber(login_number)` |
+
+**One check was invented and is now honest about it.** `live agreement` claimed to compare
+`Player.GetXY()` with "the world record's position". `PlayerControlledCharacterStruct` has no position
+member at all, and `Player.GetXY` reads the same agent record `Agent.GetXY` reads -- so a
+"second path" there would have compared one read with itself. The check now verifies the player's XY is
+inside `Map.GetMapBoundaries()`, which the client publishes separately, and the docstring says why.
+
+**The map's own accuracy, recorded rather than papered over.** 36 of the 246 "writes" are not actions:
+22 frame-id strings (`FrameId.PlayButton`) and 14 nested namespace classes (`Party.Players`), each
+classified from a *name prefix* ("Play"). `_kind_of` already has the right words for them, but the
+member sweep records a nested class as `kind="method"` and the prefix rule then reads its name as an
+action. Fixing that changes the map's own counts (246 writes / 2,031 unclassified) and the offline
+tests that pin them, so it is left as a finding with its evidence rather than folded into this round;
+the battery no longer acts on it either way, and `live safety` names the 36 in its own line.
+
+**Verified before handing it back:** the modules parse, and the guard was driven directly -- 210 callable
+writes blocked, 36 non-actions named, zero calls, `Party.Players` still a class with
+`GetAgentIDByLoginNumber` reachable. The re-run of the live battery is the owner's.
+
+## 2026-10-12 (third run): an empty live-data file that was not a regression
+
+The owner re-ran and reported no live data where the first run had it. The reports answer it without
+speculation: **the run had no connection**. `runtime/self_test_report.txt` reads `PASS 31, FAIL 0,
+SKIP 19` with all nineteen client and live rows `saw: no client connected`, the six `window` checks
+passed (so a window was built), and `runtime/live_data_report.txt` reads `connected: False`,
+`client: None`, then *"no context was read: connect a client and run the client checks"* and *"write
+members blocked while reading: 0"*. The first run, by contrast, carried `client=<py4gw.client.
+ConnectedClient object at 0x0910F500>`, `is_elevated=True` and `1 client(s)`. Nothing in the dump path
+changed between the two runs: the client checks are skipped by design when no client is connected, and
+the dump then has nothing to keep. **The defect was in how the result read, not in what it did** -- a
+clean-looking `PASS 31, FAIL 0, SKIP 19` with an empty data file is a confusing way to say "I read
+nothing".
+
+**So the summary now says it.** `summarise()` counts the skips whose reason is `no client connected`
+and names them and the fix: *"no client connected: 19 client and live checks were skipped, so no live
+data was read -- connect first (Clients tab: Refresh, select the row, Connect selected)"*. That line
+reaches the window's status line, the self-test report and (as `connected: False` plus the sentence
+above) the live-data report. What the battery must never do is the opposite: report a *pass* for a
+section it never ran.
+
+**Fourth run: PASS 50, FAIL 0, SKIP 0 -- the battery is green against a live client.** With the client
+connected (`client: connected (<ConnectedClient object at 0x0979A500>)`, `is_elevated=True`), all 50
+checks and all 14 live sections passed: 22/22 context readers, map 10/10, player 8/8, agents 15/15,
+party 9/9, world 9/9, camera 6/6, text parser 3/3, instance 3/3, items 3/3, agreement 5/5, the dump
+(21 contexts, 604 values, 0 unreadable) and safety (210 callable writes blocked, none called, 36
+non-actions named). `client/surface reads`: 16,626 answered, 103 refused, **0 failed**. The two
+failures of the previous run were the same mistake once more -- **member names this port does not
+declare** -- and both are fixed:
+
+- `Party.Players` is a **nested class on `Party`**, not a name in the `py4gw.party` module
+  (`module 'py4gw.party' has no attribute 'Players'`), and it is the class whose
+  `GetAgentIDByLoginNumber` the source itself uses (`party.py:834`).
+- a bag's `bag_id` is a **method** and its `items` is the **`GWArray` header**, not a list of items
+  (`TypeError: int() argument ... not 'method'`, `'GWArray' object is not iterable`); `read_items()`
+  is the member that materializes the records.
+
+The pattern is worth stating plainly, because it is now three rounds old: **every failure in this
+battery has been a check, never the port.** A check written from a guess about a member's name is a
+test that fails on healthy data, and the only thing that caught each one was running it against the
+client.
+
+**One value is reported rather than judged -- the character's progress bar.** Live, with the map ready
+(map 499, `is_explorable` 1): `progress_bar_ptr` 29324020 and the record read through it holds
+`pips` = **29324020** (the pointer itself) with `progress` = **1.1478e-41**, `color`/`background`/`unk`
+otherwise unremarkable. A self-referential first word is what an **empty intrusive list node** looks
+like, i.e. a UI element the client never initialized -- and Reforged reads this field exactly the way
+this port does (`Py4GW_Reforged/Py4GWCoreLib/native_src/context/CharContext.py:124`:
+`progress_bar_ptr` at `+0x035C`, `:178-181`: the property returns `progress_bar_ptr.contents`), with
+the port's `ProgressBar` record field-for-field identical to the source's. So the two readings are
+(a) the client does not maintain this record outside a map load, or (b) the pointer at `+0x035C` means
+something else on this build. **This is `inferred`, not verified**, and it is the owner's call: the
+check now *reports* `pips` and `progress` in its own line (with a note when `progress` is outside
+0..1) instead of accepting any shape, and a map-load-time reading would settle it.
+
+**The dump stopped printing pointers where data was expected.** Every fixed-width array in the client's
+records (`chat_buffer.message_pointers`, the `c_ulong_Array_N` fields) came out as
+`<c_ulong_Array_4 object at 0x...>` because `_plain` walked `_fields_` but not ctypes `Array`, which has
+none. It walks arrays now, so a live dump shows `[1, 2, 3]` where it used to show an address.
+
+**The owner found the actual source of the confusion, and it was a word.** The client list's `status`
+column read **`connected`** -- meaning *that client is running a logged-in character* -- and the
+controller's own state is a different line (`Connected to PID ...` under the table). So the window said
+"connected" about a client this controller was not attached to, and the run that followed was trusted
+because of it. One word, two meanings, and the wrong one was believed. Fixed: that column now reads
+`online` (and `in selection menus`), an unelevated read is `not read: needs an elevated shell`, the
+label under the table is *"No client connected -- this controller is not attached to a client"*, and the
+tab's own text spells out which is which. The same reasoning applies to the identically shaped defect
+found here before: *"in selection menus"* was once printed for a read that had **failed**. A table cell
+must say what it measured, and the word "connected" belongs to the controller's connection alone.

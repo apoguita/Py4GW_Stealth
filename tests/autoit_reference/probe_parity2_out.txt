@@ -1,0 +1,18 @@
+[date] read=[Friday, January 2, 2026] handle=0x01710B4C size=160x22
+[date] SetData ret=1 read=[Thursday, March 4, 2027]
+[date] getstate=80
+[date] after disable getstate=144
+[date] getstyle ret=1 read=[3/4/2027]
+[mc] read=[2026/01/02] handle=0x01650C04 size=216x156
+[mc] SetData ret=1 read=[2027/03/04]
+[mc] getstate=80
+[icon] read=[] handle=0x01CC0C70 size=32x32
+[icon] getstate=80
+[avi] read=[] handle=0x01FA0A4C size=120x120
+[avi] getstate=80
+[avi] start ret=0
+[avi] stop ret=1
+[avi] close ret=1
+[defaults] Date=120x120
+[defaults] MonthCal=116x116
+[defaults] Icon=32x32

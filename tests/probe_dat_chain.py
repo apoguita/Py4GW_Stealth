@@ -58,7 +58,12 @@ def main() -> int:
         report["text_parser"] = {
             "language_id": int(parser.language_id),
             "entries_per_file": int(parser.entries_per_file),
-            "cache_ptr": hex(parser.cache_ptr),
+            # The record's own first word of the inline cache header, read as the source declares it:
+            # the module carries no ``cache_ptr`` property (that spelling is Native's header's, and
+            # the member was an addition -- see py4gw/context/text_parser_context.py).
+            "cache_header_first_word": hex(
+                int.from_bytes(bytes(parser._cache_header[:4]), "little")
+            ),
         }
 
         languages = []

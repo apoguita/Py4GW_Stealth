@@ -246,5 +246,46 @@ class CallTargetSectionTests(unittest.TestCase):
             client._descriptor_slot(("a name", 1), 0x462FD617, CallForm.U32)
 
 
+class ElevationRefusalTests(unittest.TestCase):
+    """The connection refuses an unelevated controller before it touches the client.
+
+    This is the library's own precondition, and it is why the suites above build their stand-ins
+    with ``object.__new__``: ``ConnectedClient.__init__`` asserts elevation **before** it resolves a
+    single address or opens a handle, so a refused connection leaves the client untouched. Nothing
+    asserted that until these two tests, which is exactly the gap that lets a check be dropped
+    without a suite going red.
+    """
+
+    PROCESS: dict[str, Any] = {"pid": 4242, "name": "Gw.exe", "path": r"F:\GW\GW1\Gw.exe"}
+
+    def test_an_unelevated_controller_is_refused_before_anything_is_resolved(self) -> None:
+        """The refusal names the pid, and the reader, the module and the process are never reached."""
+
+        win32 = mock.MagicMock()
+        win32.is_elevated.return_value = False
+        reader = mock.MagicMock()
+        with mock.patch.object(client_module, "ProcessMemoryReader", reader):
+            with self.assertRaises(RuntimeError) as caught:
+                ConnectedClient(dict(self.PROCESS), win32)
+            message = str(caught.exception)
+            self.assertIn("4242", message)
+            self.assertIn("not elevated", message)
+            self.assertIn("PROCESS_VM_WRITE", message)
+            reader.assert_not_called()
+        win32.get_main_module.assert_not_called()
+        win32.open_process.assert_not_called()
+
+    def test_the_same_connection_proceeds_once_the_controller_is_elevated(self) -> None:
+        """Elevated, the check is passed and the very next step runs: the module is resolved."""
+
+        win32 = mock.MagicMock()
+        win32.is_elevated.return_value = True
+        win32.get_main_module.side_effect = RuntimeError("stop after the elevation check")
+        with self.assertRaises(RuntimeError) as caught:
+            ConnectedClient(dict(self.PROCESS), win32)
+        self.assertIn("stop after the elevation check", str(caught.exception))
+        win32.get_main_module.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

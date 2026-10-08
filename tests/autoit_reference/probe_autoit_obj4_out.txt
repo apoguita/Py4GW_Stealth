@@ -1,0 +1,7 @@
+input after an object with no size      : 10,60,8x8
+object with width=0 height=0            : 10,120,0x0
+input after that object                 : 10,200,0x0
+children: [Shell Embedding 10,10,8x8] [Edit 10,60,8x8] [Shell Embedding 10,120,0x0] [Edit 10,200,0x0]
+input 70x33                             : 10,10,70x33
+object after that input, no size        : 120,10,8x8
+children of the second window: [Edit 10,10,70x33] [Shell Embedding 120,10,8x8]

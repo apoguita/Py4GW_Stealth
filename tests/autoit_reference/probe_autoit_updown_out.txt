@@ -1,0 +1,10 @@
+input box  = 10,10,104,22
+updown box = 112,10,18,22
+updown style = 0x50000106
+input reads before = 5
+after an activating click, input = 5
+upper arrow client y = 14, lower arrow client y = 28
+click 1 on the upper half -> 6
+click 2 on the lower half -> 5
+click 3 on the upper half -> 6
+click 4 on the lower half -> 5

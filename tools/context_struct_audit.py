@@ -30,31 +30,54 @@ from pathlib import Path
 REFORGED_ROOT = Path(r"C:\Users\Apo\Py4GW_Reforged\Py4GWCoreLib\native_src\context")
 PORT_ROOT = Path(__file__).resolve().parent.parent / "py4gw" / "context"
 
-#: ``(Reforged file, port file, [class names])`` — the records the party members read.
-PAIRS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    (
-        "PartyContext.py",
-        "party_context.py",
-        (
-            "PlayerPartyMember",
-            "HeroPartyMember",
-            "HenchmanPartyMember",
-            "PartyInfoStruct",
-            "PartySearchStruct",
-            "PartyContextStruct",
-        ),
-    ),
-    (
-        "WorldContext.py",
-        "world_context.py",
-        ("HeroFlagStruct", "HeroInfoStruct", "PetInfoStruct", "SkillbarStruct", "PlayerStruct"),
-    ),
+#: ``(Reforged file, port file)`` — every context module whose port has a Reforged counterpart.
+#: Every class the two files share is compared; a class only the port declares is reported too,
+#: because a record that exists in neither source is the same defect as a member that does.
+PAIRS: tuple[tuple[str, str], ...] = (
+    ("AccAgentContext.py", "acc_agent_context.py"),
+    ("AvailableCharacterContext.py", "available_character_context.py"),
+    ("CharContext.py", "char_context.py"),
+    ("CinematicContext.py", "cinematic_context.py"),
+    ("GameContext.py", "game_context.py"),
+    ("GameplayContext.py", "gameplay_context.py"),
+    ("GuildContext.py", "guild_context.py"),
+    ("InstanceInfoContext.py", "instance_info_context.py"),
+    ("MapContext.py", "map_context.py"),
+    ("MissionMapContext.py", "mission_map_context.py"),
+    ("PartyContext.py", "party_context.py"),
+    ("PreGameContext.py", "pre_game_context.py"),
+    ("ServerRegionContext.py", "server_region_context.py"),
+    ("TextContext.py", "text_parser_context.py"),
+    ("WorldContext.py", "world_context.py"),
+    ("WorldMapContext.py", "world_map_context.py"),
 )
 
 #: Members this port adds to a source record, and why each one is allowed to be here. Round 21
 #: adjudicated the audit's whole list; the only surviving category is the read glue, because this port
 #: reads the client from **outside** the process and Reforged's views read it from inside. The five
 #: records with it are exactly the ones whose properties follow a pointer in the target.
+#:
+#: The same category applies to the rest of the context layer, so it is named once here rather than
+#: repeated per class: a member in ``READ_GLUE`` binds this port's external reader to a record or
+#: reaches the context's address outside the client. **Anything else a class carries beyond its
+#: source is still reported**, which is what this audit is for -- `sub_struct` on `TextParserStruct`
+#: (2026-10-11) was exactly such a member, and it was found by reading the distance between an
+#: audit that called it "additive" and a run that crashed on it.
+READ_GLUE: frozenset[str] = frozenset(
+    {
+        "bind_reader",
+        "resolve_address",
+        "read",
+        "initialize",
+        "remote_address",
+        "cached_context_address",
+        "cached_pointer_address",
+        "cached_base_pointer_address",
+        "slot_address",
+        "pointer",
+    }
+)
+
 ADJUDICATED: dict[str, dict[str, str]] = {
     "PartyInfoStruct": {
         "bind_reader": "external reader glue: the array views read the target from outside Gw.exe",
@@ -119,12 +142,23 @@ def own_members(node: ast.ClassDef) -> list[str]:
 def main() -> None:
     problems = 0
     unadjudicated = 0
-    for reforged_name, port_name, wanted in PAIRS:
+    for reforged_name, port_name in PAIRS:
         theirs = classes(REFORGED_ROOT / reforged_name)
         ours = classes(PORT_ROOT / port_name)
-        for class_name in wanted:
-            if class_name not in theirs:
-                print(f"{class_name}: not declared in Reforged's {reforged_name}")
+        for class_name in sorted(set(theirs) | set(ours)):
+            if class_name.startswith("_") or class_name not in theirs:
+                # A class only the port declares: a record in neither source's surface.
+                if class_name.startswith("_") or class_name in theirs:
+                    continue
+                node = ours[class_name]
+                allowed = ADJUDICATED.get(class_name, {})
+                reason = allowed.get(class_name)
+                if reason:
+                    print(f"{class_name}: port-only record, adjudicated: {reason}")
+                    continue
+                print(f"{class_name}: PORT-ONLY record in {port_name} "
+                      f"(not declared in Reforged's {reforged_name})")
+                unadjudicated += 1
                 continue
             if class_name not in ours:
                 print(f"{class_name}: MISSING from the port's {port_name}")
@@ -142,7 +176,13 @@ def main() -> None:
             missing_members = [name for name in their_public if name not in our_public]
             extra_members = [name for name in our_public if name not in their_public]
 
-            allowed = ADJUDICATED.get(class_name, {})
+            allowed = dict(ADJUDICATED.get(class_name, {}))
+            for glue_name in READ_GLUE:
+                if glue_name in extra_members:
+                    allowed.setdefault(
+                        glue_name,
+                        "external reader glue: this port reads the client from outside Gw.exe",
+                    )
             recorded = [name for name in extra_members if name in allowed]
             unrecorded = [name for name in extra_members if name not in allowed]
             unadjudicated += len(unrecorded)

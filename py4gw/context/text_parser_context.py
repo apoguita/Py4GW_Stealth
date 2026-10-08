@@ -4,6 +4,24 @@ The native context is not located by a separate signature.  It is the
 ``text_parser`` field of the currently resolved ``GameContext`` at offset
 ``0x18``.  This module follows that pointer and reads the complete fixed-width
 x86 root structure through the external process reader.
+
+**What is here is what the source declares.** ``TextParserStruct``'s fields, the two
+nested records, ``TextFileSlotStruct.file_hash``, ``get_file_slot`` and the
+``TextParser`` facade are Reforged's own Python surface (``TextContext.py`` and
+``TextContext.pyi``). This module used to carry a second set of members beside them --
+``dec_start``/``dec_end``/``cache_ptr``/``h0000``/``h016c``/``h0184`` and the two
+dereferencing properties ``cache``/``sub_struct``, with a ``TextCacheStruct`` and a
+``TextParserSubStructStruct`` to hold their results. Those spellings belong to
+**Native's header** (``GW/context/text_parser.h``: ``TextCache* cache``, ``SubStruct1*
+sub_struct``), and Native binds none of them -- there is no ``TextParserStruct`` in
+Native's bindings at all. For a class ported from Reforged's Python, Reforged's Python is
+the shape authority and Native's header is only the layout authority, so they were
+additions: a member that exists in neither source's declared surface. They are gone, and
+`sub_struct` is why they were found -- it read offset ``+0x180`` as a pointer and this
+client holds ``0x4C`` there, so displaying the context raised
+``ReadProcessMemory(address=0x4C, size=0x4) failed with Windows error 299`` inside a GUI
+event handler. A record that only *declares* that field (``sub_struct_ptr``) is what both
+sources have, and what this module now carries.
 """
 
 from __future__ import annotations
@@ -11,8 +29,8 @@ from __future__ import annotations
 from ..helpers.target_struct import TargetStruct
 
 import ctypes
-from ctypes import Structure, c_uint8, c_uint16, c_uint32
-from typing import Any, Protocol, TypeVar, cast
+from ctypes import c_uint8, c_uint16, c_uint32
+from typing import Any, Protocol, cast
 
 from .game_context import GameContext, GameContextStruct
 from .gw_array import RemoteMemoryReader
@@ -20,23 +38,6 @@ from .gw_array import RemoteMemoryReader
 
 class _memory_reader(RemoteMemoryReader, Protocol):
     """The byte-reading operation needed by nested context properties."""
-
-
-_structure_type = TypeVar("_structure_type", bound=Structure)
-
-
-class TextCacheStruct(TargetStruct):
-    """The native ``TextCache`` record referenced by ``TextParser``."""
-
-    _pack_ = 1
-    _fields_ = [("h0000", c_uint32)]
-
-
-class TextParserSubStructStruct(TargetStruct):
-    """The native one-word sub-structure referenced by ``TextParser``."""
-
-    _pack_ = 1
-    _fields_ = [("h0000", c_uint32)]
 
 
 class TextFileSlotStruct(TargetStruct):
@@ -123,58 +124,10 @@ class TextParserStruct(TargetStruct):
     def bind_reader(
         self, reader: _memory_reader, address: int | None = None
     ) -> TextParserStruct:
-        """Attach the reader used by the nested pointer properties."""
+        """Attach the reader ``get_file_slot`` reads its slot records through."""
 
         self._remote_reader = reader
         return self
-
-    @property
-    def dec_start(self) -> int:
-        """Return the native spelling of the decode-start pointer."""
-
-        return int(self.dec_start_ptr)
-
-    @property
-    def dec_end(self) -> int:
-        """Return the native spelling of the decode-end pointer."""
-
-        return int(self.dec_end_ptr)
-
-    @property
-    def cache_ptr(self) -> int:
-        """Return the native cache pointer stored at ``_cache_header``."""
-
-        return int.from_bytes(bytes(self._cache_header[:4]), "little")
-
-    @property
-    def h0000(self) -> tuple[int, ...]:
-        """Return the legacy root-header words."""
-
-        return tuple(int(value) for value in self._h0000)
-
-    @property
-    def h016c(self) -> tuple[int, ...]:
-        """Return the legacy spelling of the post-cache words."""
-
-        return tuple(int(value) for value in self._h016C)
-
-    @property
-    def h0184(self) -> tuple[int, ...]:
-        """Return the legacy spelling of the trailing words."""
-
-        return tuple(int(value) for value in self._h0184)
-
-    @property
-    def cache(self) -> TextCacheStruct | None:
-        """Read the native cache record when its target pointer is valid."""
-
-        return self._read_struct(self.cache_ptr, TextCacheStruct)
-
-    @property
-    def sub_struct(self) -> TextParserSubStructStruct | None:
-        """Read the native auxiliary record when its target pointer is valid."""
-
-        return self._read_struct(self.sub_struct_ptr, TextParserSubStructStruct)
 
     def get_file_slot(
         self, slot_idx: int, language: int = 0
@@ -196,27 +149,9 @@ class TextParserStruct(TargetStruct):
             self._remote_reader
         )
 
-    def _read_struct(
-        self,
-        address: int,
-        structure_type: type[_structure_type],
-    ) -> _structure_type | None:
-        """Read one nested fixed-width structure through the bound reader."""
 
-        if not address:
-            return None
-        if self._remote_reader is None:
-            raise RuntimeError("This context snapshot is not bound to a memory reader.")
-        raw_value = self._remote_reader.read(
-            int(address), ctypes.sizeof(structure_type)
-        )
-        return structure_type.from_buffer_copy(raw_value)
-
-
-assert ctypes.sizeof(TextCacheStruct) == 0x04
 assert ctypes.sizeof(TextFileSlotStruct) == 0x24
 assert ctypes.sizeof(LanguageSlotStruct) == 0x0C
-assert ctypes.sizeof(TextParserSubStructStruct) == 0x04
 assert ctypes.sizeof(TextParserStruct) == 0x1D4
 assert TextParserStruct._cache_header.offset == 0x30
 assert TextParserStruct.sub_struct_ptr.offset == 0x180

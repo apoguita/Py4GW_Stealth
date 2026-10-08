@@ -1,0 +1,24 @@
+=== Part A: bits the interpreter reacts to (creation box 60,45,100,30) ===
+client 398x275 -> 684x461  (ratios 1.7186, 1.6764)
+  flag 0 -> 103,75,100,30
+  flag 16 -> 103,75,171,50
+  flag 1040 -> 103,75,100,30
+  flag 1024 -> 103,75,100,30
+  flag 2048 -> 103,75,100,30
+  flag 4096 -> 103,75,100,30
+  flag 8192 -> 103,75,100,30
+  flag 16384 -> 103,75,100,30
+  flag 24 -> 103,75,171,50
+  flag 48 -> 103,45,171,50
+  flag 1040 -> 103,75,100,30
+  flag 272 -> 103,75,100,50
+  flag 5120 -> 103,75,100,30
+
+=== Part B: odd client sizes, so the arithmetic has halves to round ===
+at creation: 61,46,100,30 / 61,46,100,30
+after 699x499 window: client=683x460
+  WIDTH|HCENTER      -> 203,76,100,50
+  HEIGHT|VCENTER     -> 104,138,171,30
+  WIDTH|RIGHT        -> 346,76,100,50
+  HEIGHT|BOTTOM      -> 104,231,171,30
+  BORDERS            -> 61,46,385,215

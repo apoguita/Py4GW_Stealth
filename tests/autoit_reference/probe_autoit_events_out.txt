@@ -1,0 +1,16 @@
+active window = events
+window box = 100,100,506,429
+handles: input=0x027F0DDC updown=0x01B70D1C date=0x01B70D4E monthcal=0x015B02D0
+input box  = 10,10,104,22
+updown box = 112,10,18,22
+input reads before = 5
+click up arrow, client 121,15 screen 224,141 -> log: 
+input reads after  = 5
+control under that point = events
+click down arrow -> log: updown id=4 handle=0x01B70D1C win=0x03C90D74;
+input reads after  = 4
+click date dropdown -> log: 
+date reads = Friday, January 2, 2026
+click monthcal day -> log: date id=5 handle=0x01B70D4E;
+monthcal reads = 2026/01/02
+click button -> log: button id=7 handle=0x00880E74;

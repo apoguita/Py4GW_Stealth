@@ -7,9 +7,10 @@ name = "py4gw-stealth"
 version = "0.1.0"
 description = "Read-only Windows process and memory scanning for Guild Wars research"
 requires-python = ">=3.11"
-dependencies = [
-    "nicegui[native]",
-]
+# No third-party runtime dependencies: the root window is built with py4gw.gui, which
+# reproduces the AutoIt v3 GUI reference on the standard library's tkinter. NiceGUI (and its
+# pywebview/native extra) was removed on 2026-10-11 with the window that used it.
+dependencies = []
 
 [tool.setuptools.packages.find]
 where = ["."]

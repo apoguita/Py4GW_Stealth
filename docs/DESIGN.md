@@ -6,17 +6,21 @@ external API requires a different spelling.
 
 The project is a normal editable Python package. `pyproject.toml` is the
 package-configuration file at the project root. It includes the `py4gw`
-package and declares NiceGUI's native extra as a runtime dependency.
+package and declares **no runtime dependencies**: the window is drawn with the
+standard library's `tkinter` through `py4gw/gui` (NiceGUI and its native extra were
+removed on 2026-10-11 with the window that used them).
 
 ## Current architecture
 
 ```text
 main.py
   MainWindow
-    NiceGUI native window
+    py4gw.gui window (AutoIt v3 statement set on tkinter, OnEvent mode)
       Guild Wars client-selection tab
         py4gw.Win32 + ConnectedClient
           documented Windows APIs
+      Client data tab
+        22 context views, one shown at a time via GUICtrlSetState
 
 py4gw/
   __init__.py
@@ -427,13 +431,17 @@ this project places in the client lives in `py4gw/game_thread/` and nowhere else
 Keeping them apart is deliberate: a scan never patches anything, so no read path
 carries the risk of a write path.
 
-NiceGUI is a presentation dependency, not part of the Win32 library API. UI
+`py4gw/gui` is the presentation layer, not part of the Win32 library API. Window
 callbacks may call public `Win32` methods and format returned records for
 display. They must not contain `ctypes` declarations, Windows handle
 management, memory operations, or Guild Wars signatures.
 
-The separate `tests/nicegui_probe.py` script remains a small manual dependency
-check. It is not the main application and does not replace the root UI.
+The window's controls are all created through `py4gw/gui`'s AutoIt-named functions, and the
+layer's own specification — what it reproduces, what the AutoIt interpreter verified, and
+which functions tkinter cannot honestly back — is in
+[`AUTOIT_GUI.md`](AUTOIT_GUI.md). `main.py` runs in OnEvent mode and holds one control set per
+context; the chosen context is shown with `GUICtrlSetState($GUI_SHOW)`, because a GUI holds a
+single Tab control and one tab per context would not fit on one row.
 
 ## Implementation rules
 
@@ -479,11 +487,10 @@ do not claim that the copied offsets work against a live Guild Wars build.
 `tests\test_context.py` is different: it is a live integration test and
 requires a running, logged-in Guild Wars client.
 
-Run the manual NiceGUI dependency probe when the UI dependency or environment
-changes:
+Run the GUI layer's own tests when the UI or the layer changes:
 
 ```text
-python tests\nicegui_probe.py
+python -m unittest tests.test_gui_offline
 ```
 
 Run the main test surface with:

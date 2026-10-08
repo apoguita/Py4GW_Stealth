@@ -1,0 +1,155 @@
+py4gw self-test
+client: connected (<py4gw.client.ConnectedClient object at 0x0979A500>)
+======================================================================
+PASS 50, FAIL 0, SKIP 0
+
+PASS map          exported names             5.5 ms
+     expected: every name py4gw exports is mapped
+     saw:      0 missing: []
+PASS map          class members           3874.2 ms
+     expected: every public member of every exported class is mapped
+     saw:      0 missing: []
+PASS map          record fields            187.4 ms
+     expected: every field is mapped with its offset and type
+     saw:      0 wrong: []
+PASS map          enum members             131.8 ms
+     expected: every enum member is mapped
+     saw:      0 missing: []
+PASS map          one expansion              1.0 ms
+     expected: each record, enum and class is expanded exactly once
+     saw:      0: []
+PASS map          modules                    9.0 ms
+     expected: every module of the package is a group
+     saw:      0 modules absent: []
+PASS engine       writes classified          0.7 ms
+     expected: the known acting members are classified as writes
+     saw:      246 writes, these absent: []
+PASS engine       reads classified           4.5 ms
+     expected: the known reading members are classified as reads
+     saw:      17735 reads, missing: []
+PASS engine       reasons kept               0.7 ms
+     expected: every member carries the reason for its classification
+     saw:      0 without a reason: []
+PASS engine       writes skipped            14.6 ms
+     expected: a write is skipped unless writes are asked for
+     saw:      skipped (classified as a write)
+PASS engine       writes reachable          40.1 ms
+     expected: with writes asked for the member is called, not skipped
+     saw:      answered
+PASS engine       unknowns reported          0.6 ms
+     expected: unclassified members are reported, never hidden
+     saw:      2031 unclassified
+PASS engine       walk is clean            249.0 ms
+     expected: a 4,000-entry walk raises nothing unexpected
+     saw:      0 failed: 
+PASS pure members Utils.DegToRad             0.0 ms
+     expected: DegToRad(180) is pi
+     saw:      3.141592653589793
+PASS pure members Utils.Distance             0.0 ms
+     expected: Distance((0,0),(3,4)) is 5
+     saw:      5.0
+PASS pure members AutoIt constants           0.0 ms
+     expected: the GUI constants are AutoIt's own values
+     saw:      (-3, 16, 32, 7)
+PASS pure members colour order               0.0 ms
+     expected: colorref 0x0000FF is #ff0000
+     saw:      '#ff0000'
+PASS pure members player status              0.0 ms
+     expected: GetPlayerStatusNameFromValue(0) is 'offline'
+     saw:      'offline'
+PASS pure members skill names                0.0 ms
+     expected: a skill id maps to its name and back
+     saw:      (3031, 'No_Skill', 0)
+PASS pure members PerfCounter                0.0 ms
+     expected: a metric that was measured is reported
+     saw:      names=['self-test'], reports=1
+PASS pure members pattern catalog            7.9 ms
+     expected: the offsets directory loads its patterns
+     saw:      220 patterns, 235 resolvers
+PASS pure members Win32 answers              5.5 ms
+     expected: Win32 answers a bool, a list and a formatted table
+     saw:      elevated=True, 323 processes
+PASS pure members enumerations               0.0 ms
+     expected: Allegiance enumerates its members
+     saw:      ['Unknown', 'Ally', 'Neutral', 'Enemy', 'SpiritPet', 'Minion', 'NpcMinipet']
+PASS pure members record round trip          0.0 ms
+     expected: a record holds what was put in it
+     saw:      1234
+PASS pure members refusal without a client     0.5 ms
+     expected: a client-facing reader answers the map id, or refuses and says a client is needed
+     saw:      client connected: map id 499
+PASS window       tabs                       0.0 ms
+     expected: the window has its six tabs
+     saw:      (4, 15, 33, 127, 140, 148)
+PASS window       map built                  0.4 ms
+     expected: the window built the whole map
+     saw:      20012 entries in 130 modules
+PASS window       group list                 0.0 ms
+     expected: the group list is filled
+     saw:      130 rows
+PASS window       search and run             7.8 ms
+     expected: a searched entry runs to an answer
+     saw:      GetPlayerStatusNameFromValue: answered in 0.0 ms — 'offline'
+PASS window       subset test              127.9 ms
+     expected: Test this class runs that class's entries
+     saw:      79 new results
+PASS window       reports                   68.5 ms
+     expected: both reports are written
+     saw:      51605 + 181 lines
+PASS client       elevated                   0.3 ms
+     expected: the controller is elevated
+     saw:      is_elevated=True
+PASS client       discovered                 6.3 ms
+     expected: a Guild Wars client is running
+     saw:      1 client(s)
+PASS client       connected                  0.0 ms
+     expected: the window holds a live connection
+     saw:      client=<py4gw.client.ConnectedClient object at 0x0979A500>
+PASS client       window contexts          162.9 ms
+     expected: every context view refreshed without a read failure
+     saw:      0 contexts failed: 
+PASS client       surface reads           3046.4 ms
+     expected: the map's reads ran against the client with no failure
+     saw:      answered=16626, refused=103, failed=0
+PASS live contexts every reader               1.9 ms
+     expected: each of the 22 context readers answers a snapshot or refuses in its own words
+     saw:      22 checks, 22 passed
+PASS live char    character context          1.4 ms
+     expected: in a map, named, with a four-word uuid and a coherent login flag
+     saw:      5 checks, 5 passed
+PASS live map     map, region, instance      2.5 ms
+     expected: an id above zero, a known region, a kind, boundaries ordered, a party size
+     saw:      10 checks, 10 passed
+PASS live player  the controlled character    13.3 ms
+     expected: a live agent id, finite position, a real hp fraction, an agent name
+     saw:      8 checks, 8 passed
+PASS live agents  the agent array          240.7 ms
+     expected: the player is in it, positions are finite, ids are unique, allegiances are known
+     saw:      15 checks, 15 passed
+PASS live party   the party                  2.1 ms
+     expected: GetPartySize equals the three arrays, and the leader is the player
+     saw:      9 checks, 9 passed
+PASS live world   the world record           1.4 ms
+     expected: the controlled-character record agrees with Player and holds a real area
+     saw:      9 checks, 9 passed
+PASS live camera  the camera                 1.1 ms
+     expected: radian angles in range, a finite position, and a look-at point distinct from it
+     saw:      6 checks, 6 passed
+PASS live text parser the text parser            1.1 ms
+     expected: the file table holds 1,024 entries per file with 11 language slots
+     saw:      3 checks, 3 passed
+PASS live instance instance and server region     1.3 ms
+     expected: a typed instance, a map record with ordered party sizes, terrain corners ending beyond their start
+     saw:      3 checks, 3 passed
+PASS live items   items and inventory        1.6 ms
+     expected: every item's id and quantity are real and its position is in a bag
+     saw:      3 checks, 3 passed
+PASS live agreement two paths, one fact       12.2 ms
+     expected: context, getter, world record and agent array agree on map, name, id, position, party
+     saw:      5 checks, 5 passed
+PASS live data dump every field and property   126.3 ms
+     expected: every context's fields and properties are read, and the dump is kept for output
+     saw:      21 contexts, 604 values, 0 unreadable
+PASS live safety  no write was called        0.0 ms
+     expected: every callable member classified as a write was blocked, and none was called
+     saw:      210 callable write members were blocked and none was called; 36 classified writes are not actions: ['py4gw.frame_tree.frame_ids.FrameId.AcceptButton (str)', 'py4gw.frame_tree.frame_ids.FrameId.Chat (str)', 'py4gw.frame_tree.frame_ids.FrameId.ChatChannels (namespace)']

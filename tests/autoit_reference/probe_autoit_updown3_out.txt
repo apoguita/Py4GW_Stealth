@@ -1,0 +1,11 @@
+updown box = 112,10,18,22
+updown style = 0x50000106
+upper arrow client y = 14, lower arrow client y = 28
+updown handle = 0x05720C16 input handle = 0x03180A68
+tick 0 position=5 input=5
+tick 1 position=5 input=5
+tick 2 position=5 input=5
+tick 3 position=5 input=5
+tick 4 position=5 input=5
+tick 5 position=5 input=5
+tick 6 position=5 input=5

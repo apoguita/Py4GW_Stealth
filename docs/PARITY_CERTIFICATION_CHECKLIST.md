@@ -400,16 +400,26 @@ Source files and revision: Reforged native_src/context/TextContext.py and
   game.h (working-tree sources)
 Declaration result: PASS
 Runtime availability: external GameContext +0x18 pointer path, complete root
-  read, bounded language/file-slot reads, cache/sub-structure reads, and file
-  hash decoding verified; callback registration and in-process string-table
-  trigger not ported; disable clears the external facade cache
+  read, bounded language/file-slot reads, and file hash decoding verified;
+  callback registration and in-process string-table trigger not ported;
+  disable clears the external facade cache
 Missing or changed declarations: none found in the source structure or facade
   surface
+CORRECTED 2026-10-11: this audit's own "additive" entries were additions and are
+  now removed. `cache_ptr`, `cache`, `sub_struct`, `dec_start`, `dec_end`,
+  `h0000`, `h016c`, `h0184`, `TextCacheStruct` and `TextParserSubStructStruct`
+  existed in neither Reforged's Python nor its `.pyi`; their spellings come from
+  Native's header (`GW/context/text_parser.h`, which binds nothing), and for a
+  class ported from Reforged's Python that header is only the layout authority.
+  `sub_struct` read offset +0x180 as a pointer, this client holds 0x4C there, and
+  displaying the context raised ReadProcessMemory(0x4C, 4) error 299 inside the
+  root window's Connect handler -- which is how the additions were found. The
+  declared field `sub_struct_ptr` remains, as the raw word the source carries,
+  and `tests/test_text_parser_context_offline.py` now asserts those members are
+  ABSENT so a re-added convenience fails.
 Transport-only adaptations: source inline `_cache_header` remains one 0x34-byte
-  field; its first four bytes are exposed through an additive `cache_ptr`
-  property; all target pointers and UTF-16 reads use bounded external memory
-Transport behavior: `get_file_slot`, `cache`, `sub_struct`, and `file_hash`
-  follow target pointers through the bound reader instead of local dereference
+  field; all target pointers and UTF-16 reads use bounded external memory through
+  the bound reader instead of local dereference
 Live evidence: tests/test_text_parser_context.py passed against the running
   client on 2026-09-22. TextParser=0x07453C38; language_id=0
 Tests: tests/test_text_parser_context_offline.py (7 passed) and
@@ -746,9 +756,10 @@ Offline evidence: tests/test_world_map_context_offline.py (6 passed; root read
   tests/test_ui_frame_offline.py (25 passed; frame layouts, frame-array
   validation, frame tree, frame-id cross-check, and the frame-array
   acquisition end to end)
-Pyright: 0 errors, 0 warnings, 0 informations (project-wide run reports only
-  the two pre-existing unresolved `nicegui` imports in main.py and
-  tests/nicegui_probe.py)
+Pyright: 0 errors, 0 warnings, 0 informations. (As recorded at the time, a
+  project-wide run reported only two unresolved `nicegui` imports in main.py and
+  tests/nicegui_probe.py; both were closed on 2026-10-11 by removing NiceGUI —
+  `main.py` is now built with `py4gw/gui` and the probe script is gone.)
 Certificate: PASS — structure/facade declaration parity, address-based root
   reader, and a read-only frame-array acquisition route that awaits live
   confirmation.

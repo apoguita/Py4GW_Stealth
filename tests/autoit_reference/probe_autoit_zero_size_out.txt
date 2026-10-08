@@ -1,0 +1,7 @@
+input  width=0 height=0 : 10,10,0x0
+edit   width=0 height=0 : 200,10,0x0
+list   width=0 height=0 : 400,10,0x6
+label  width=0 height=0 : 10,200,0x0
+button width=0 height=0 : 10,300,0x0
+group  width=0 height=0 : 200,200,0x0
+input with no size after : 10,400,0x0

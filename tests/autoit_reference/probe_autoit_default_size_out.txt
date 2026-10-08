@@ -1,0 +1,11 @@
+1. Input, no size                : 200x20
+2. Button, no size               : 23x25
+3. Input, explicit 50x10         : 50x10
+4. Input, no size                : 50x10
+5. Button, no size               : 23x25
+6. Input, no size                : 23x25
+2a. Edit, explicit 120x60         : 120x60
+2b. Edit, no size                 : 120x60
+2c. List, no size                 : 120x58
+3a. Input, no size, window shown  : 200x20
+3b. Input, no size, again         : 200x20

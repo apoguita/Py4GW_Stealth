@@ -1,17 +1,8 @@
 from ..helpers.target_struct import TargetStruct
-from ctypes import Structure
 from typing import Any, Optional
 
 from .game_context import GameContext
 from .gw_array import RemoteMemoryReader
-
-
-class TextCacheStruct(TargetStruct):
-    h0000: int
-
-
-class TextParserSubStructStruct(TargetStruct):
-    h0000: int
 
 
 class TextFileSlotStruct(TargetStruct):
@@ -57,30 +48,6 @@ class TextParserStruct(TargetStruct):
     def bind_reader(
         self, reader: RemoteMemoryReader, address: int | None = None
     ) -> TextParserStruct: ...
-
-    @property
-    def cache_ptr(self) -> int: ...
-
-    @property
-    def dec_start(self) -> int: ...
-
-    @property
-    def dec_end(self) -> int: ...
-
-    @property
-    def h0000(self) -> tuple[int, ...]: ...
-
-    @property
-    def h016c(self) -> tuple[int, ...]: ...
-
-    @property
-    def h0184(self) -> tuple[int, ...]: ...
-
-    @property
-    def cache(self) -> TextCacheStruct | None: ...
-
-    @property
-    def sub_struct(self) -> TextParserSubStructStruct | None: ...
 
     def get_file_slot(
         self, slot_idx: int, language: int = 0

@@ -58,7 +58,8 @@ boundary uses our `snake_case` names.
   document has been updated first.
 - Keep object state explicit. Do not hide shared mutable state in module-level
   variables.
-- `MainWindow` owns NiceGUI controls and UI state. `Win32` owns Windows process
+- `MainWindow` owns the window's controls and UI state, all of them created through
+  `py4gw.gui`'s AutoIt-named functions. `Win32` owns Windows process
   operations. Do not move behavior between those responsibilities for
   convenience.
 
@@ -84,17 +85,19 @@ boundary uses our `snake_case` names.
 - Do not convert a Windows pointer or structure field to a host-sized Python
   interpretation without documenting the target architecture.
 
-## NiceGUI code
+## Window code
 
-- Use NiceGUI components from Python; do not introduce HTML, CSS, or JavaScript
-  for the current test surface unless the design document explicitly approves
-  that boundary.
+- Build controls with `py4gw.gui`'s AutoIt-named functions. Keep AutoIt's spelling
+  (`GUICreate`, `GUICtrlCreateListView`, `GUICtrlSetData`), because those names are the
+  external API's, in the same way `Process32FirstW` keeps its spelling.
+- Do not put HTML, CSS, or JavaScript anywhere: the window is drawn by tkinter through the
+  AutoIt-compatible layer, and nothing in the project depends on a third-party UI package.
 - Keep UI callbacks small. They may call public library methods, convert
   structured results to display rows, and report errors.
 - Do not put `ctypes`, process handles, memory access, signatures, or target
   assumptions in UI code.
 - Keep the main window in root-level `main.py`. Use `tests/` for focused tests
-  and manual dependency probes; do not create a new top-level directory for a
+  and manual probes; do not create a new top-level directory for a
   one-off check.
 
 ## Documentation and comments
@@ -115,8 +118,8 @@ boundary uses our `snake_case` names.
   then project imports.
 - Run the focused tests for the changed class before considering the change
   complete.
-- Run `pyright` from the project root. Use the same interpreter in which
-  NiceGUI and the editable project are installed; otherwise Pylance can report
-  a missing import even when the package works from another terminal.
+- Run `pyright` from the project root, using an interpreter that has the editable
+  project installed; otherwise Pylance can report a missing import even when the
+  package works from another terminal.
 - Keep the first implementation small; do not add future features “because we
   will need them later.”

@@ -96,9 +96,18 @@ See
 callback-route status and [`docs/UI_FRAME_TREE.md`](docs/UI_FRAME_TREE.md) for
 the frame-tree route and its test scripts. Any target-side payload or patch is
 still injection, even without a DLL.
-A small NiceGUI window exercises the
-client-selection and connection surface. It opens the client list read-only and
-patches nothing; a selected connection installs the game-thread layer.
+The root `main.py` window exercises the client-selection and connection surface. Its controls
+are created with `py4gw/gui`, a Stealth-owned, AutoIt-compatible window toolkit: the AutoIt v3
+GUI reference's 71 functions, its constants and its two event modes (message loop and OnEvent)
+reproduced on tkinter, so a GwAu3-lineage script's `GUICreate`/`GUICtrlCreate...`/`GUIGetMsg`
+statements move over unchanged. Every one of those functions is backed — `GUICtrlCreateObj`
+included, which embeds an object variable (`ObjCreate`, `IsObj`, `ObjName`) through the
+platform's ActiveX host. It is not a port — neither source project has a host toolkit —
+and its readings from the local AutoIt interpreter, its style mapping and the functions tkinter
+cannot honestly back are recorded in [`docs/AUTOIT_GUI.md`](docs/AUTOIT_GUI.md). NiceGUI, which
+the window used before, was removed on 2026-10-11; the project now has no third-party runtime
+dependency. The window opens the client list read-only and patches nothing; a selected
+connection installs the game-thread layer.
 The library also has a bounded AgentArray reader with native category
 classification, lazy agent-record reads, and explicit living-agent snapshots
 for frequent queries. Living effects, visible effects, equipment, and tags are
@@ -122,9 +131,10 @@ From the project directory:
 python -m pip install -e .
 ```
 
-This installs the package and its Python dependencies, including NiceGUI's
-native-window support. The editable install keeps Python connected to the
-working source tree.
+This installs the package, which has no runtime dependencies: the window is drawn with the
+standard library's `tkinter` through the AutoIt-compatible layer. NiceGUI and its native extra
+were removed on 2026-10-11 with the window that used it. The editable install keeps Python
+connected to the working source tree.
 
 Run scripts through the selected Python interpreter:
 

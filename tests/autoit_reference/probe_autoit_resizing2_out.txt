@@ -1,0 +1,54 @@
+=== Part A: GUICreate(400,300) then WinMove(700,500) then WinMove(500,400) ===
+at creation : window=414x314 client=398x275
+  dock 0 -> 50,40,100,30
+  dock 1 -> 50,40,100,30
+  dock 2 -> 50,40,100,30
+  dock 256 -> 50,40,100,30
+  dock 512 -> 50,40,100,30
+  dock 768 -> 50,40,100,30
+  dock 802 -> 50,40,100,30
+after 700x500 window: window=700x500 client=684x461
+  dock 0 -> 85,67,100,30
+  dock 1 -> 85,67,171,50
+  dock 2 -> 50,67,171,50
+  dock 256 -> 85,67,100,50
+  dock 512 -> 85,67,171,30
+  dock 768 -> 85,67,100,30
+  dock 802 -> 50,40,100,30
+after 500x400 window: window=500x400 client=484x361
+  dock 0 -> 60,52,100,30
+  dock 1 -> 60,52,121,39
+  dock 2 -> 50,52,121,39
+  dock 256 -> 60,52,100,39
+  dock 512 -> 60,52,121,30
+  dock 768 -> 60,52,100,30
+  dock 802 -> 50,40,100,30
+after 416x339 window (the original window size): window=416x339 client=400x300
+  dock 0 -> 50,43,100,30
+  dock 1 -> 50,43,100,32
+  dock 2 -> 50,43,100,32
+  dock 256 -> 50,43,100,32
+  dock 512 -> 50,43,100,30
+  dock 768 -> 50,43,100,30
+  dock 802 -> 50,40,100,30
+
+=== Part B: Opt("GUIEventOptions", 1) before GUICreate ===
+at creation : window=414x314 client=398x275
+after resize: window=700x500 client=684x461
+  dock 2 (left)   -> 50,67,171,50
+  dock 1 (auto)   -> 85,67,171,50
+  dock 102 (borders) -> 50,40,386,216
+
+=== Part C: List / ListView / TreeView / MonthCal defaults ===
+at creation : window=414x314 client=398x275
+  List      -> 50,40,100,58
+  ListView  -> 50,40,100,60
+  TreeView  -> 50,40,100,60
+  MonthCal  -> 50,40,100,60
+  Slider    -> 50,40,100,60
+after resize: window=700x500 client=684x461
+  List      -> 85,67,171,97
+  ListView  -> 85,67,171,100
+  TreeView  -> 85,67,171,100
+  MonthCal  -> 85,67,100,60
+  Slider    -> 85,67,171,100

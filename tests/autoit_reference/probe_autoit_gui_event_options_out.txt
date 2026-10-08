@@ -1,0 +1,7 @@
+state bits: 16 = minimised (WinGetState); request = WM_SYSCOMMAND/SC_MINIMIZE
+GUIEventOptions=0: state before=15 after=23 minimised=yes
+  events: minimize;
+  after a restore request: state=15 events: minimize;
+GUIEventOptions=1: state before=15 after=15 minimised=no
+  events: minimize;
+  after a restore request: state=15 events: minimize;

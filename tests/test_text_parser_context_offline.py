@@ -1,4 +1,17 @@
-"""Offline parity checks for the external ``TextParser`` reader."""
+"""Offline parity checks for the external ``TextParser`` reader.
+
+The declaration surface is Reforged's Python (``native_src/context/TextContext.py`` and its
+``.pyi``): this record's fields, ``TextFileSlotStruct``/``LanguageSlotStruct``,
+``TextFileSlotStruct.file_hash``, ``TextParserStruct.get_file_slot`` and the ``TextParser`` facade,
+and nothing else. The members this module used to carry beside them -- ``cache``, ``sub_struct``,
+``dec_start``, ``dec_end``, ``cache_ptr``, ``h0000``, ``h016c``, ``h0184`` and the two records
+holding their results -- are **Native's header spellings** (``GW/context/text_parser.h``), and
+Native binds no text-parser struct at all. They were additions, and one of them (`sub_struct`) is
+why they were found: it read offset ``+0x180`` as a pointer, this client holds ``0x4C`` there, and
+displaying the context raised ``ReadProcessMemory(address=0x4C, size=0x4) failed with Windows error
+299`` inside the window's Connect handler. So the tests below assert the source's surface is present
+**and that those additions are absent**, which is what makes a re-added convenience fail.
+"""
 
 from __future__ import annotations
 
@@ -9,12 +22,11 @@ from unittest import mock
 
 from py4gw import (
     LanguageSlotStruct,
-    TextCacheStruct,
     TextFileSlotStruct,
     TextParser,
-    TextParserSubStructStruct,
     TextParserStruct,
 )
+from py4gw.context import text_parser_context
 
 
 class _Memory:
@@ -39,10 +51,8 @@ class TextParserParityTests(unittest.TestCase):
     """Check every source-defined layout, property, and facade member."""
 
     def test_source_layouts(self) -> None:
-        """The typed cache records retain their source sizes and offsets."""
+        """The typed records retain their source sizes and offsets."""
 
-        self.assertEqual(ctypes.sizeof(TextCacheStruct), 0x04)
-        self.assertEqual(ctypes.sizeof(TextParserSubStructStruct), 0x04)
         self.assertEqual(ctypes.sizeof(LanguageSlotStruct), 0x0C)
         self.assertEqual(ctypes.sizeof(TextFileSlotStruct), 0x24)
         self.assertEqual(ctypes.sizeof(TextParserStruct), 0x1D4)
@@ -74,13 +84,6 @@ class TextParserParityTests(unittest.TestCase):
         self.assertEqual(getattr(TextParserStruct, "sub_struct_ptr").offset, 0x180)
         self.assertEqual(getattr(TextParserStruct, "language_id").offset, 0x1D0)
 
-    def test_source_cache_pointer_property_uses_inline_header(self) -> None:
-        """The source's 0x34-byte cache header starts with TextCache*."""
-
-        parser = TextParserStruct()
-        parser._cache_header[:4] = (0x00200000).to_bytes(4, "little")
-        self.assertEqual(parser.cache_ptr, 0x00200000)
-
     def test_get_file_slot_reads_bounded_slot_and_hash(self) -> None:
         """A valid language slot reads one remote record and its UTF-16 hash."""
 
@@ -109,12 +112,27 @@ class TextParserParityTests(unittest.TestCase):
         self.assertIsNone(parser.get_file_slot(1))
         self.assertIsNone(parser.get_file_slot(0, 11))
 
-    def test_source_nested_properties_are_declared(self) -> None:
-        for name in ("cache", "sub_struct", "dec_start", "dec_end", "h0000", "h016c", "h0184"):
-            self.assertTrue(hasattr(TextParserStruct, name), name)
-        parser = TextParserStruct()
-        self.assertIsNone(parser.cache)
-        self.assertIsNone(parser.sub_struct)
+    def test_only_the_source_s_surface_is_declared(self) -> None:
+        """The source's fields, helper and facade are here -- and nothing Native only spells."""
+
+        for name in (
+            "cache",
+            "sub_struct",
+            "cache_ptr",
+            "dec_start",
+            "dec_end",
+            "h0000",
+            "h016c",
+            "h0184",
+            "_read_struct",
+        ):
+            self.assertFalse(hasattr(TextParserStruct, name), name)
+        self.assertTrue(hasattr(TextParserStruct, "get_file_slot"))
+        # The declared field is still there, as the raw word the source's record carries.
+        self.assertEqual(getattr(TextParserStruct, "sub_struct_ptr").offset, 0x180)
+        # And the two record classes that existed only to hold those reads are gone from the module.
+        for name in ("TextCacheStruct", "TextParserSubStructStruct"):
+            self.assertFalse(hasattr(text_parser_context, name), name)
 
     def test_source_facade_members_are_declared(self) -> None:
         for name in (

@@ -54,7 +54,8 @@ needs to an unelevated caller. **Connecting is therefore a write**;
 - Windows
 - Python 3.13 32-bit for the current x86-oriented research setup
 - An **elevated shell**: `py4gw.connect(...)` refuses to connect without one
-- NiceGUI with native-window support (installed automatically with the project)
+- No third-party Python packages: the package installs with no dependencies, and the window
+  is drawn with the standard library's `tkinter` through `py4gw/gui`
 
 Python 3.12 or another supported Python version may run the process-discovery
 code, but the current remote scanner requires an x86 controller for an x86
@@ -82,14 +83,12 @@ From the project directory, install the package in editable mode:
 python -m pip install -e .
 ```
 
-This installs the project and its Python dependencies, including NiceGUI's
-native support for the optional desktop interface. Editable installation means
-Python uses the files in this working directory. After changing the code, there
-is no package rebuild step.
-
-On Windows, NiceGUI native mode also uses the system's .NET Framework and
-Microsoft Edge WebView2 Runtime. These are Windows components, not Python
-packages, and are not installed by pip.
+This installs the project in editable mode. It has no runtime dependencies: the root window,
+`main.py`, is built with `py4gw/gui`, which reproduces the AutoIt v3 GUI reference on the
+standard library's `tkinter`. NiceGUI and its `native` extra were removed on 2026-10-11 with
+the window that used them, so the .NET Framework and the WebView2 runtime are no longer
+involved. Editable installation means Python uses the files in this working directory. After
+changing the code, there is no package rebuild step.
 
 Run scripts with the same interpreter explicitly:
 
@@ -106,11 +105,10 @@ Pyright and the VS Code Pylance extension use the Python interpreter selected
 in VS Code. They do not automatically use whichever `python` command happens
 to appear first in another terminal.
 
-Select the interpreter where NiceGUI is installed, then verify it from the
-project root:
+Select that interpreter, then verify it from the project root:
 
 ```text
-python -c "import sys, nicegui; print(sys.executable); print(nicegui.__file__)"
+python -c "import sys, tkinter, py4gw; print(sys.executable); print(tkinter.TkVersion)"
 ```
 
 The repository's `pyrightconfig.json` checks the project package and project
@@ -277,9 +275,10 @@ same Python environment where the editable package was installed.
 ## Project layout
 
 ```text
-main.py         Main NiceGUI window and current Win32 test surface
+main.py         Main window (built with py4gw/gui) and current Win32 test surface
 py4gw/          The Python package
-tests/          Automated tests and manual dependency probes
+py4gw/gui/      The AutoIt-compatible window toolkit the main window is built with
+tests/          Automated tests and manual probes
 docs/           Design and programming-style rules
 external/       Local research checkouts; intentionally excluded from Git
 ```

@@ -1,0 +1,16 @@
+0. at creation        : client=398x275 window=414x314
+   early (from start) : 60,45,100,30
+1. after 700x500      : client=684x461 window=700x500
+   early              : 103,75,171,50
+2. late created       : client=684x461 window=700x500
+   late               : 60,45,100,30
+3. after 500x400      : client=484x361 window=500x400
+   early              : 72,59,121,39
+   late               : 41,34,70,22
+4. after 600x450      : client=584x411 window=600x450
+   early              : 88,67,146,44
+   late               : 49,38,85,25
+5. third created      : client=584x411 window=600x450
+   third              : 60,45,100,30
+6. after 700x500 again: client=684x461 window=700x500
+   third              : 68,50,116,33

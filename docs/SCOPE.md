@@ -107,7 +107,8 @@ The first deliverable has three deliberately separated parts:
 1. a project-owned `py4gw` package with a `Win32` class for read-only Windows
    process and memory operations;
 2. a reusable scanner that consumes the copied `offsets/` definitions; and
-3. a root-level `main.py` NiceGUI window for exercising the process surface.
+3. a root-level `main.py` window, built with `py4gw/gui`, for exercising the process
+   surface.
 
 The UI is not a second process library. It is a presentation and testing
 surface over the package. Windows process and memory behavior stays inside the
@@ -125,7 +126,13 @@ surface over the package. Windows process and memory behavior stays inside the
   `py4gw.disconnect()`. The client's code is patched while connected and restored
   afterwards.
 - Pattern and resolver definitions loaded from the copied `offsets/` directory.
-- A small native NiceGUI window for testing the current library behavior.
+- A root-level `main.py` window, built with `py4gw/gui`, for testing the current library
+  behavior.
+- The AutoIt-compatible GUI layer in `py4gw/gui`: a **Stealth-owned** host-window toolkit
+  (tkinter backed) that reproduces the AutoIt v3 GUI reference's function set, constants and
+  two event modes, so a GwAu3-lineage script's `GUICreate`/`GUICtrlCreate...`/`GUIGetMsg`
+  statements move over. It is not part of the port, it reads nothing from the client, and its
+  specification record is [`AUTOIT_GUI.md`](AUTOIT_GUI.md).
 - Tests and documentation that explain each capability.
 - Small project-owned wrappers around documented Windows APIs.
 - Source-backed research into pointer lifetimes and callback/hook paths needed
@@ -164,7 +171,11 @@ The current `py4gw` package can:
   functions, a dispatcher that runs typed calls on the client's game thread, and an
   observer that reports the client's own messages; and
 - deliver those reports to handlers registered by event kind, on a listener thread
-  that stops when the connection closes.
+  that stops when the connection closes; and
+- build AutoIt-style windows and controls from Python through `py4gw/gui`, which
+  reproduces the AutoIt v3 GUI reference's 71 functions, its constants and its two event
+  modes (message loop and OnEvent) on tkinter, and names every function tkinter cannot
+  honestly back instead of faking it.
 
 The root UI currently exposes these operations in the `Guild Wars clients` tab:
 
@@ -179,20 +190,34 @@ and resolve addresses, and the context readers can decode the maintained
 structures externally. This does not claim compatibility with every client
 build or provide all Reforged context behavior.
 
-## NiceGUI contract
+## GUI contract
 
-NiceGUI is used only as the presentation layer for the current test window.
-The native window is started with `ui.run(native=True)` and uses pywebview
-underneath. UI callbacks may call public `Win32` methods and display their
-results, but they must not contain Windows API declarations, process-handle
-management, memory operations, or Guild Wars target assumptions.
+The root window is built with `py4gw/gui`, the AutoIt v3-compatible layer, and nothing else:
+the project has no third-party runtime dependency. NiceGUI and its `native` extra, which the
+previous window used through pywebview, were removed on 2026-10-11 together with that window.
 
-The UI must remain understandable without knowing NiceGUI internals. New tabs
-or controls should be added only for a capability that already has a library
-method and a documented contract.
+`main.py` runs in AutoIt's OnEvent mode: `Opt("GUIOnEventMode", 1)` makes the GUI call a
+registered function per control, and the script's idle loop is `while not closed: Sleep(50)`.
+Its callbacks may call public `Win32` methods and display their results, but they must not
+contain Windows API declarations, process-handle management, memory operations, or Guild Wars
+target assumptions.
+
+The window must remain understandable without knowing tkinter: every control is created
+through an AutoIt-named function (`GUICtrlCreateListView`, `GUICtrlSetData`, …), and the
+controls a callback needs are named attributes of `MainWindow`. New tabs or controls should be
+added only for a capability that already has a library method and a documented contract.
+
+One window carries twenty-two context tables because a GUI holds a single Tab control and
+AutoIt's own reference says a nested tab belongs in a child GUI. The chosen context's controls
+are shown and the others hidden with `GUICtrlSetState($GUI_SHOW)`/`($GUI_HIDE)`, which is the
+documented way to show and hide a control.
 
 `PerfCounter` is controller-side instrumentation. It does not inspect or
 execute code inside the Guild Wars process.
+
+The AutoIt-compatible GUI layer's specification, its readings from the AutoIt interpreter and
+the functions tkinter cannot honestly back are recorded in
+[`AUTOIT_GUI.md`](AUTOIT_GUI.md).
 
 The resolver scan occurs during connection and its stable pointer location is
 cached. Context object pointers are re-read for each snapshot because they may
@@ -225,7 +250,7 @@ the client's own functions — or as members still to port:
 | Reforged wrapper data members (`Player.GetLevel`, `Player.GetAgent`, ...) | **in scope** — ported as read-only accessors over the context readers |
 | Accessor classes ported from Reforged and Native (`Map`, `Party`, `Player`) | **in scope** — ported member for member, see [`PORTING_RULES.md`](PORTING_RULES.md) |
 | Native `Py*` binding modules (`PyPlayer`, `PyInventory`, ...) | **out of scope** — they are Reforged's own DLL binding objects, and this project loads no DLL; the members they wrap are ported, or still to port, in the wrapper classes above |
-| UI widgets, ImGui panels, and the host framework | **out of scope** |
+| Reforged's UI widgets, ImGui panels, and the host framework | **out of scope** — Reforged's own widget layer is not ported. Stealth has its own AutoIt-compatible host-window toolkit in `py4gw/gui`, which is a separate, owner-directed component with its own specification record ([`AUTOIT_GUI.md`](AUTOIT_GUI.md)), not a port of that layer |
 | Wrapper action members (`Player.Move`, `Player.SendChat`, ...) | **out of scope as reads** — each is ported as either an action that calls the client's own function on its own thread, or a member that is still to port. Which one an individual member is, is recorded in its port doc. |
 
 An action member that is not yet ported is present but inert: it raises and never

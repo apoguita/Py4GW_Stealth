@@ -1,0 +1,11 @@
+creation box 60,45,100,30 in a 398x275 client; after a resize to a 684x461 client
+AUTO would be 103,75,171,50; DOCKSIZE/flag-0 would be 103,75,100,30; HEIGHT would be 103,75,171,30
+
+GUICtrlSetResizing(control, 0):
+Label     default=60,45,100,30  [0]=103,75,171,50  [1024]=103,75,171,50
+Edit      default=60,45,100,30  [0]=103,75,171,50  [1024]=103,75,171,50
+Input     default=60,45,100,30  [0]=103,75,171,30  [1024]=103,75,171,30
+Date      default=60,45,100,30  [0]=103,75,171,30  [1024]=103,75,171,30
+Button    default=60,45,100,30  [0]=103,75,100,30  [1024]=103,75,100,30
+Pic       default=60,45,100,30  [0]=103,75,100,30  [1024]=103,75,100,30
+ListView  default=60,45,100,30  [0]=103,75,171,50  [1024]=103,75,171,50

@@ -1,0 +1,79 @@
+[window] GUICreate-no-width-height client=400x400
+[window] GUICreate(400,300) client=400x300
+[defaults] Button=23x25
+[defaults] Label=32x21
+[defaults] Input=28x17
+[defaults] Checkbox=51x21
+[defaults] Radio=44x21
+[defaults] Combo=44x21
+[defaults] List=38x13
+[defaults] Edit=23x17
+[defaults] Progress=44x21
+[defaults] Slider=44x21
+[defaults] Tab=44x21
+[defaults] TreeView=44x21
+[defaults] ListView=40x17
+[defaults] Date=44x21
+[defaults] Graphic=150x150
+[ids] Button id=3 handle=0x00D20B34 equal=False
+[ids] Label handle=0x00340674 equal=False
+[ids] Dummy id=22 handle=0
+[ids] Graphic id=21 handle=0x01C40C60
+[ids] TabItem id=14 handle=0
+[ids] TreeItem id=17 handle=0x0148E9B8
+[ids] ListViewItem id=19 handle=0
+[ids] Updown id=23 handle=0x01590C44
+[ids] Menu id=24 handle=0xAAFB0955
+[ids] MenuItem id=25 handle=0 separator=26
+[read] Button=OK
+[read] Label=Hello
+[read] Input=abc
+[read] Edit=text
+[read] Checkbox-unchecked=4
+[read] Checkbox-checked=1
+[read] Checkbox-advanced=Check
+[read] Radio=4
+[read] Progress=50
+[read] Slider=30
+[read] List=b
+[read] Combo=z
+[read] Tab=0 advanced=14 tabitem1=14
+[read] TabItem=
+[read] TreeView=0 treeitem=17
+[read] TreeViewItem=0 advanced=root
+[read] ListView=0 lvitem=19
+[read] ListViewItem=a|b| advanced=a|b|
+[read] Menu=68 advanced=File
+[read] MenuItem=68 advanced=Open
+[read] Dummy-before=0
+[read] Dummy-after-send=42
+[read] Date=Friday, January 2, 2026
+[state] Button=80
+[state] Button-disabled=144
+[state] Button-hidden=96
+[state] Button-shown=80
+[state] Checkbox-checked=80
+[ret] GUICtrlSetData=1
+[ret] GUICtrlSetPos=1
+[ret] GUICtrlSetState=1
+[ret] GUICtrlSetColor=1
+[ret] GUICtrlSetBkColor=1
+[ret] GUICtrlSetFont=1
+[ret] GUICtrlSetResizing=1
+[ret] GUICtrlSetTip=1
+[ret] GUICtrlSetLimit=1
+[ret] GUICtrlSetStyle=1
+[ret] GUICtrlSetOnEvent=1
+[ret] GUISetCoord=1
+[ret] GUIStartGroup=1
+[ret] GUISetOnEvent=1
+[ret] GUISetState=1
+[ret] GUISetStyle=1
+[ret] GUIGetStyle=-2067136512,256
+[ret] GUIGetMsg=0
+[ret] GUISetBkColor=1
+[ret] GUISetFont=1
+[ret] GUISwitch=True
+[ret] GUICtrlDelete=1
+[ret] GUIDelete=1
+[opt] GUIDataSeparatorChar=[|]

@@ -105,11 +105,9 @@ from .instance_info_context import (
 )
 from .text_parser_context import (
     LanguageSlotStruct,
-    TextCacheStruct,
     TextFileSlotStruct,
     TextParser,
     TextParserStruct,
-    TextParserSubStructStruct,
 )
 from .available_character_context import (
     AvailableCharacterArray,
@@ -353,10 +351,8 @@ __all__ = [
     "AreaInfoStruct",
     "TextParser",
     "TextParserStruct",
-    "TextCacheStruct",
     "TextFileSlotStruct",
     "LanguageSlotStruct",
-    "TextParserSubStructStruct",
     "AvailableCharacterArray",
     "AvailableCharacterArrayStruct",
     "AvailableCharacterInfoStruct",

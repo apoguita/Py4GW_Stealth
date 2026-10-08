@@ -1,0 +1,10 @@
+ids: first(no size)=3 sized(60x40)=4 after sized(no size)=5 label=6 after label(no size)=7 40x30=8 last(no size)=9
+after show: [Shell Embedding 10,10,8x8 vis=1] [Shell Embedding 10,120,60x40 vis=1] [Shell Embedding 200,10,8x8 vis=1] [Static 200,300,30x21 vis=1] [Shell Embedding 300,300,8x8 vis=1] [Shell Embedding 300,350,40x30 vis=1] [Shell Embedding 400,10,8x8 vis=1]
+label box = 200,300,30x21
+same object variable twice: ids 10 and 11
+after the reuse: [Shell Embedding 10,10,8x8 vis=1] [Shell Embedding 10,120,60x40 vis=1] [Shell Embedding 200,10,8x8 vis=1] [Static 200,300,30x21 vis=1] [Shell Embedding 300,300,8x8 vis=1] [Shell Embedding 300,350,40x30 vis=1] [Shell Embedding 400,10,8x8 vis=1] [Shell Embedding 20,350,30x20 vis=1]
+client before the resize = 500x400
+after the window grew to 700x500: [Shell Embedding 13,11,8x8 vis=1] [Shell Embedding 13,138,60x40 vis=1] [Shell Embedding 273,11,8x8 vis=1] [Static 273,345,41x24 vis=1] [Shell Embedding 414,347,8x8 vis=1] [Shell Embedding 426,408,40x30 vis=1] [Shell Embedding 551,11,8x8 vis=1] [Shell Embedding 27,407,30x20 vis=1]
+after the window shrank to 420x340: [Shell Embedding 8,7,8x8 vis=1] [Shell Embedding 8,90,60x40 vis=1] [Shell Embedding 161,7,8x8 vis=1] [Static 161,225,24x15 vis=1] [Shell Embedding 241,224,8x8 vis=1] [Shell Embedding 235,256,40x30 vis=1] [Shell Embedding 322,7,8x8 vis=1] [Shell Embedding 16,259,30x20 vis=1]
+after deleting the 60x40 object: GUICtrlGetState(that id) = -1
+after the delete: [Shell Embedding 8,7,8x8 vis=1] [Shell Embedding 161,7,8x8 vis=1] [Static 161,225,24x15 vis=1] [Shell Embedding 241,224,8x8 vis=1] [Shell Embedding 235,256,40x30 vis=1] [Shell Embedding 322,7,8x8 vis=1] [Shell Embedding 16,259,30x20 vis=1]

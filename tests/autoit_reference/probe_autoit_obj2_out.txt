@@ -1,0 +1,24 @@
+GUICtrlCreateObj(ie, 10, 10, 200, 150) -> 3
+before GUISetState: 1 children
+   Shell Embedding box=10,10,200x150 visible=0 style=0x50010000 exstyle=0x00010000 parentclass=AutoIt v3 GUI
+after GUISetState(SW_SHOW): 1 children
+   Shell Embedding box=10,10,200x150 visible=1 style=0x50010000 exstyle=0x00010000 parentclass=AutoIt v3 GUI
+GUICtrlGetHandle(id) = 0; GUICtrlRead = ''; GUICtrlGetState = 80
+after GUICtrlSetPos(50, 60, 120, 80): 1 children
+   Shell Embedding box=50,60,120x80 visible=1 style=0x50010000 exstyle=0x00010000 parentclass=AutoIt v3 GUI
+after GUICtrlSetState(GUI_HIDE): 1 children
+   Shell Embedding box=50,60,120x80 visible=0 style=0x40010000 exstyle=0x00010000 parentclass=AutoIt v3 GUI
+GUICtrlGetState while hidden = 96
+after GUICtrlSetState(GUI_SHOW): 1 children
+   Shell Embedding box=50,60,120x80 visible=1 style=0x50010000 exstyle=0x00010000 parentclass=AutoIt v3 GUI
+GUICtrlGetState after showing = 80
+after the window grew to 700x500 with GUI_DOCKAUTO: 1 children
+   Shell Embedding box=68,69,164x92 visible=1 style=0x50010000 exstyle=0x00010000 parentclass=AutoIt v3 GUI
+after the window shrank to 560x420 with GUI_DOCKSIZE: 1 children
+   Shell Embedding box=53,56,164x92 visible=1 style=0x50010000 exstyle=0x00010000 parentclass=AutoIt v3 GUI
+after GUICtrlDelete: no child windows
+second window, four objects: 3 children
+   Shell Embedding box=250,10,8x8 visible=1 style=0x50010000 exstyle=0x00010000 parentclass=AutoIt v3 GUI
+   Static box=250,300,30x21 visible=1 style=0x50020100 exstyle=0x00000000 parentclass=AutoIt v3 GUI
+   Shell Embedding box=300,300,8x8 visible=1 style=0x50010000 exstyle=0x00010000 parentclass=AutoIt v3 GUI
+label box = 250,300,30x21

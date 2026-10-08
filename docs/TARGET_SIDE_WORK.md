@@ -346,7 +346,8 @@ The following work can continue on the read side without touching target memory:
   DLL/shared memory;
 - pointer freshness, stale-data handling, error reporting, and performance;
 - live verification against supported client builds; and
-- packaging, tests, documentation, and the external NiceGUI inspection surface.
+- packaging, tests, documentation, and the inspection surface `main.py` presents through
+  `py4gw/gui`.
 
 The fact that a feature is listed here does not mean it has been implemented.
 Any future target-side experiment must be visible, bounded, and have a tested

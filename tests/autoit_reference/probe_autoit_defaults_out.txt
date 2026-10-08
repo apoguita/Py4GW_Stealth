@@ -1,0 +1,19 @@
+each control created with no width or height, short text vs long text
+Button     short=23x25     long=147x25   
+Label      short=18x21     long=163x21   
+Input      short=200x20    long=200x20   
+Edit       short=200x150   long=200x150  
+Checkbox   short=25x21     long=176x21   
+Radio      short=21x21     long=148x21   
+Combo      short=200x21    long=200x21   
+List       short=200x149   long=200x149  
+Progress   short=0x0       long=0x0      
+Slider     short=0x0       long=0x0      
+Tab        short=150x150   long=150x150  
+TreeView   short=150x150   long=150x150  
+ListView   short=150x150   long=150x150  
+Date       short=200x20    long=200x20   
+MonthCal   short=229x164   long=229x164  
+Group      short=200x150   long=200x150  
+Pic        short=150x150   long=150x150  
+Graphic    short=150x150   long=150x150  

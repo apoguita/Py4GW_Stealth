@@ -1,0 +1,21 @@
+graphic control box = 10,10,240,160
+command: MOVE 20,120 then BEZIER x=200 y=120 x1=20 y1=20 x2=200 y2=20
+column 20: darkest row 111 (value 0)
+column 40: darkest row 71 (value 0)
+column 60: darkest row 57 (value 0)
+column 80: darkest row 49 (value 0)
+column 100: darkest row 46 (value 0)
+column 120: darkest row 46 (value 0)
+column 140: darkest row 49 (value 0)
+column 160: darkest row 57 (value 0)
+column 180: darkest row 71 (value 0)
+command: MOVE 20,20 then BEZIER x=220 y=20 x1=20 y1=150 x2=220 y2=150
+red column 20: darkest row 111 (red 0)
+red column 40: darkest row 71 (red 0)
+red column 60: darkest row 57 (red 0)
+red column 80: darkest row 49 (red 0)
+red column 100: darkest row 46 (red 0)
+red column 120: darkest row 46 (red 0)
+red column 140: darkest row 49 (red 0)
+red column 160: darkest row 57 (red 0)
+red column 180: darkest row 71 (red 0)

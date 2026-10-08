@@ -1,0 +1,59 @@
+gui=0x01470ECA
+input=0x01CC0C88 button=0x02850A4C
+
+[A] no tip at all:
+
+
+[B] a titled tip on the input, a plain tip on the button:
+0x02350E8E|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='' icon=0|tool=uId=42273356 flags=0x0000000000000051 text=''
+0x00EF0D74|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='First title' icon=1|tool=uId=30149768 flags=0x0000000000000051 text=''
+
+
+[C] the button's tip titled, without touching the input's:
+0x02360E8E|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='Second title' icon=3|tool=uId=42273356 flags=0x0000000000000051 text=''
+0x00EF0D74|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='First title' icon=1|tool=uId=30149768 flags=0x0000000000000051 text=''
+
+
+[D] the input's tip set again, same parameters:
+0x00F00D74|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='First title' icon=1|tool=uId=30149768 flags=0x0000000000000051 text=''
+0x02360E8E|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='Second title' icon=3|tool=uId=42273356 flags=0x0000000000000051 text=''
+
+
+[E] the input's tip changed to a new text, title and icon:
+0x00F10D74|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='Changed' icon=2|tool=uId=30149768 flags=0x0000000000000051 text=''
+0x02360E8E|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='Second title' icon=3|tool=uId=42273356 flags=0x0000000000000051 text=''
+
+
+[F] $TIP_BALLOON on the input, whose tip was plain:
+0x00F20D74|style=0x84000053|ex=0x00080088|tools=1|parent=0x01470ECA|title='Changed' icon=2|tool=uId=30149768 flags=0x0000000000000051 text=''
+0x02360E8E|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='Second title' icon=3|tool=uId=42273356 flags=0x0000000000000051 text=''
+
+
+[G] $TIP_BALLOON on the third input, which had no tip:
+0x01AD0B44|style=0x84000053|ex=0x00080088|tools=1|parent=0x01470ECA|title='Balloon' icon=0|tool=uId=23269042 flags=0x0000000000000051 text=''
+0x00F20D74|style=0x84000053|ex=0x00080088|tools=1|parent=0x01470ECA|title='Changed' icon=2|tool=uId=30149768 flags=0x0000000000000051 text=''
+0x02360E8E|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='Second title' icon=3|tool=uId=42273356 flags=0x0000000000000051 text=''
+
+
+[H] $TIP_CENTER on the fourth control:
+0x01CD0B18|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='Centre' icon=0|tool=uId=21040778 flags=0x0000000000000053 text=''
+0x01AD0B44|style=0x84000053|ex=0x00080088|tools=1|parent=0x01470ECA|title='Balloon' icon=0|tool=uId=23269042 flags=0x0000000000000051 text=''
+0x00F20D74|style=0x84000053|ex=0x00080088|tools=1|parent=0x01470ECA|title='Changed' icon=2|tool=uId=30149768 flags=0x0000000000000051 text=''
+0x02360E8E|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='Second title' icon=3|tool=uId=42273356 flags=0x0000000000000051 text=''
+
+
+[I] $TIP_FORCEVISIBLE on the fourth control:
+0x01CE0B18|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='Force' icon=0|tool=uId=21040778 flags=0x0000000000000051 text=''
+0x01AD0B44|style=0x84000053|ex=0x00080088|tools=1|parent=0x01470ECA|title='Balloon' icon=0|tool=uId=23269042 flags=0x0000000000000051 text=''
+0x00F20D74|style=0x84000053|ex=0x00080088|tools=1|parent=0x01470ECA|title='Changed' icon=2|tool=uId=30149768 flags=0x0000000000000051 text=''
+0x02360E8E|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='Second title' icon=3|tool=uId=42273356 flags=0x0000000000000051 text=''
+
+
+[J] after deleting the third control (the balloon one):
+0x01CE0B18|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='Force' icon=0|tool=uId=21040778 flags=0x0000000000000051 text=''
+0x00F20D74|style=0x84000053|ex=0x00080088|tools=1|parent=0x01470ECA|title='Changed' icon=2|tool=uId=30149768 flags=0x0000000000000051 text=''
+0x02360E8E|style=0x84000013|ex=0x00080088|tools=1|parent=0x01470ECA|title='Second title' icon=3|tool=uId=42273356 flags=0x0000000000000051 text=''
+
+
+[K] after deleting the window:
+

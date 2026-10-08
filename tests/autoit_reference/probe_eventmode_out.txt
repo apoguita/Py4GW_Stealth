@@ -1,0 +1,6 @@
+dummy-id=3
+calls-before-sleep=1
+calls-after-sleep=1
+events=ctrlid=3,win=True,ctrlhandle=0x00000000;
+msgloop-GetMsg=3 (dummy-id match=True)
+msgloop-GetMsg-again=0

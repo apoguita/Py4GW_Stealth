@@ -1,0 +1,14 @@
+[lv] before: col0=ColA col1=ColB read=0
+[lv] GUICtrlSetData ret=1 col0=X col1=Y
+[lv] after: item count=1 col2 text=[Y] count=2
+[lvitem] state before=80
+[lvitem] read=a|b| advanced=1 getstate=80
+[lvitem] after uncheck read=a|b| advanced=4
+[updown] read= input=5 getstate=80
+[updown] after SetData(12) read= input=5
+[updown] after SetLimit read= input=5
+[hide] shown pos=1481,713 size=90x25
+[hide] after hide/move/show pos=1511,753 size=90x25
+[timing] GUIGetMsg idle average ms=14.6978
+[dummy] read=0
+[sendmsg] BM_CLICK returned=0
