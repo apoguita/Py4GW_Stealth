@@ -1,0 +1,96 @@
+=== skillbar slots: started Sat 10/10/2026 12:41:15.07 === 
+connected read-only to pid 19696
+player agent id 35
+skillbars the port reads: 1
+matched skillbar index 0 at 0x266829b0 (stride 0xbc)
+
+--- flat dwords from +0x00 (index: offset value) ---
+   0 +0x000           35 0x00000023
+   1 +0x004            0 0x00000000
+   2 +0x008            0 0x00000000
+   3 +0x00C            0 0x00000000
+   4 +0x010          330 0x0000014a
+   5 +0x014            0 0x00000000
+   6 +0x018            0 0x00000000
+   7 +0x01C            0 0x00000000
+   8 +0x020            0 0x00000000
+   9 +0x024         2107 0x0000083b
+  10 +0x028            0 0x00000000
+  11 +0x02C            0 0x00000000
+  12 +0x030            0 0x00000000
+  13 +0x034            0 0x00000000
+  14 +0x038            0 0x00000000
+  15 +0x03C            0 0x00000000
+  16 +0x040            0 0x00000000
+  17 +0x044            0 0x00000000
+  18 +0x048            0 0x00000000
+  19 +0x04C         1506 0x000005e2
+  20 +0x050            0 0x00000000
+  21 +0x054            0 0x00000000
+  22 +0x058            0 0x00000000
+  23 +0x05C            0 0x00000000
+  24 +0x060          343 0x00000157
+  25 +0x064            0 0x00000000
+  26 +0x068            0 0x00000000
+  27 +0x06C            0 0x00000000
+  28 +0x070            0 0x00000000
+  29 +0x074          336 0x00000150
+  30 +0x078            0 0x00000000
+  31 +0x07C            0 0x00000000
+  32 +0x080            0 0x00000000
+  33 +0x084            0 0x00000000
+  34 +0x088         3426 0x00000d62
+  35 +0x08C            0 0x00000000
+  36 +0x090            0 0x00000000
+  37 +0x094            0 0x00000000
+  38 +0x098            0 0x00000000
+  39 +0x09C            0 0x00000000
+  40 +0x0A0            0 0x00000000
+  41 +0x0A4            0 0x00000000
+  42 +0x0A8            0 0x00000000
+  43 +0x0AC            0 0x00000000
+  44 +0x0B0            0 0x00000000
+  45 +0x0B4           32 0x00000020
+  46 +0x0B8            8 0x00000008
+  47 +0x0BC            0 0x00000000
+
+--- the port's slot records, as the port declares them ---
+  slot 1: adrenaline_a=0 adrenaline_b=0 recharge=0 skill_id=330 event=0
+  slot 2: adrenaline_a=0 adrenaline_b=0 recharge=0 skill_id=2107 event=0
+  slot 3: adrenaline_a=0 adrenaline_b=0 recharge=0 skill_id=0 event=0
+  slot 4: adrenaline_a=0 adrenaline_b=0 recharge=0 skill_id=1506 event=0
+  slot 5: adrenaline_a=0 adrenaline_b=0 recharge=0 skill_id=343 event=0
+  slot 6: adrenaline_a=0 adrenaline_b=0 recharge=0 skill_id=336 event=0
+  slot 7: adrenaline_a=0 adrenaline_b=0 recharge=0 skill_id=3426 event=0
+  slot 8: adrenaline_a=0 adrenaline_b=0 recharge=0 skill_id=0 event=0
+
+--- candidate bases: which 0x14 stride shows the port's ids at skill_id +0xC? ---
+  port ids: [330, 2107, 1506, 343, 336, 3426]
+  base +0x00: id-word [0, 0, 0, 0, 0, 0, 0, 0]
+           first-word [35, 0, 0, 0, 0, 0, 0, 0]
+  base +0x04: id-word [330, 2107, 0, 1506, 343, 336, 3426, 0]
+           first-word [0, 0, 0, 0, 0, 0, 0, 0]
+  base +0x08: id-word [0, 0, 0, 0, 0, 0, 0, 0]
+           first-word [0, 0, 0, 0, 0, 0, 0, 0]
+  base +0x0C: id-word [0, 0, 0, 0, 0, 0, 0, 0]
+           first-word [0, 0, 0, 0, 0, 0, 0, 0]
+  base +0x10: id-word [0, 0, 0, 0, 0, 0, 0, 0]
+           first-word [330, 2107, 0, 1506, 343, 336, 3426, 0]
+  base +0x14: id-word [0, 0, 0, 0, 0, 0, 0, 0]
+           first-word [0, 0, 0, 0, 0, 0, 0, 0]
+  base +0x18: id-word [2107, 0, 1506, 343, 336, 3426, 0, 0]
+           first-word [0, 0, 0, 0, 0, 0, 0, 0]
+
+--- the layer's answers ---
+  slot 1: SkillID=330 HasSkill=True Adrenaline=0 Event=0
+  slot 2: SkillID=2107 HasSkill=True Adrenaline=0 Event=0
+  slot 3: SkillID=0 HasSkill=False Adrenaline=0 Event=0
+  slot 4: SkillID=1506 HasSkill=True Adrenaline=0 Event=0
+  slot 5: SkillID=343 HasSkill=True Adrenaline=0 Event=0
+  slot 6: SkillID=336 HasSkill=True Adrenaline=0 Event=0
+  slot 7: SkillID=3426 HasSkill=True Adrenaline=0 Event=0
+  slot 8: SkillID=0 HasSkill=False Adrenaline=0 Event=0
+
+  layer AgentID=35 (player 35)
+  layer timer=2155376297
+=== exit=0 === 

@@ -473,3 +473,90 @@ the connect **refuses**, all four entries read back byte-for-byte identical to a
 the client stays healthy. That is the direction the old repair damaged. Run: elevated
 `python -m unittest tests.test_live_coexistence -v` (`tests/live_reports/live_coexistence_reforged_first.txt`,
 `tests/live_reports/live_refusal_text.txt`).
+
+
+## 2026-10-08 — the GwAu3 audit: the one root gap, and the functions with no resolver here
+
+`external/GwAu3` was audited for a single question: **does it reach anything in the client that this
+project cannot?** Its authority is tier 5 (`AGENTS.md`), so everything below was revalidated here before
+being written down — the revalidation is named in each row, and the parts that did *not* survive are in
+[`RESEARCH.md`](RESEARCH.md).
+
+### The root gap: nothing here sends a CtoS packet
+
+`verified` — `py4gw/**/*.py` swept for `ctos|CtoS|send_packet|SendPacket|send_raw` returns **zero
+matches**, while `offsets/ctos.json` resolves `ctos.send_target` and `ctos.game_server_object`. The two
+name the same client function: this port's anchor (`F7 00 C7 47 54 01 00 00 00 1B 00`) contains the
+`mov [edi+0x54], …` instruction GwAu3's `PacketSend` pattern anchors on (`GwAu3_Core.au3:66`). **The
+send path resolves and nothing calls it.**
+
+Every action this project performs goes through the client's *own* functions —
+`send_agent_dialog_func`, `use_skill_func`, `transact_item_func`, `find_path_func` — which compose and
+send their packet themselves. That is what makes the port match its sources. The consequence is the one
+to weigh: **an action neither source wrapped has no route here at all**, and across GwAu3's `Cmd`
+modules the packet send is its largest single substrate (**74 `Core_SendPacket` sites against 64
+`Core_Enqueue`**).
+
+Closing it needs a call form this project does not have: `CallForm` carries thirteen shapes and none is a
+variable-length packet, so the vocabulary's next item is the **string/packet form** already named under
+"Not implemented yet" above.
+
+### Client functions GwAu3 locates that have no resolver in this catalog
+
+Each checked by name against `offsets/*.json` and by member against `py4gw/`.
+
+| GwAu3 pattern | GwAu3 | here |
+| --- | --- | --- |
+| `IncreaseAttribute`, `DecreaseAttribute` | `GwAu3_Core.au3:87-88` | **no resolver, no member** — attribute-point spending has no route, while every attribute *read* is ported |
+| `InvCanIdentifyAll`, `InvIdentifyAll`, `InvCanDepositAllMaterials`, `InvDepositAllMaterials` | `:97-100` | **no resolver**; the frame ids exist (`frame_ids.py`), the actions do not |
+| 7 × `TradeSess*` plus `TradeCancel` | `:105-111`, `:126` | **no resolver and no member** — `py4gw/context/trade_context.py` reads a trade; nothing acts on one |
+| `DropBundle` | `:101` | **no resolver**; the frame id exists |
+
+Two adjacent findings, and the second is the useful one:
+
+- `QueryPropIntersect` (`:103`) — a prop raycast returning hit, distance and prop index. This project
+  **already has the address**: `map.map_cli_query_intersection_func` and
+  `map.terrain_query_intersection_func` are in the catalog and **no Python calls either** (`verified`:
+  eight offset hits, zero `py4gw` hits).
+- `UseHeroSkill` (`:78`) is **not** a gap, and is listed here because the name invites the wrong
+  conclusion: this port drives hero skills through the client's own control actions (`ui::Keypress`),
+  the route `Party.Heroes.UseSkill` uses, and it works. Checked rather than assumed.
+
+### Two UI-message ids this port is missing
+
+`verified` against `py4gw/enums_src/ui_enums.py`:
+
+| id | meaning | here |
+| --- | --- | --- |
+| `0x10000040` | open the Xunlai chest (`kShowXunlaiChest`) | **present** — so `PyInventory.OpenXunlaiWindow`'s raise is wiring, not capability |
+| `0x100000FE` | close the salvage confirm dialog | **absent** |
+| `0x1000010A` | close the inventory-upgrade confirm dialog | **absent** |
+
+The sender is live-verified (`send_ui_message_raw`), so those two absences are two constants.
+
+### Process-level mechanism GwAu3 has and this project does not
+
+`verified` by sweep. None of these is a game-data gap.
+
+- **`CreateRemoteThread`** — GwAu3 runs a free-standing routine in the client on demand
+  (`GwAu3_Core_Scanner.au3:754-768`). This project has no remote-thread path and **refuses one on
+  purpose** (see "Constraints"): its payload runs only when the client reaches a hooked entry, which is
+  why a client sitting at a menu aborts an install.
+- **`VirtualQueryEx`** — GwAu3 walks the whole address space (`:607-638`); this project's scanner is
+  bounded to the main module's PE sections, so it cannot find or validate anything outside the client's
+  image — including a payload another controller left behind.
+- **Input synthesis** (`ControlSend`) — GwAu3 drives the character-select screen. This project has no
+  input API at all, so it can read the pre-game screen and not act on it.
+- **The client's assertion stream** — GwAu3 detours `ErrorAssertion` and forwards expression, file and
+  line (`AssertLog_Core.au3:21, 60-86`). This project has nothing there; `offsets/crash.json` is a stub.
+- **Render suppression** — GwAu3 replaces the render entry to skip drawing. This project hooks the same
+  function to *capture*, never to skip.
+
+### And the register: what is in neither source, therefore not portable
+
+Reforged has **no `Trade.py`** and **no `Guild.py`** (`verified` by module listing), and its
+`PacketSniffer.py` only *observes* CtoS — it never composes one. So the trade-session actions, guild
+invite and invite-guest, attribute-point spending, a raw CtoS send, ping, prop raycast and
+`GetLastMoveCoords` are **GwAu3-only**. Under `AGENTS.md`'s first cornerstone they do not come here:
+*"Nothing that is in neither source may be added here."* They are recorded here so they stop reading as
+a queue.

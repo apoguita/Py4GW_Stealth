@@ -279,6 +279,26 @@ class AttributeStruct(TargetStruct):
 
         return self.name
 
+class AttributeInfoStruct(TargetStruct):
+    """The native 0x14 attribute-constant record (``GW/context/attribute.h:21-28``).
+
+    ``Context::GetAttributeInfoArray`` is the client's own table of attribute constants, indexed by
+    ``Constants::Attribute`` and bounded by ``g_attribute_array_count`` (``skillbar.cpp:41`` — the
+    literal ``0x33``). ``skillbar``'s readers over this record are ``GetAttributeConstantData``
+    (``skillbar_methods.cpp:78-83``), ``GetAttributeProfession`` (``skillbar.cpp:102-126``) and the
+    template decoder's own range check (``skillbar_methods.cpp:244-249``).
+    """
+
+    _pack_ = 1
+    _fields_ = [
+        ("profession_id", c_uint32),
+        ("attribute_id", c_uint32),
+        ("name_id", c_uint32),
+        ("desc_id", c_uint32),
+        ("is_pve", c_uint32),
+    ]
+
+
 class PartyAttributeStruct(TargetStruct):
     """The native 0x43C attribute block for one party agent."""
 

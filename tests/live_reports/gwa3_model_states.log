@@ -1,0 +1,12 @@
+=== model-state probe: started Sat 10/10/2026 14:59:20.98 === 
+--- connected read-only to pid 19696 ---
+living agents: 43
+model states seen:
+  0x040 (  64) x  4  data-file says IsIdle; decoder says IsAttacking
+  0x042 (  66) x  2  
+  0x044 (  68) x 36  data-file says IsIdle; decoder says IsIdle
+  0x04C (  76) x  1  
+disagreements between the two GwAu3 definitions, and layer-vs-Native:
+    4  IsAttacking: 0x40
+    4  IsIdle: 0x40
+=== exit=0 === 

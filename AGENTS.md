@@ -347,9 +347,107 @@ assessment of `FrameCache` and `GLOBAL_CACHE` is in
 
 ## Engineering and Verification
 
+### One verification pass per work package (owner's directive, 2026-10-10)
+
+**The owner's instruction, verbatim: *"port them and do one single test at the end, you waste too
+much time regressing test after test over and over again."*** That is the rule, and it is not a
+suggestion:
+
+- **Port the whole batch first.** A work package is a set of members, a family, a script's missing
+  routines — write all of it, then verify once.
+- **Run the tests once, at the end of the package.** One offline pass. One live pass at most, and only
+  if the package touches the client. No run after each edit, each member, each generated file, or each
+  small fix.
+- **A failing run ends the package's testing, not the batch.** Fix everything that run reported, then
+  run **once** more. Never "run, fix one thing, run" in a loop.
+- **Generators are part of the batch, not the test loop.** Run `tools/generate_gwa3_*.py` and
+  `tools/analyze_gwa3_example_parity.py` as the last steps *before* the single pass, so the
+  staleness guards in the suite (`test_gwa3_route_map_offline`, the declared-surface tests) are
+  satisfied when it runs rather than discovered by it.
+- **Exact counts in the docs are not a gate.** Test counts, route counts and wrapper counts in
+  `docs/GWA3_COMPAT_SPEC.md` are updated when a package lands, never per edit, and no test asserts
+  them.
+- **What the single pass must still prove is unchanged**: a claim is not `verified` until it has been
+  run, refusals are asserted, and live evidence is kept separate from offline tests. Fewer runs, the
+  same evidence.
+
+### Parity first, then the Pythonic equivalent (owner's directive, 2026-10-10)
+
+**The owner's instruction: *"we should try to find parity on gwau3 if possible, if its not possible we
+should look for a similar pythonic way."*** So a GwAu3 member has three outcomes, in this order:
+
+1. **Parity** — the ported class has the same member or field the GwAu3 body reads, and the port calls
+   it, with GwAu3's names, arguments, defaults and return shape. Nothing is written by hand.
+2. **The Pythonic equivalent** — the port *has* the data but under a different shape, or the GwAu3
+   mechanism is one this project does not use. Then the member is written over the port's own readers
+   and members, the divergence is recorded on the member in one honest sentence (what GwAu3 does, what
+   this does, why), and it is never a refusal for that reason alone.
+3. **A refusal** — only when the effect cannot be produced at all, and then it names the capability
+   that is missing.
+
+The worked case: GwAu3's `Item_GetInventoryArray` puts a byte at ``+0x22`` in a column it calls
+``EXTRAID``; this port declares that byte as **named nibbles** (`DyeInfoStruct.dye1..dye4`,
+``py4gw/context/item_context.py:120-130``), so the column is answered as the packing of the two named
+nibbles. Same for the pointer column: GwAu3 hands back client addresses, this layer hands out none, so
+the column answers the item's **id** -- the identity this library uses -- and the divergence is written
+on the member. Neither is a refusal.
+
+**And the layer is the user-facing surface, not GwAu3's memory plumbing (owner's correction,
+2026-10-10).** The owner's ruling stands at the top of `docs/GWA3_COMPAT_SPEC.md`: *"i didnt mean copy
+the entirety of gwau3 ... what i need is the user end facing routines, constants, functions."* So:
+
+- **A client address is never an answer.** Where GwAu3's name returns one -- `Item_GetItemPtr`,
+  `Item_GetBagPtr`, `PreGame_Ptr`, an array of pointers -- the member answers the **record**, the
+  **id**, a list of those, or the plain boolean a caller's own guard tests, at the same name and with
+  GwAu3's arguments. The divergence is one sentence on the member.
+- **A raw accessor that exists only to feed GwAu3's internals is the lowest priority in the layer**,
+  and is written only when a user-facing flow actually calls it -- never because it appears in a
+  script's call list.
+- **Prefer the library's own vocabulary** for the value: an `ItemStruct`, an agent id, a character
+  name, a Windows window handle. Those are things a caller can use; an offset into another process is
+  not.
+
+### Stealth owns the data (owner's directive, 2026-10-10)
+
+**The owner's instruction, verbatim: *"stealth owns the data now, if stealth has access we use stealth
+access no matter what gwau3 says."*** This is the ruling that settles every remaining argument about a
+key, an offset or a mechanism:
+
+- **If this project can reach the fact, the member answers the fact.** GwAu3's offsets, its injected
+  block, its scan-resolved globals and its own bookkeeping are *leads*, not authority. Where GwAu3 reads
+  `+0x228` and Stealth's record names the field at `+0x22C`, the member answers **Stealth's field** --
+  and the disagreement is recorded on the member as a finding, not used as a reason to answer nothing.
+- **A refusal now has exactly one justification: this project has no access to the fact.** "GwAu3
+  reaches it by a mechanism we do not use", "GwAu3 hands back an address", "GwAu3's offset disagrees",
+  "GwAu3 keeps it in its own memory" are **not** refusals any more. Each of those is either answered
+  from Stealth's own reader (the record, the id, the list, the string, the handle) or, when the value is
+  GwAu3's *own* controller-side state, **transcribed as this layer's own state** -- the way `uai_const.py`
+  carries the plugin's mutable state and `Map_Move` now stores the last-move pair its reader answers.
+- **The names, arguments, defaults and return shapes stay GwAu3's.** That is the whole point of the
+  layer: a migrating script keeps its call, and gets Stealth's data behind it.
+- **What this retires, concretely:** refusals whose only ground was a mechanism (`Memory_Read`,
+  `Utils_TList_*`, `Pathfinder_*`, the `*ContextPtr` spellings, the item inventory-id/capacity readers,
+  the merchant quote-id and buy-base readers, `Map_GetMapContextInfo("Terrain"/"Zones")`,
+  `Ui_GetRender*`). Each gets re-examined against what this project can actually reach, and answered
+  from it or refused only for a missing read that is named.
+
+**And the dependency runs one way only: the layer imports the library, never the reverse.** The ported
+classes under `py4gw/` are the port of Reforged and Reforged Native and must stand on their own; a
+`from .gwa3... import ...` inside `py4gw/` makes the library depend on a compatibility shim built on top
+of it, which inverts the project. So when a layer member needs this project's *own* state kept in step:
+
+- **The writer lives in the layer and is called from a layer member.** If the layer has no member that
+  performs the action yet, the state does not advance and the member **says exactly that** -- naming the
+  layer path that would advance it -- rather than reaching back into the library to hook one.
+- **Or the value is derived, not hooked:** the layer reads what it already reads and answers a value
+  computed from it (a change detector over the values it observes, for instance), with the divergence
+  stated in one sentence on the member.
+- **A library-side hook is never the fix**, however small it looks, and `py4gw/gwa3/__init__.py`'s own
+  note that the library imports none of this is the statement being kept true.
+
 - Keep public Python APIs explicitly typed and intentional.
 - Preserve Windows error codes and diagnostic context. A failure must identify the PID, module/address when safe to report, operation, expected result, and observed result.
-- Test generic logic without a live target first: structure offsets, pointer-width behavior, signature parsing, bounded read failures, and address validation.
+- Test generic logic without a live target first: structure offsets, pointer-width behavior, signature parsing, bounded read failures, and address validation. **This is about which tests to write, not how often to run them** — see the rule above.
 - Keep live-client evidence separate from offline tests. Record target build/version, timestamp, inputs, expected behavior, observed behavior, and cleanup result.
 - Match controller bitness to the target for early x86 experiments unless a cross-bitness design has been explicitly verified.
 - Do not rely on Python finalizers for handles or process state. Use explicit close/context-manager ownership when resource-owning code is introduced.

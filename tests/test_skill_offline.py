@@ -25,6 +25,8 @@ compared with the switches in ``skill_names.cpp``.
 from __future__ import annotations
 
 import ast
+import collections
+import hashlib
 import re
 import ctypes
 import struct
@@ -48,6 +50,8 @@ from py4gw.skill import (
     SkillProfession,
     SkillType,
 )
+from py4gw import skill as skill_module
+from py4gw.enums_src.texture_enums import ProfessionTextureMap, SkillTextureMap
 from py4gw.enums_src.skill_names import (
     ID_TO_NAME,
     NAME_TO_ID,
@@ -209,8 +213,16 @@ class SkillSurfaceTests(unittest.TestCase):
                 self.assertEqual(ported, self._member_names(source_node))
 
     def test_the_description_cache_attribute_is_the_sources(self) -> None:
-        """``_desc_cache = None`` (``Skill.py:7``) is the declared class attribute."""
+        """``_desc_cache = None`` (``Skill.py:7``) is the declared class attribute.
 
+        Reset first: another test may already have loaded the corpus into it, and what this pins is the
+        source's *declaration* — that the attribute lives on the class and starts ``None``.
+        """
+
+        self.assertIn("_desc_cache", vars(Skill))
+        original = Skill._desc_cache
+        self.addCleanup(setattr, Skill, "_desc_cache", original)
+        Skill._desc_cache = None
         self.assertIsNone(Skill._desc_cache)
 
     def test_the_binding_object_carries_every_field_the_source_reads(self) -> None:
@@ -514,13 +526,13 @@ class SkillMemberTests(unittest.TestCase):
         self.assertEqual(hash(SkillID(7)), hash(7))
 
 
-class SkillRaisingTests(unittest.TestCase):
-    """The members that are not built yet name the table each one needs.
+class SkillEdgeCaseTests(unittest.TestCase):
+    """The members that used to raise, and the port's own usage error.
 
-    Each of these members reaches its missing table *through* the binding object — the source's own
-    order is ``Skill.skill_instance(skill_id).id.GetName()`` — so the tests supply a record the way a
-    connection would, and the raise that surfaces is the missing table's. Without a connection the
-    first failure is the usage error, which is the port's behaviour for every reader.
+    **Every member of ``Skill`` now answers**, so this class no longer pins a raising set. What is
+    left here is the two members that reach their table *through* the binding object — the source's own
+    order is ``Skill.skill_instance(skill_id).id.GetName()`` — driven with a supplied record the way a
+    connection would supply one, plus the port's own usage error for a reader with no connection.
     """
 
     def setUp(self) -> None:
@@ -529,13 +541,6 @@ class SkillRaisingTests(unittest.TestCase):
         self._patch = mock.patch("py4gw.client._current_client", client)
         self._patch.start()
         self.addCleanup(self._patch.stop)
-
-    def _assert_names(self, call: Any, requirement: str) -> None:
-        with self.assertRaises(NotImplementedError) as caught:
-            call()
-        message = str(caught.exception)
-        self.assertIn(requirement, message)
-        self.assertIn("The source's member works", message)
 
     def test_get_name_and_get_id_read_the_generated_table(self) -> None:
         """``Skill.GetName``/``Skill.GetID`` over native's ``kSkillNameTable``, both directions."""
@@ -548,22 +553,31 @@ class SkillRaisingTests(unittest.TestCase):
             self.assertEqual(Skill.GetID("Illusionary_Weaponry"), 33)
             self.assertEqual(Skill.GetID("Not_A_Skill"), 0)
 
-    def test_get_campaign_names_the_region_enums(self) -> None:
-        self._assert_names(lambda: Skill.GetCampaign(1), "CampaignName")
+    def test_get_campaign_answers_the_region_enums_name(self) -> None:
+        """``Skill.py:87-92`` over this port's ``CampaignName`` (``region_enums.py:144``).
 
-    def test_get_texture_path_names_the_texture_enums(self) -> None:
-        self._assert_names(lambda: Skill.ExtraData.GetTexturePath(1), "SkillTextureMap")
+        The member is built, so it answers the pair the source answers: the record's own ``campaign``
+        word and the name table's entry for it. The setUp's record leaves ``campaign`` at ``0``, which
+        is ``Campaign.Core`` — the same key ``Map.GetCampaign`` reads (``map.py:434``).
+        """
 
-    def test_the_description_members_name_the_bundled_json(self) -> None:
-        for call in (
-            lambda: Skill.GetDescription(1),
-            lambda: Skill.GetConciseDescription(1),
-            lambda: Skill.GetURL(1),
-            lambda: Skill.GetProgressionData(1),
-            lambda: Skill.GetNameFromWiki(1),
-        ):
-            with self.subTest(call=call):
-                self._assert_names(call, "skill_descriptions.json")
+        self.assertEqual(Skill.GetCampaign(1), (0, "Core"))
+
+    def test_get_texture_path_is_the_sources_three_lines(self) -> None:
+        """``Skill.py:499-503``: the table's file name, the literal prefix, ``""`` on a miss."""
+
+        self.assertEqual(
+            Skill.ExtraData.GetTexturePath(1),
+            "Assets\\Textures\\Skill_Icons\\[1] - Healing Signet.jpg",
+        )
+        self.assertEqual(
+            Skill.ExtraData.GetTexturePath(192),
+            "Assets\\Textures\\Skill_Icons\\[192] - Meteor Shower.jpg",
+        )
+        # Skill 4 is commented out in Reforged's own table, so the lookup misses and the source
+        # answers ``""`` — the port matches the source rather than filling the gap.
+        self.assertEqual(Skill.ExtraData.GetTexturePath(4), "")
+        self.assertEqual(Skill.ExtraData.GetTexturePath(99999), "")
 
     def test_the_binding_needs_a_connection_before_it_can_answer(self) -> None:
         """With no client the failure is the port's usage error, not a wrong value."""
@@ -572,6 +586,196 @@ class SkillRaisingTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as caught:
                 Skill.Data.GetEnergyCost(1)
             self.assertIn("connect()", str(caught.exception))
+
+
+class SkillDescriptionsTests(unittest.TestCase):
+    """The description group reads the source's own ``skill_descriptions.json``.
+
+    ``Skill._load_descriptions`` (``Skill.py:9-15``) is the source's three lines — the cache
+    short-circuit, the path built from the module's own directory, and ``json.load`` under
+    ``encoding="utf-8"`` — and the five members are the source's own one-liners over that dict.
+
+    The corpus is the source's file, copied beside the module byte for byte, so it is pinned here by
+    digest, size and entry count, and compared against Reforged's own copy whenever that checkout is
+    present. That comparison is the point: it is what makes "the corpus is the source's" a check rather
+    than a claim.
+    """
+
+    #: Reforged's copy, and this port's.
+    SOURCE_JSON = Path(r"C:\Users\Apo\Py4GW_Reforged\Py4GWCoreLib\skill_descriptions.json")
+    PORTED_JSON = Path(__file__).resolve().parents[1] / "py4gw" / "skill_descriptions.json"
+
+    #: The source file's own identity, measured from Reforged's copy (2026-10-08).
+    SIZE = 1975988
+    ENTRIES = 1488
+    SHA256 = "ca0a514934c7461559876af8bebc42ccbb84812b005fe4ea7d7d5752635bbd20"
+
+    def setUp(self) -> None:
+        client = mock.Mock()
+        client.read_skill = mock.Mock(return_value=_record(skill_id=1, type=4))
+        self._patch = mock.patch("py4gw.client._current_client", client)
+        self._patch.start()
+        self.addCleanup(self._patch.stop)
+        self.addCleanup(setattr, Skill, "_desc_cache", Skill._desc_cache)
+
+    def test_the_corpus_is_the_file_the_source_reads(self) -> None:
+        """Its digest, its size and its entry count, and that the loader opens it."""
+
+        self.assertTrue(self.PORTED_JSON.is_file(), self.PORTED_JSON)
+        self.assertEqual(self.PORTED_JSON.stat().st_size, self.SIZE)
+        self.assertEqual(
+            hashlib.sha256(self.PORTED_JSON.read_bytes()).hexdigest(), self.SHA256
+        )
+        self.assertEqual(len(Skill._load_descriptions()), self.ENTRIES)
+
+    def test_the_corpus_is_byte_for_byte_reforgeds(self) -> None:
+        """The two files are compared, not assumed equal, when Reforged's checkout is present."""
+
+        if not self.SOURCE_JSON.is_file():
+            self.skipTest(f"Reforged's copy is not at {self.SOURCE_JSON}")
+        self.assertEqual(self.PORTED_JSON.read_bytes(), self.SOURCE_JSON.read_bytes())
+
+    def test_the_loader_caches_on_the_sources_attribute(self) -> None:
+        """``Skill.py:11-15``: one load, then the same dict on every later call."""
+
+        Skill._desc_cache = None
+        first = Skill._load_descriptions()
+        self.assertIs(Skill._desc_cache, first)
+        self.assertIs(Skill._load_descriptions(), first)
+
+    def test_every_member_answers_its_own_key_for_the_same_entry(self) -> None:
+        """``name``/``url``/``desc_full``/``desc_concise``, read out of the corpus for 25 entries."""
+
+        data = Skill._load_descriptions()
+        checked = 0
+        for key, entry in data.items():
+            if not all(field in entry for field in ("name", "url", "desc_full", "desc_concise")):
+                continue
+            skill_id = int(key)
+            with self.subTest(skill_id=skill_id):
+                self.assertEqual(Skill.GetNameFromWiki(skill_id), entry["name"])
+                self.assertEqual(Skill.GetURL(skill_id), entry["url"])
+                self.assertEqual(Skill.GetDescription(skill_id), entry["desc_full"])
+                self.assertEqual(Skill.GetConciseDescription(skill_id), entry["desc_concise"])
+            checked += 1
+            if checked == 25:
+                break
+        self.assertEqual(checked, 25, "the corpus held fewer than 25 complete entries")
+
+    def test_the_progression_rows_are_the_sources_tuples(self) -> None:
+        """``Skill.py:38-61``: ``(attribute, field, {int: float})``, one row per progression.
+
+        Agonizing Chop's own row — 22 points, ``+Damage`` under Axe Mastery — is pinned key type,
+        value type and both ends of the range, because that is exactly what the source's
+        ``{int(k): float(v) ...}`` comprehension is for.
+        """
+
+        rows = Skill.GetProgressionData(1403)
+        self.assertEqual(len(rows), 1)
+        attribute, field, values = rows[0]
+        self.assertEqual(attribute, "Axe Mastery")
+        self.assertEqual(field, "+Damage")
+        self.assertEqual(len(values), 22)
+        self.assertTrue(all(isinstance(k, int) for k in values))
+        self.assertTrue(all(isinstance(v, float) for v in values.values()))
+        self.assertEqual(sorted(values), list(range(22)))
+        self.assertEqual(min(values.values()), 5.0)
+        self.assertEqual(max(values.values()), 26.0)
+
+    def test_a_skill_with_no_progression_answers_an_empty_list(self) -> None:
+        """``Skill.py:46-49``: no ``progression``, no rows — not ``None``."""
+
+        self.assertEqual(Skill.GetProgressionData(2), [])  # Resurrection Signet
+
+    def test_absent_skills_answer_the_sources_defaults(self) -> None:
+        """``Skill.py:30,36,74,80``: the ``.get`` defaults, never an exception."""
+
+        self.assertEqual(Skill.GetURL(99999), "")
+        self.assertEqual(Skill.GetDescription(99999), "No description available.")
+        self.assertEqual(Skill.GetConciseDescription(99999), "No description available.")
+        self.assertEqual(Skill.GetProgressionData(99999), [])
+
+    def test_get_name_from_wiki_falls_back_to_the_name_table(self) -> None:
+        """``Skill.py:30``: the corpus' name, or ``GetName`` when the corpus has no entry.
+
+        The source's default argument is evaluated eagerly, so ``GetName`` is called either way; what
+        this pins is which value the member *returns*.
+        """
+
+        self.assertEqual(Skill.GetNameFromWiki(2), "Resurrection Signet")
+        self.assertEqual(Skill.GetNameFromWiki(99999), Skill.GetName(99999))
+
+
+class SkillTextureTableTests(unittest.TestCase):
+    """``SkillTextureMap`` is Reforged's own table, transcribed rather than retyped.
+
+    The two maps are extracted from the source with ``ast``, so the check that matters is a **byte
+    comparison of the source segments**, not a remembered count. The count is pinned anyway, because
+    the number an earlier docstring carried was wrong: ``~3100`` was the source file's line count, and
+    1,371 of those lines are commented out in Reforged itself. The live table holds **1,720** entries.
+    """
+
+    SOURCE = Path(
+        r"C:\Users\Apo\Py4GW_Reforged\Py4GWCoreLib\enums_src\Texture_enums.py"
+    )
+
+    def test_the_tables_are_the_sources_segments(self) -> None:
+        """Each map's own ``ast`` source segment appears unchanged in the ported module."""
+
+        if not self.SOURCE.is_file():
+            self.skipTest(f"Reforged's Texture_enums.py is not at {self.SOURCE}")
+        source = self.SOURCE.read_text(encoding="utf-8")
+
+        import ast as _ast
+
+        segments: dict[str, str] = {}
+        for node in _ast.parse(source).body:
+            targets = node.targets if isinstance(node, _ast.Assign) else []
+            for target in targets:
+                if isinstance(target, _ast.Name):
+                    segments[target.id] = _ast.get_source_segment(source, node)
+
+        ported = Path(skill_module.__file__).parent / "enums_src" / "texture_enums.py"
+        ported_text = ported.read_text(encoding="utf-8")
+        for name in ("ProfessionTextureMap", "SkillTextureMap", "ITEM_MODEL_TEXTURE_PATH"):
+            with self.subTest(name=name):
+                self.assertIn(segments[name], ported_text)
+
+    def test_the_counts_and_the_key_range_are_the_sources(self) -> None:
+        """1,720 skill icons over keys ``1..3431``, and 10 profession icons over ``1..10``."""
+
+        self.assertEqual(len(SkillTextureMap), 1720)
+        self.assertEqual(min(SkillTextureMap), 1)
+        self.assertEqual(max(SkillTextureMap), 3431)
+        self.assertEqual(len(ProfessionTextureMap), 10)
+        self.assertEqual(sorted(ProfessionTextureMap), list(range(1, 11)))
+
+    def test_a_commented_out_entry_stays_commented_out(self) -> None:
+        """The source comments skill 4 out (``Texture_enums.py:53``); the port holds no entry."""
+
+        self.assertNotIn(4, SkillTextureMap)
+        self.assertEqual(SkillTextureMap[1], "[1] - Healing Signet.jpg")
+        # The table is the source's data, not a normalised copy: 1,718 entries are `.jpg`
+        # and exactly two are `.png` (2699 and 3390), which is how Reforged writes them.
+        extensions = collections.Counter(
+            value.rsplit(".", 1)[-1] for value in SkillTextureMap.values()
+        )
+        self.assertEqual(dict(extensions), {"jpg": 1718, "png": 2})
+        self.assertEqual(SkillTextureMap[2699], "Journey_to_the_North.png")
+        self.assertEqual(SkillTextureMap[3390], "PvP_Flair.png")
+        self.assertTrue(all(value.endswith(".png") for value in ProfessionTextureMap.values()))
+
+    def test_get_texture_for_model_is_the_artifact_it_is_documented_to_be(self) -> None:
+        """It needs the injected runtime's own module directory, and says so instead of guessing."""
+
+        from py4gw.enums_src.texture_enums import get_texture_for_model
+
+        with self.assertRaises(NotImplementedError) as caught:
+            get_texture_for_model(1)
+        message = str(caught.exception)
+        self.assertIn("get_projects_path", message)
+        self.assertIn("process_manager.cpp:38-40", message)
+        self.assertIn("no such module", message)
 
 
 class SkillArrayReaderTests(unittest.TestCase):

@@ -20,8 +20,10 @@ from __future__ import annotations
 import ast
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from py4gw import Map
+from py4gw import map as map_module
 
 REFORGED_SOURCE = Path(r"C:\Users\Apo\Py4GW_Reforged\Py4GWCoreLib\Map.py")
 
@@ -306,6 +308,8 @@ NESTED_IMPLEMENTED: frozenset[str] = frozenset(
         "Map.MissionMap.IsWindowOpen",
         "Map.MissionMap.OpenWindow",
         "Map.MissionMap.CloseWindow",
+        "Map.MissionMap.GetLastClickCoords",
+        "Map.MissionMap.GetLastRightClickCoords",
         "Map.MissionMap.GetMissionMapWindowCoords",
         "Map.MissionMap.GetMissionMapContentsCoords",
         "Map.MissionMap.GetScale",
@@ -405,11 +409,6 @@ NESTED_IMPLEMENTED: frozenset[str] = frozenset(
 #: it names itself instead of returning a value.
 PERMANENT_REFUSALS: tuple[tuple[str, object], ...] = (
     ("MissionMap.IsMouseOver", Map.MissionMap.IsMouseOver),
-    ("MissionMap.GetLastClickCoords", Map.MissionMap.GetLastClickCoords),
-    (
-        "MissionMap.GetLastRightClickCoords",
-        Map.MissionMap.GetLastRightClickCoords,
-    ),
     ("MiniMap.IsMouseOver", Map.MiniMap.IsMouseOver),
     ("MiniMap.GetLastClickCoords", Map.MiniMap.GetLastClickCoords),
     ("MiniMap.GetLastRightClickCoords", Map.MiniMap.GetLastRightClickCoords),
@@ -813,7 +812,84 @@ class RefusalTests(unittest.TestCase):
             "these members are listed as implemented but still refuse",
         )
         self.assertEqual(len(every_path), 178)
-        self.assertEqual(len(implemented_paths), 168)
+        self.assertEqual(len(implemented_paths), 170)
+
+
+class ClickCoordinateTests(unittest.TestCase):
+    """``MissionMap``'s two click-coordinate members, and the four that stay refused.
+
+    ``MissionMap.GetLastClickCoords``/``GetLastRightClickCoords`` read the client's own
+    ``MissionMapContext.last_mouse_location`` — the line the source itself reads
+    (``Map.py:975``, ``:1003``) — with the source's ``io_events()`` gate **omitted**. That omission is
+    the owner's decision of 2026-10-08 and is a recorded divergence, on the members and in
+    ``docs/MAP_PORT.md``: the gate's only producer is the injected runtime's ``PyImGui``, which this
+    project installs nowhere.
+
+    ``MiniMap``/``WorldMap`` are a different case, and the tests say so rather than treating the six as
+    one group: their coordinate is ``event["mouse_pos"]`` (``Map.py:1472``, ``:1920``), which the
+    injected runtime produces, and there is **no client field behind it** to read with the gate gone.
+    """
+
+    class _Context:
+        """A ``MissionMapContextStruct`` stand-in carrying one location."""
+
+        class last_mouse_location:
+            x = 1234.5
+            y = -678.25
+
+            @staticmethod
+            def to_tuple() -> tuple[float, float]:
+                return (1234.5, -678.25)
+
+    def _context(self, value: object) -> object:
+        return mock.patch.object(
+            map_module.GWContext.MissionMap, "GetContext", staticmethod(lambda: value)
+        )
+
+    def test_the_two_mission_map_members_answer_the_context_field(self) -> None:
+        """The source's own read, ``last_mouse_location.to_tuple()``."""
+
+        with self._context(self._Context()):
+            self.assertEqual(Map.MissionMap.GetLastClickCoords(), (1234.5, -678.25))
+            self.assertEqual(Map.MissionMap.GetLastRightClickCoords(), (1234.5, -678.25))
+
+    def test_both_twins_read_the_same_field(self) -> None:
+        """A consequence of the omission, pinned so it cannot be mistaken for a bug.
+
+        The client's record carries no left/right distinction — the source's distinction lived in
+        *which event* refreshed its cache, and that event is gone. So with the gate omitted the two
+        members necessarily answer the same value, and the members' own docstrings say so.
+        """
+
+        with self._context(self._Context()):
+            self.assertEqual(
+                Map.MissionMap.GetLastClickCoords(),
+                Map.MissionMap.GetLastRightClickCoords(),
+            )
+
+    def test_no_context_answers_the_sources_zero_pair(self) -> None:
+        """``Map.py:954-956``: no frame, ``(0.0, 0.0)`` — the source's own guard, kept."""
+
+        with self._context(None):
+            self.assertEqual(Map.MissionMap.GetLastClickCoords(), (0.0, 0.0))
+            self.assertEqual(Map.MissionMap.GetLastRightClickCoords(), (0.0, 0.0))
+
+    def test_the_mini_map_and_world_map_members_still_refuse_with_their_own_reason(self) -> None:
+        """Their coordinate is ``event["mouse_pos"]``; there is no client field to read instead."""
+
+        for label, call in (
+            ("MiniMap.GetLastClickCoords", Map.MiniMap.GetLastClickCoords),
+            ("MiniMap.GetLastRightClickCoords", Map.MiniMap.GetLastRightClickCoords),
+            ("WorldMap.GetLastClickCoords", Map.WorldMap.GetLastClickCoords),
+            ("WorldMap.GetLastRightClickCoords", Map.WorldMap.GetLastRightClickCoords),
+        ):
+            with self.subTest(member=label):
+                with self.assertRaises(NotImplementedError) as caught:
+                    call()  # type: ignore[operator]
+                message = str(caught.exception)
+                self.assertIn(label, message)
+                self.assertIn("mouse_pos", message)
+                self.assertIn("no client-side field behind it", message)
 
 
 if __name__ == "__main__":

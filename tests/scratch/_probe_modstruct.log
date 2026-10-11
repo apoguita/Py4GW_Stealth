@@ -1,0 +1,11 @@
+vartype       = Binary
+as text       = 0xDE0168240500D822
+StringLen     = 18
+IsBinary      = 1
+InStr upper   = 3
+InStr lower   = 3
+InStr tail    = 11
+Replace       = 0x0500D822
+ReplaceLen    = 10
+TrimLeft2     = DE0168240500D822
+Mid 5,4       = 0168

@@ -5,15 +5,33 @@
 (`skillbar_bindings.cpp:25-142`, bound as `PySkillbar.Skillbar`, with `PySkillbar.SkillbarSkill`
 beside it) and the client state those members read.
 
-**Verdict: INCOMPLETE.** **12 of the 18 members work** — every read — plus
-`ChangeHeroSecondary`, the one action whose mechanism this port already has. **6 members raise**, and
-each names what it needs:
+**Verdict: FULL (2026-10-08).** **All 18 `SkillBar` members answer, plus every member of the
+`PySkillbar` binding behind them, and nothing in the module raises** — `_unported` is gone from
+`py4gw/skillbar.py` because no member needs it. The five that were outstanding landed together:
 
-| Member | What it needs |
+| Member | What it took |
 | --- | --- |
-| `UseSkill`, `UseSkillTargetless`, `HeroUseSkill` | the client's **control actions**: native's `ui::Keypress` (`ui_methods.cpp:1408-1426`) is a `kKeyDown` frame message carrying a `KeyAction` payload, then a game-thread `kKeyUp` — and `UseSkill` targets first (`skillbar_methods.cpp:439-443`). The catalog has the frame-message function and the port has the UI-message form; what is missing is the control-action values, the button-action frame and the key pairing. Registered on [`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md). |
-| `LoadSkillTemplate`, `LoadHeroSkillTemplate` | native's `DecodeSkillTemplate` and the profession/attribute gating (`skillbar_methods.cpp:230-411`), which stand in front of the three functions this project already resolves (`skillbar.load_skills_func`, `load_attributes_func`, `change_secondary_func`). Pure porting work, no target-side piece. |
-| `SkillbarSkill.get_recharge` | `MemoryManager::GetSkillTimer` (`memory_manager.cpp:69-71`) = `timeGetTime() + *g_skill_timer_ptr` — the client global the catalog names `memory.skill_timer_ptr`, plus a host `timeGetTime()`. The same timer is what `Effect.GetTimeElapsed`/`GetTimeRemaining` need, so it lands with that class. |
+| `UseSkill`, `UseSkillTargetless`, `HeroUseSkill` | the client's **control actions**, which turn out to be a mechanism this port already drove elsewhere. The press is `ControlAction_UseSkill1` (`0xA4`) **plus the zero-based slot** (`skillbar_methods.cpp:439-447` — the binding makes it zero-based at `skillbar_bindings.cpp:70-86`), and for a hero it is one of the seven `ControlAction_Hero{N}Skill1` bases behind the source's own **switch** (`skillbar_bindings.cpp:92-101`), because those bases are not an arithmetic series. The call itself is `UIManager.Keypress(key, 0)`, the same one `Party.Heroes.UseSkill` already made. Two source quirks are kept: the player's previous target is **not** restored while the hero's **is** (even on the path where no change was made), and `skill_number` is not validated the way `slot` is. |
+| `LoadSkillTemplate`, `LoadHeroSkillTemplate` | native's `DecodeSkillTemplate` and the gating, as this doc predicted — pure porting work with no target-side piece. The decoder is `decode_skill_template` (`skillbar_methods.cpp:190-312`), the gating is `get_attribute_profession`/`is_primary_attribute_required`/`is_profession_required` (`skillbar.cpp:87-152`), and the two load calls are `load_skillbar`/`set_attributes`. This work **un-orphaned `skillbar.attribute_array_addr`**: it now reads the client's attribute-constant table through `AttributeInfoStruct` (0x14, `GW/context/attribute.h:21-28`, added beside `AttributeStruct` in `py4gw/context/world_context.py`), and it made `skillbar.load_skills_func`/`load_attributes_func` live for the first time. |
+| `SkillbarSkill.get_recharge` | the ported skill timer, as this doc predicted; it landed with `Effect` on 2026-09-26. |
+
+**One transcription slip was corrected in the same change.** Both loaders were annotated `-> None`,
+but `skillbar_bindings.cpp:62` and `:66` return `bool` and the `.def` at `:177-181` carries no
+return-value policy, so Reforged's Python sees a bool. Reforged's own `SkillBar.LoadSkillTemplate`
+ignores the value, which is why the slip was invisible.
+
+**Two source quirks in the decoder are kept rather than smoothed**, and both are pinned by tests: the
+first profession must be *above* `Profession::None` (`prof1 <= None`) while the second only must not be
+*below* it (`prof2 < None`), so a build with no secondary is valid and one with no primary is not; and
+the hero branch drops the `IsProfessionRequired` question the player's branch asks before changing its
+secondary (`:404` against `:343`).
+
+**Verification.** `tests/test_skillbar_offline.py` — 45 tests, green. The strongest one is a round
+trip through the source's **own encoder** (`Utils.encode_skill_template`, Reforged's
+`GenerateSkillbarTemplate`): a template is encoded, decoded, and must agree on both professions, all
+eight skills and every attribute point, with `Attribute::None` in each unfilled slot. That single test
+exercises the bit order, both bit-width fields and all three gating paths at once. The refusals are
+pinned individually, and the control-action tests pin the exact key each member presses.
 
 ## What each read is, in the source's own terms
 

@@ -1,0 +1,139 @@
+=== gwa3 live suite (with UAI targeting): started Sat 10/10/2026 16:15:58.49 === 
+--- connected read-only to pid 19696 ---
+--- agent 35, map 642, item 2748, quest 167 ---
+test_a_corpse_lookup_answers_without_raising (tests.test_gwa3_live.Gwa3LiveTests.test_a_corpse_lookup_answers_without_raising)
+The corpse queries read only; an empty field answers ``0`` rather than raising. ...     corpses: nearest=True support=0 pressure=0
+ok
+test_a_record_the_client_does_not_hold_answers_gwau3s_no_match_value (tests.test_gwa3_live.Gwa3LiveTests.test_a_record_the_client_does_not_hold_answers_gwau3s_no_match_value)
+GwAu3 answers rather than raises when the record is not there, and so does this. ...     a missing agent, skill and map answered 0; a missing quest answered False/0
+ok
+test_a_sample_of_live_values_is_printed_for_the_record (tests.test_gwa3_live.Gwa3LiveTests.test_a_sample_of_live_values_is_printed_for_the_record)
+Not an assertion: the numbers this run read, so the record shows real game data. ...     Agent.Level            20
+    Agent.X                -946.8108520507812
+    Agent.Y                3346.81494140625
+    Agent.CurrentHP        585.0
+    Agent.MaxHP            585
+    Agent.Rotation         -2.8694863319396973
+    Map.NameID             62114
+    Map.MaxPartySize       8
+    Map.MinLevel           1
+    Skill.EnergyCost       0
+    Skill.Activation       2.0
+    Party.IsPartyLeader    True
+    World.Campaign         0
+    Quest.IsCompleted      False
+    Item.ModelID           19140
+ok
+test_every_living_agent_answers_the_keys_the_filters_read (tests.test_gwa3_live.Gwa3LiveTests.test_every_living_agent_answers_the_keys_the_filters_read)
+Every filter key, for **every** agent in the client's array, without raising. ...     asked 22 keys of every agent; record views seen: {'AgentLivingStruct': 29, 'AgentGadgetStruct': 2}
+ok
+test_every_refused_key_refuses_live_with_its_own_rule (tests.test_gwa3_live.Gwa3LiveTests.test_every_refused_key_refuses_live_with_its_own_rule)
+A refusal that only fires offline would be worse than no refusal: it would answer. ... --- 45 refused keys refused live, each with its recorded reason ---
+ok
+test_every_routed_key_answers_against_the_live_client (tests.test_gwa3_live.Gwa3LiveTests.test_every_routed_key_answers_against_the_live_client)
+The gate the migration rests on: no call a script makes raises or answers nothing. ...     Skill_GetSkillInfo: 63/63 answered, 0 refused in the reader, 0 deferred, 0 empty
+    Item_GetItemInfoByItemID: 32/35 answered, 0 refused in the reader, 3 deferred, 0 empty
+    Map_GetAreaInfo: 40/40 answered, 0 refused in the reader, 0 deferred, 0 empty
+    Quest_GetQuestInfo: 12/16 answered, 0 refused in the reader, 0 deferred, 4 empty
+    Party_GetPartyContextInfo: 13/13 answered, 0 refused in the reader, 0 deferred, 0 empty
+    World_GetWorldInfo: 49/49 answered, 0 refused in the reader, 0 deferred, 0 empty
+    Agent_GetAgentInfo: 139/139 answered, 0 refused in the reader, 0 deferred, 0 empty
+--- 348 routed field keys read the live client; 0 refused by name; 3 refused a read-only connection by name; 4 answered '' because their decode could not start ---
+--- all 355 answered keys accounted for, out of 400 declared across the seven families, 45 of which refuse ---
+ok
+test_gwau3s_own_guards_answer_before_anything_is_read (tests.test_gwa3_live.Gwa3LiveTests.test_gwau3s_own_guards_answer_before_anything_is_read)
+The empty field name and the unknown field name, which GwAu3 answers 0 for. ...     the empty and unknown field names answered 0, as GwAu3's own guards do
+ok
+test_in_range_agrees_with_the_count (tests.test_gwa3_live.Gwa3LiveTests.test_in_range_agrees_with_the_count)
+`UAI_IsAgentInRange` is `UAI_CountAgents`'s own loop stopped at the first match. ... ok
+test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members)
+The layer's answer and the ported member's answer, from the same live agent. ...     11 agent keys equal an independent ported read
+ok
+test_the_agent_keys_beyond_the_cross_checks_answer_a_plausible_value (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_keys_beyond_the_cross_checks_answer_a_plausible_value)
+The remaining living keys, held to the bands the game's own data allows. ...     level 20, hp 585/585, energy 24/24
+ok
+test_the_agent_sentinels_resolve_live (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_sentinels_resolve_live)
+GwAu3's two id sentinels, against the live client. ...     the -2 sentinel resolved to the controlled character 35
+    the -1 sentinel needs the game thread's target capture; asserted, not skipped
+ok
+test_the_area_target_is_one_of_the_filtered_agents_or_zero (tests.test_gwa3_live.Gwa3LiveTests.test_the_area_target_is_one_of_the_filtered_agents_or_zero)
+`UAI_GetBestAOETarget`'s answer must be an agent the filter passes, or ``0``. ...     UAI_GetBestAOETarget -> 0
+ok
+test_the_attribute_readers_agree_with_the_ports_own_attribute_reads (tests.test_gwa3_live.Gwa3LiveTests.test_the_attribute_readers_agree_with_the_ports_own_attribute_reads)
+`data_attribute`, live -- two readers of the same two tables, checked against each other. ... 
+  test_the_attribute_readers_agree_with_the_ports_own_attribute_reads (tests.test_gwa3_live.Gwa3LiveTests.test_the_attribute_readers_agree_with_the_ports_own_attribute_reads) (attribute_id=17)
+`data_attribute`, live -- two readers of the same two tables, checked against each other. ... FAIL
+    attributes: 2 populated; unspent 78 of 185 points
+test_the_best_single_target_follows_the_fight_mode (tests.test_gwa3_live.Gwa3LiveTests.test_the_best_single_target_follows_the_fight_mode)
+The mode decides the end of the HP range the answer comes from (``:227-231``). ...     UAI_GetBestSingleTarget: finisher -> 16 (1.0), pressure -> 16 (1.0)
+ok
+test_the_condition_counter_answers_from_the_agents_visible_effects (tests.test_gwa3_live.Gwa3LiveTests.test_the_condition_counter_answers_from_the_agents_visible_effects)
+`UAI_GetBestTargetByConditionCount`, live -- the query that refused until now. ...     UAI_GetBestTargetByConditionCount() -> 0
+ok
+test_the_farthest_enemy_is_the_farthest_by_an_independent_measure (tests.test_gwa3_live.Gwa3LiveTests.test_the_farthest_enemy_is_the_farthest_by_an_independent_measure) ...     UAI_GetFarthestAgent -> 0; independent -> 0
+ok
+test_the_lowest_and_highest_hp_agents_agree_with_an_independent_measure (tests.test_gwa3_live.Gwa3LiveTests.test_the_lowest_and_highest_hp_agents_agree_with_an_independent_measure)
+`UAI_GetAgentLowest`/`Highest` over the live `HP` column, against `Agent.GetHealth`. ...     UAI_GetAgentLowest -> 16 (1.0); highest -> 16 (1.0); 8 living agents in reach
+ok
+test_the_map_family_agrees_with_the_ported_area_record (tests.test_gwa3_live.Gwa3LiveTests.test_the_map_family_agrees_with_the_ported_area_record)
+The area keys, against the same `AreaInfoStruct` reached by the ported `Map` members. ...     6 map keys equal the live area record
+ok
+test_the_martial_ward_position_skips_casters (tests.test_gwa3_live.Gwa3LiveTests.test_the_martial_ward_position_skips_casters)
+The martial query is the offensive one over enemies `UAI_IsCaster` says are not casters. ...     martial -> [0, 0, 0]; offensive -> [0, 0, 0]; non-caster enemies: 0
+ok
+test_the_member_accessors_agree_with_the_ported_party_class (tests.test_gwa3_live.Gwa3LiveTests.test_the_member_accessors_agree_with_the_ported_party_class)
+`Party_GetMyParty*Info` against the same member records, read through `py4gw.party`. ...     party members: 1 player(s), 0 hero(es), 0 henchman/en
+ok
+test_the_nearest_enemy_is_the_nearest_by_an_independent_measure (tests.test_gwa3_live.Gwa3LiveTests.test_the_nearest_enemy_is_the_nearest_by_an_independent_measure)
+`UAI_GetNearestAgent`, against the nearest of the independently read enemies. ...     UAI_GetNearestAgent -> 0; independent -> 0 of 0
+ok
+test_the_party_family_answers_the_types_gwau3_declares (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_family_answers_the_types_gwau3_declares)
+The party flags are booleans live, with no id argument -- GwAu3's own arity. ...     party flags read as booleans; ported counts: size 1, heroes 0, henchmen 0, flags 0x80
+ok
+test_the_party_layer_of_the_engine_answers_live (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_layer_of_the_engine_answers_live)
+`UtilityAI_Utils.au3`'s party layer, against the port's own party and the live client. ...     party layer: size 1, heroes 0, in-aggro False, count 0, nearest 0, called 0
+ok
+test_the_party_member_counts_agree_with_the_ported_party_class (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_member_counts_agree_with_the_ported_party_class)
+The five second-level context keys, against `Party.GetPlayers`/`GetHeroes`/the rest. ...     party context counts {'PlayerCount': 1, 'HenchmenCount': 0, 'HeroCount': 0, 'OtherCount': 0}, id 11
+ok
+test_the_party_refusals_refuse_live_too (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_refusals_refuse_live_too)
+The address keys and the party pointer, against the live client. ...     the address keys and MyPartyPtr refused live
+ok
+test_the_skill_family_agrees_with_the_ported_skill_record (tests.test_gwa3_live.Gwa3LiveTests.test_the_skill_family_agrees_with_the_ported_skill_record)
+The skill keys, against the record the ported class reads. ...     11 skill keys equal the live skill record
+ok
+test_the_skillbar_reader_agrees_with_the_ports_own_skillbar (tests.test_gwa3_live.Gwa3LiveTests.test_the_skillbar_reader_agrees_with_the_ports_own_skillbar)
+`Skill_GetSkillbarInfo` against `py4gw.skillbar`'s read of the player's own bar. ...     skillbar: [330, 2107, 0, 1506, 343, 336, 3426, 0] read back slot for slot, timer 2168280126
+ok
+test_the_targeting_count_agrees_with_an_independent_count (tests.test_gwa3_live.Gwa3LiveTests.test_the_targeting_count_agrees_with_an_independent_count)
+`UAI_CountAgents` against the same count computed through `py4gw.Agent`. ...     UAI_CountAgents -> 0; independent -> 0
+ok
+test_the_visible_effect_walk_reads_the_controlled_characters_own_list (tests.test_gwa3_live.Gwa3LiveTests.test_the_visible_effect_walk_reads_the_controlled_characters_own_list)
+The visible-effect family, live: the AutoIt array contract and the per-row match. ...     visible effects on agent 35: [[1, 0, 0], [2, 0, 0]]
+ok
+test_the_ward_position_covers_the_allies_it_reports (tests.test_gwa3_live.Gwa3LiveTests.test_the_ward_position_covers_the_allies_it_reports)
+``[X, Y, Count]``: the count is how many allies the reported position covers, checked live. ...     UAI_GetBestWardPosition -> [-1097.5, 4952.5, 6]; independent allies 13, covered by it: 6
+ok
+--- code section after disconnect: 53b3c20b9541f72a… (0x539400 bytes); before: 53b3c20b9541f72a… ---
+
+======================================================================
+FAIL: test_the_attribute_readers_agree_with_the_ports_own_attribute_reads (tests.test_gwa3_live.Gwa3LiveTests.test_the_attribute_readers_agree_with_the_ports_own_attribute_reads) (attribute_id=17)
+`data_attribute`, live -- two readers of the same two tables, checked against each other.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 1057, in test_the_attribute_readers_agree_with_the_ports_own_attribute_reads
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        data_attribute.Attribute_GetPartyAttributeInfo(attribute_id, 0, "Level"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        int(level),
+        ^^^^^^^^^^^
+    )
+    ^
+AssertionError: 16 != 12
+
+----------------------------------------------------------------------
+Ran 30 tests in 22.793s
+
+FAILED (failures=1)
+=== exit=1 === 

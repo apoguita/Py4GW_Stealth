@@ -1,0 +1,26 @@
+repo root: C:\Users\Apo\Py4GW_Stealth
+
+PASS  bridge starts
+
+_Stealth_Call directly           -> @error=1
+PASS  _Stealth_Call sets @error
+Agent_GetAgentInfo(-2, "X") -> 0   @error=1   kind=error
+PASS  a client routine fails with @error set
+PASS  the failure is not reported as a value
+PASS  the failure kind is 'error'
+PASS  the detail names the connection
+
+Agent_CancelAction() -> 0   @error=1   kind=refused
+PASS  a refused routine sets @error too
+PASS  a refusal is not the connection error
+PASS  its detail names the GwAu3 line
+
+NoSuchFunction -> 0   kind=unknown
+PASS  a typo is 'unknown'
+
+PASS  the channel still answers after failures
+
+PASS  bridge stops
+PASS  a call after stop is a transport error
+
+=== 13 passed, 0 failed ===

@@ -1,0 +1,27 @@
+=== ported GwAu3 script on the Stealth layer: start Sat 10/10/2026 10:29:19.22 === 
+=== a GwAu3 script on the Stealth layer ===
+PASS  the bridge started
+PASS  Guild Wars is running
+PASS  Core_Initialize answered 1
+[INFO] [script] Core_Initialize opened pid 19696
+[INFO] [SetDebugMode] Debug Mode Enabled
+[DEBUG] [script] this line must appear: debug mode is on
+[WARNING] [script] a warning renders through the same callback
+PASS  Agent_GetAgentInfo(-2, "X") is a number
+PASS  Agent_GetAgentInfo(-2, "Y") is a number
+PASS  the level is 1..20
+PASS  the maximum health is positive
+PASS  Agent_GetMyID is the controlled character
+PASS  the character name came back
+PASS  Agent_GetMaxAgents answered a count
+[INFO] [script] at -947,3347 level 20 hp 585 as 'Fezzik The Untamed'
+PASS  Party_GetPartyContextInfo("IsPartyLeader") is a boolean
+PASS  a quest the log does not hold answers False
+PASS  Skill_GetSkillInfo(1, "EnergyCost") answered
+PASS  Skill_GetSkillInfo takes a $GC_* constant as its key
+PASS  Core_IsIngame is refused rather than guessed
+PASS  Cache_SkillBar is declared and reports itself unbuilt
+PASS  UAI_Fight is declared and reports itself unbuilt
+=== 17 passed, 0 failed ===
+ported_script_exit=0 
+=== done Sat 10/10/2026 10:29:22.48 === 

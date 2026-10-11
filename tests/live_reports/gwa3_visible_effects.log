@@ -1,0 +1,18 @@
+=== visible effects probe: started Sat 10/10/2026 14:22:03.12 === 
+--- connected read-only to pid 19696 ---
+agents: 39
+  agent 18: 1 visible effect(s) [[3, 5, 0]] (type-1 nodes: 0; effect bits {'IsBleeding': False, 'IsConditioned': False})
+  agent 34: 1 visible effect(s) [[2, 0, 0]] (type-1 nodes: 0; effect bits {'IsBleeding': False, 'IsConditioned': False})
+  player 35: 1 visible effect(s) [[2, 0, 0]] (type-1 nodes: 0; effect bits {'IsBleeding': False, 'IsConditioned': False})
+  agent 43: 1 visible effect(s) [[2, 0, 0]] (type-1 nodes: 0; effect bits {'IsBleeding': False, 'IsConditioned': False})
+  agent 52: 1 visible effect(s) [[2, 0, 0]] (type-1 nodes: 0; effect bits {'IsBleeding': False, 'IsConditioned': False})
+  agent 58: 2 visible effect(s) [[2, 0, 0], [1, 42, 0]] (type-1 nodes: 1; effect bits {'IsBleeding': False, 'IsConditioned': False})
+  agent 59: 1 visible effect(s) [[2, 0, 0]] (type-1 nodes: 0; effect bits {'IsBleeding': False, 'IsConditioned': False})
+  agent 60: 1 visible effect(s) [[2, 0, 0]] (type-1 nodes: 0; effect bits {'IsBleeding': False, 'IsConditioned': False})
+  agent 61: 1 visible effect(s) [[2, 0, 0]] (type-1 nodes: 0; effect bits {'IsBleeding': False, 'IsConditioned': False})
+  agent 242: 1 visible effect(s) [[2, 0, 0]] (type-1 nodes: 0; effect bits {'IsBleeding': False, 'IsConditioned': False})
+  agent 295: 1 visible effect(s) [[2, 0, 0]] (type-1 nodes: 0; effect bits {'IsBleeding': False, 'IsConditioned': False})
+  agent 328: 1 visible effect(s) [[2, 0, 0]] (type-1 nodes: 0; effect bits {'IsBleeding': False, 'IsConditioned': False})
+--- conditioned agents with visible effects: 0; type-1 nodes: 1 ---
+--- condition ids: bleeding=23 blinded=24 burning=25 diseased=26 poisoned=27 dazed=28 weakness=29 ---
+=== exit=0 === 

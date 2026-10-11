@@ -1,0 +1,21 @@
+subject=Health +30 pattern=Health \+(\d+)
+   UBound=1
+   [0] = '30'  Int=30
+subject=+30 HP pattern=\+(\d+) HP
+   UBound=1
+   [0] = '30'  Int=30
+subject=+45 HP while Enchanted pattern=\+(\d+) HP
+   UBound=1
+   [0] = '45'  Int=45
+subject=+60 HP while Hexed pattern=\+(\d+) HP
+   UBound=1
+   [0] = '60'  Int=60
+subject=Energy +5 pattern=Energy \+(\d+)
+   UBound=1
+   [0] = '5'  Int=5
+subject=Energy +15 (-1 energy regen) pattern=Energy \+(\d+)
+   UBound=1
+   [0] = '15'  Int=15
+subject=Armor +5 pattern=Energy \+(\d+)
+   no match (returns 0)
+Int('Health +30') = 0

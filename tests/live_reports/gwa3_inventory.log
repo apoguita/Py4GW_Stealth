@@ -1,0 +1,58 @@
+=== inventory probe: started Sat 10/10/2026 13:56:25.80 === 
+--- connected read-only to pid 19696 ---
+inventory: active_weapon_set=3 gold_character=2064 gold_storage=842320
+read_item_records(): 341 records, 341 with an address
+--- set 1 weapon: pointer 0x27B707E0 ---
+      record: item_id=6096 type=2 model_id=113 agent_id=0 bag=647409568 equipped=3
+      mod_struct=0x2664D378 mod_struct_size=14
+      mod bytes: 0x091298270002482684000824080130250005B824260208244D0430250506A82868010824D00232250F00A822061CA8A7007898A4000000C0
+      id 6096 in read_item_records(): True
+      address 0x27B707E0 in read_item_records(): True
+      is id + 0x10 = 0x000017E0 readable?
+      read at 0x000017E0 failed: OSError: [Errno 299] ReadProcessMemory(address=0x17E0, size=0x4) failed with Windows error 299
+--- set 1 offhand: pointer 0x00000000 ---
+      null pointer
+--- set 2 weapon: pointer 0x27B707E0 ---
+      record: item_id=6096 type=2 model_id=113 agent_id=0 bag=647409568 equipped=3
+      mod_struct=0x2664D378 mod_struct_size=14
+      mod bytes: 0x091298270002482684000824080130250005B824260208244D0430250506A82868010824D00232250F00A822061CA8A7007898A4000000C0
+      id 6096 in read_item_records(): True
+      address 0x27B707E0 in read_item_records(): True
+      is id + 0x10 = 0x000017E0 readable?
+      read at 0x000017E0 failed: OSError: [Errno 299] ReadProcessMemory(address=0x17E0, size=0x4) failed with Windows error 299
+--- set 2 offhand: pointer 0x26B353E0 ---
+      record: item_id=3813 type=24 model_id=8636 agent_id=0 bag=644243660 equipped=10
+      mod_struct=0x2626DB48 mod_struct_size=5
+      mod bytes: 0x091198270200A820002D88230810B8A7000000C0
+      id 3813 in read_item_records(): True
+      address 0x26B353E0 in read_item_records(): True
+      is id + 0x10 = 0x00000EF5 readable?
+      read at 0x00000EF5 failed: OSError: [Errno 299] ReadProcessMemory(address=0xEF5, size=0x4) failed with Windows error 299
+--- set 3 weapon: pointer 0x27B70834 ---
+      record: item_id=122 type=5 model_id=8637 agent_id=0 bag=647409568 equipped=4
+      mod_struct=0x2664D638 mod_struct_size=13
+      mod bytes: 0x00011826091998270001B8240F0038220A0018204801082490023025E1016824CE0008249D013025070058210F1CA8A7000000C0
+      id 122 in read_item_records(): True
+      address 0x27B70834 in read_item_records(): True
+      is id + 0x10 = 0x0000008A readable?
+      read at 0x0000008A failed: OSError: [Errno 299] ReadProcessMemory(address=0x8A, size=0x4) failed with Windows error 299
+--- set 3 offhand: pointer 0x00000000 ---
+      null pointer
+--- set 4 weapon: pointer 0x26B35434 ---
+      record: item_id=94 type=2 model_id=8786 agent_id=0 bag=644243660 equipped=8
+      mod_struct=0x2664D678 mod_struct_size=14
+      mod bytes: 0x091298270002B8240F327822A30008244601302501001825460130250100C820D9000824B3013025001E4823061CA8A7007898A4000000C0
+      id 94 in read_item_records(): True
+      address 0x26B35434 in read_item_records(): True
+      is id + 0x10 = 0x0000006E readable?
+      read at 0x0000006E failed: OSError: [Errno 299] ReadProcessMemory(address=0x6E, size=0x4) failed with Windows error 299
+--- set 4 offhand: pointer 0x26B353E0 ---
+      record: item_id=3813 type=24 model_id=8636 agent_id=0 bag=644243660 equipped=10
+      mod_struct=0x2626DB48 mod_struct_size=5
+      mod bytes: 0x091198270200A820002D88230810B8A7000000C0
+      id 3813 in read_item_records(): True
+      address 0x26B353E0 in read_item_records(): True
+      is id + 0x10 = 0x00000EF5 readable?
+      read at 0x00000EF5 failed: OSError: [Errno 299] ReadProcessMemory(address=0xEF5, size=0x4) failed with Windows error 299
+--- done ---
+=== exit=0 === 

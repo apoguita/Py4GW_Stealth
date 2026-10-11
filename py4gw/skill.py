@@ -33,16 +33,29 @@ Three groups exist, and each member says which one it is in its docstring:
     members of native's ``SkillID`` enum — and this module imports them from there, the way native's
     ``skill_bindings`` calls into ``GW::skillbar``.
 
-``not built yet``
-    ``GetNameFromWiki``/``GetURL``/``GetProgressionData``/``GetDescription``/``GetConciseDescription``
-    need Reforged's bundled ``skill_descriptions.json`` (1.98 MB beside ``Skill.py``),
-    ``GetTexturePath`` needs ``enums_src/Texture_enums.py``'s ``SkillTextureMap`` (~3100 entries), and
-    ``GetCampaign`` needs ``enums_src/Region_enums.py``'s ``CampaignName``. Each raises
-    ``NotImplementedError`` through :func:`_unported`, naming the table and where it lives — never a
-    plausible wrong value.
+``GetTexturePath`` is **built too**, over ``enums_src/texture_enums.py`` — the port of Reforged's
+``enums_src/Texture_enums.py``, whose ``SkillTextureMap`` (1,720 entries over keys ``1..3431``) the
+member reads. Two of that source module's four names are literals and data and are carried whole;
+``get_texture_for_model`` is the fourth and is **an artifact**, because its base path is
+``PySystem.Console.get_projects_path()`` — the injected runtime's own module directory. It reports
+that rather than building a path from this project's directory. ``GetTexturePath`` does not touch it.
+
+**Nothing in this class raises.** ``GetCampaign``'s raise was false (``CampaignName`` was ported all
+along) and the description group's blocker was a file that was in the Reforged checkout the whole
+time; both are closed, so ``Skill`` has no ``NotImplementedError`` left to name.
+
+The description group is **built**: ``GetNameFromWiki``, ``GetURL``, ``GetProgressionData``,
+``GetDescription`` and ``GetConciseDescription`` all read ``skill_descriptions.json`` through
+:meth:`Skill._load_descriptions`, which is the source's own three lines (``Skill.py:9-15``). The file
+is the source's own, copied beside this module byte for byte — 1,975,988 bytes, 1,488 entries,
+SHA-256 ``ca0a514934c7461559876af8bebc42ccbb84812b005fe4ea7d7d5752635bbd20``. ``GetCampaign`` is
+built too, over this port's ``enums_src/region_enums.py:144`` ``CampaignName``.
 """
 
 from __future__ import annotations
+
+import json
+import os
 
 from .client import require_client
 from .context.skill_context import SkillStruct
@@ -52,21 +65,7 @@ from .enums_src.skill_names import (
     GetSkillNameByID,
     GetSkillTypeNameByID,
 )
-
-
-def _unported(member: str, requirement: str) -> NotImplementedError:
-    """Build the error raised by a member this port has not built yet.
-
-    The source's member is complete and working — Reforged is an in-production library — so the
-    message never describes the source: it names the work item this port still owes, and the raise
-    is what keeps a caller from receiving a plausible wrong value while that work is outstanding.
-    """
-
-    return NotImplementedError(
-        f"Skill.{member} is declared but not built here yet: it needs {requirement}. "
-        "The source's member works; this port raises at the call site and names the work "
-        "item instead of returning a wrong value."
-    )
+from .enums_src.texture_enums import SkillTextureMap
 
 
 class SkillID:
@@ -283,16 +282,18 @@ class Skill:
     def _load_descriptions():
         """``Skill.py:9-15``: load ``skill_descriptions.json`` beside ``Skill.py``.
 
-        Not built yet, and the missing piece is data rather than code: Reforged ships
-        ``Py4GWCoreLib/skill_descriptions.json`` (1,975,988 bytes) beside the module and reads it
-        here. This port has no copy of it, and five members read it.
+        The source's three lines, one for one: the cache short-circuit, the path built from the
+        module's own directory, and ``json.load`` under ``encoding="utf-8"``. The file this port
+        reads is the source's own, copied beside this module byte for byte (1,975,988 bytes,
+        1,488 skill entries, SHA-256
+        ``ca0a514934c7461559876af8bebc42ccbb84812b005fe4ea7d7d5752635bbd20``).
         """
 
-        raise _unported(
-            "_load_descriptions",
-            "Py4GWCoreLib/skill_descriptions.json (1,975,988 bytes), the data file Reforged reads "
-            "beside Skill.py (Skill.py:12-14)",
-        )
+        if Skill._desc_cache is None:
+            path = os.path.join(os.path.dirname(__file__), "skill_descriptions.json")
+            with open(path, encoding="utf-8") as f:
+                Skill._desc_cache = json.load(f)
+        return Skill._desc_cache
 
     @staticmethod
     def skill_instance(skill_id):
@@ -377,16 +378,16 @@ class Skill:
     def GetCampaign(skill_id):
         """Purpose: Retrieve the campaign of a skill by its ID (``Skill.py:87-92``).
 
-        Not built yet: the second half is ``CampaignName`` from ``enums_src/Region_enums.py``
-        (``Region_enums.py:132-140``), and that module has no ported home yet. The record's own
-        ``campaign`` value is readable through the binding; it is the name table that is missing.
+        The source's three lines: the local import of ``CampaignName`` from ``Region_enums``, the
+        record's own ``campaign`` value, and ``CampaignName.get(campaign, "Unknown")``. The table is
+        this port's ``py4gw/enums_src/region_enums.py:144`` (``Region_enums.py:132-140``), which
+        ``Map.GetCampaign`` already reads the same way (``map.py:434``).
         """
 
-        raise _unported(
-            "GetCampaign",
-            "enums_src.Region_enums.CampaignName (Region_enums.py:132-140), the campaign-id to name "
-            "table the member maps the record's campaign through",
-        )
+        from .enums_src.region_enums import CampaignName
+
+        campaign = Skill.skill_instance(skill_id).campaign
+        return campaign, CampaignName.get(campaign, "Unknown")
 
     @staticmethod
     def GetProfession(skill_id):
@@ -877,14 +878,21 @@ class Skill:
 
         @staticmethod
         def GetTexturePath(skill_id: int) -> str:
-            """``Skill.py:499-503``.
+            """``Skill.py:499-503``: the icon path, or ``""`` when the table has no entry.
 
-            Not built yet: ``SkillTextureMap`` (``enums_src/Texture_enums.py``) maps ~3100 skill ids
-            to icon file names, and that module has no ported home yet.
+            The source's whole body is three lines: the file name out of ``SkillTextureMap``, the
+            **literal** prefix ``"Assets\\Textures\\Skill_Icons\\"``, and ``""`` when the lookup
+            misses. The table is this port's ``enums_src/texture_enums.py``, whose docstring records
+            where it came from; it holds **1,720** entries over keys ``1..3431``, not the ~3100 an
+            earlier version of this docstring claimed — that number was the source file's line count,
+            and 1,371 of those lines are commented out in Reforged itself. The commented entries stay
+            commented here, so the port and the source hold exactly the same skills.
+
+            Note what this member does **not** touch: the injected runtime's own module directory.
+            ``get_texture_for_model`` in the same source module needs it (``Console.get_projects_path``)
+            and is the artifact kind; this member needs only the table and a literal, which is why it
+            is portable.
             """
 
-            raise _unported(
-                "GetTexturePath",
-                "enums.SkillTextureMap (enums_src/Texture_enums.py, ~3100 entries), the skill-id to "
-                "icon-file-name table the member builds the texture path from",
-            )
+            filename = SkillTextureMap.get(skill_id)
+            return f"Assets\\Textures\\Skill_Icons\\{filename}" if filename else ""

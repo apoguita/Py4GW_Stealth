@@ -1050,33 +1050,81 @@ class Map:
 
         @staticmethod
         def GetLastClickCoords() -> tuple[float, float]:
-            """Not built: the frame IO-event list is filled in-process.
+            """``Map.py:954-980`` **with its IO-event gate omitted — a recorded divergence.**
 
-            The source walks ``frame_info.io_events()`` (``Map.py:959``) —
-            ``UIManager.GetIOEventsForFrame``, whose only producer is
-            ``UIManager._UpdateFrameIOEvents``, and that reads ``PyImGui.get_io()`` and
-            ``PyImGui.is_mouse_clicked`` (``UIManager.py:74-88``). Nothing in the client holds
-            this list; it is the injected runtime's own recorder, so the answer is its absence
-            rather than a stand-in reading of the mouse.
+            The source's own route to the value is one line, and this member is that line:
+            ``Map.MissionMap.last_left_clicked_coords = misison_map_ctx.last_mouse_location.to_tuple()``
+            (``Map.py:975``). What it reads is therefore the client's
+            ``MissionMapContext.last_mouse_location`` — a ``Vec2f`` native declares at
+            ``context/map.h:151-153`` and this port already carries
+            (``py4gw/context/mission_map_context.py:63``), through the same ``to_tuple()`` the source
+            calls on it (``py4gw/context/map_context.py:96``).
+
+            **What is omitted.** Everything else in the source body is a *trigger*: it walks
+            ``frame_info.io_events()`` (``Map.py:959-974``) and refreshes its cache only when a fresh
+            ``left_mouse_clicked`` event arrives. That list's only producer is
+            ``UIManager._UpdateFrameIOEvents`` reading ``PyImGui.get_io()`` — the injected runtime's own
+            ImGui context, which this project installs nowhere. It is unreachable here, not merely
+            unwritten.
+
+            **What the divergence costs, stated plainly.** The source answers *the mouse location as of
+            the last left click*; this member answers *the mouse location now*. The two agree whenever
+            the mouse has not moved since that click and differ otherwise. The source also caches into
+            ``last_left_clicked_coords``/``last_left_clicked_timestamp``, which stay at their declared
+            ``(0.0, 0.0)``/``0`` here because nothing refreshes them. And with the gate gone, this member
+            and its right-click twin read the **same** field — the client's record carries no
+            left/right distinction; that distinction lived in which event refreshed the cache.
+
+            **The owner's decision (2026-10-08) is the authority for the omission**: *"omit the io events
+            and only grab the coords, that's what GwAu3 does."* GwAu3 is corroboration at tier 5, not the
+            authority: it reads click coordinates as two floats straight out of game memory
+            (``external/GwAu3/API/Modules/Data/GwAu3_Data_Map.au3:24-29``), which is independent evidence
+            that the client holds them. Recorded in ``docs/MAP_PORT.md`` and the ``CLASS_PORT_MAP``
+            register.
             """
 
-            raise _unported(
-                "MissionMap.GetLastClickCoords",
-                "UIManager.GetIOEventsForFrame, whose only producer is "
-                "UIManager._UpdateFrameIOEvents — PyImGui.get_io() and PyImGui.is_mouse_clicked "
-                "(UIManager.py:74-88), the injected runtime's own recorder",
-            )
+            if not (misison_map_ctx := GWContext.MissionMap.GetContext()):
+                return 0.0, 0.0
+            return misison_map_ctx.last_mouse_location.to_tuple()
 
         @staticmethod
         def GetLastRightClickCoords() -> tuple[float, float]:
-            """Not built: the same in-process IO-event list as ``GetLastClickCoords``."""
+            """``Map.py:982-1004`` **with its IO-event gate omitted — a recorded divergence.**
 
-            raise _unported(
-                "MissionMap.GetLastRightClickCoords",
-                "UIManager.GetIOEventsForFrame, whose only producer is "
-                "UIManager._UpdateFrameIOEvents — PyImGui.get_io() and PyImGui.is_mouse_clicked "
-                "(UIManager.py:74-88), the injected runtime's own recorder",
-            )
+            The source's own route to the value is one line, and this member is that line:
+            ``Map.MissionMap.last_right_clicked_coords = misison_map_ctx.last_mouse_location.to_tuple()``
+            (``Map.py:1003``). What it reads is therefore the client's
+            ``MissionMapContext.last_mouse_location`` — a ``Vec2f`` native declares at
+            ``context/map.h:151-153`` and this port already carries
+            (``py4gw/context/mission_map_context.py:63``), through the same ``to_tuple()`` the source
+            calls on it (``py4gw/context/map_context.py:96``).
+
+            **What is omitted.** Everything else in the source body is a *trigger*: it walks
+            ``frame_info.io_events()`` (``Map.py:987-1002``) and refreshes its cache only when a fresh
+            ``right_mouse_clicked`` event arrives. That list's only producer is
+            ``UIManager._UpdateFrameIOEvents`` reading ``PyImGui.get_io()`` — the injected runtime's own
+            ImGui context, which this project installs nowhere. It is unreachable here, not merely
+            unwritten.
+
+            **What the divergence costs, stated plainly.** The source answers *the mouse location as of
+            the last right click*; this member answers *the mouse location now*. The two agree whenever
+            the mouse has not moved since that click and differ otherwise. The source also caches into
+            ``last_right_clicked_coords``/``last_right_clicked_timestamp``, which stay at their declared
+            ``(0.0, 0.0)``/``0`` here because nothing refreshes them. And with the gate gone, this member
+            and its right-click twin read the **same** field — the client's record carries no
+            left/right distinction; that distinction lived in which event refreshed the cache.
+
+            **The owner's decision (2026-10-08) is the authority for the omission**: *"omit the io events
+            and only grab the coords, that's what GwAu3 does."* GwAu3 is corroboration at tier 5, not the
+            authority: it reads click coordinates as two floats straight out of game memory
+            (``external/GwAu3/API/Modules/Data/GwAu3_Data_Map.au3:24-29``), which is independent evidence
+            that the client holds them. Recorded in ``docs/MAP_PORT.md`` and the ``CLASS_PORT_MAP``
+            register.
+            """
+
+            if not (misison_map_ctx := GWContext.MissionMap.GetContext()):
+                return 0.0, 0.0
+            return misison_map_ctx.last_mouse_location.to_tuple()
 
         @staticmethod
         def GetMissionMapWindowCoords() -> tuple[float, float, float, float]:
@@ -1481,29 +1529,52 @@ class Map:
 
         @staticmethod
         def GetLastClickCoords() -> tuple[float, float]:
-            """Not built: the frame IO-event list is filled in-process.
+            """Not built: ``Map.py:1455-1477`` takes its coordinate from the injected runtime's own event.
 
-            The source walks ``frame_info.io_events()`` (``Map.py:1460``), whose only producer is
-            ``UIManager._UpdateFrameIOEvents`` — and that reads ``PyImGui.get_io()`` and
-            ``PyImGui.is_mouse_clicked`` (``UIManager.py:74-88``).
+            This is **not** the case `MissionMap.GetLastClickCoords` is in, and the difference is the
+            point. That member's coordinate is a client field — ``MissionMapContext.last_mouse_location``
+            — so it can be read with the event gate omitted. These two take the value from the **event
+            itself**: ``Map.MiniMap.last_left_clicked_coords = event["mouse_pos"]``
+            (``Map.py:1472``). ``event["mouse_pos"]`` is produced by the injected runtime's
+            ``UIManager._UpdateFrameIOEvents`` reading ``PyImGui.get_io()``, and there is **no
+            client-side field behind it** to fall back on. Handing these members the mission map's own
+            field would be a value the source never produces, so they keep raising and say why.
             """
 
             raise _unported(
                 "MiniMap.GetLastClickCoords",
-                "UIManager.GetIOEventsForFrame, whose only producer is "
-                "UIManager._UpdateFrameIOEvents — PyImGui.get_io() and PyImGui.is_mouse_clicked "
-                "(UIManager.py:74-88), the injected runtime's own recorder",
+                "event[\"mouse_pos\"] from Frame.io_events() — UIManager.GetIOEventsForFrame, whose "
+                "only producer is UIManager._UpdateFrameIOEvents reading PyImGui.get_io() "
+                "(UIManager.py:74-88), the injected runtime's own recorder. Unlike "
+                "MissionMap.GetLastClickCoords, whose coordinate is the client's own "
+                "MissionMapContext.last_mouse_location (Map.py:975) and which this port reads, the "
+                "mini-map and world-map members take the value from the EVENT itself "
+                "(Map.py:1472, :1920) — there is no client-side field behind it to read instead",
             )
 
         @staticmethod
         def GetLastRightClickCoords() -> tuple[float, float]:
-            """Not built: the same in-process IO-event list as ``GetLastClickCoords``."""
+            """Not built: ``Map.py:1479-1501`` takes its coordinate from the injected runtime's own event.
+
+            This is **not** the case `MissionMap.GetLastClickCoords` is in, and the difference is the
+            point. That member's coordinate is a client field — ``MissionMapContext.last_mouse_location``
+            — so it can be read with the event gate omitted. These two take the value from the **event
+            itself**: ``Map.MiniMap.last_left_clicked_coords = event["mouse_pos"]``
+            (``Map.py:1497``). ``event["mouse_pos"]`` is produced by the injected runtime's
+            ``UIManager._UpdateFrameIOEvents`` reading ``PyImGui.get_io()``, and there is **no
+            client-side field behind it** to fall back on. Handing these members the mission map's own
+            field would be a value the source never produces, so they keep raising and say why.
+            """
 
             raise _unported(
                 "MiniMap.GetLastRightClickCoords",
-                "UIManager.GetIOEventsForFrame, whose only producer is "
-                "UIManager._UpdateFrameIOEvents — PyImGui.get_io() and PyImGui.is_mouse_clicked "
-                "(UIManager.py:74-88), the injected runtime's own recorder",
+                "event[\"mouse_pos\"] from Frame.io_events() — UIManager.GetIOEventsForFrame, whose "
+                "only producer is UIManager._UpdateFrameIOEvents reading PyImGui.get_io() "
+                "(UIManager.py:74-88), the injected runtime's own recorder. Unlike "
+                "MissionMap.GetLastClickCoords, whose coordinate is the client's own "
+                "MissionMapContext.last_mouse_location (Map.py:975) and which this port reads, the "
+                "mini-map and world-map members take the value from the EVENT itself "
+                "(Map.py:1472, :1920) — there is no client-side field behind it to read instead",
             )
 
         @staticmethod
@@ -1982,29 +2053,52 @@ class Map:
 
         @staticmethod
         def GetLastClickCoords() -> tuple[float, float]:
-            """Not built: the frame IO-event list is filled in-process.
+            """Not built: ``Map.py:1897-1924`` takes its coordinate from the injected runtime's own event.
 
-            The source walks ``frame_info.io_events()`` (``Map.py:1908``), whose only producer is
-            ``UIManager._UpdateFrameIOEvents`` — and that reads ``PyImGui.get_io()`` and
-            ``PyImGui.is_mouse_clicked`` (``UIManager.py:74-88``).
+            This is **not** the case `MissionMap.GetLastClickCoords` is in, and the difference is the
+            point. That member's coordinate is a client field — ``MissionMapContext.last_mouse_location``
+            — so it can be read with the event gate omitted. These two take the value from the **event
+            itself**: ``Map.WorldMap.last_left_clicked_coords = event["mouse_pos"]``
+            (``Map.py:1920``). ``event["mouse_pos"]`` is produced by the injected runtime's
+            ``UIManager._UpdateFrameIOEvents`` reading ``PyImGui.get_io()``, and there is **no
+            client-side field behind it** to fall back on. Handing these members the mission map's own
+            field would be a value the source never produces, so they keep raising and say why.
             """
 
             raise _unported(
                 "WorldMap.GetLastClickCoords",
-                "UIManager.GetIOEventsForFrame, whose only producer is "
-                "UIManager._UpdateFrameIOEvents — PyImGui.get_io() and PyImGui.is_mouse_clicked "
-                "(UIManager.py:74-88), the injected runtime's own recorder",
+                "event[\"mouse_pos\"] from Frame.io_events() — UIManager.GetIOEventsForFrame, whose "
+                "only producer is UIManager._UpdateFrameIOEvents reading PyImGui.get_io() "
+                "(UIManager.py:74-88), the injected runtime's own recorder. Unlike "
+                "MissionMap.GetLastClickCoords, whose coordinate is the client's own "
+                "MissionMapContext.last_mouse_location (Map.py:975) and which this port reads, the "
+                "mini-map and world-map members take the value from the EVENT itself "
+                "(Map.py:1472, :1920) — there is no client-side field behind it to read instead",
             )
 
         @staticmethod
         def GetLastRightClickCoords() -> tuple[float, float]:
-            """Not built: the same in-process IO-event list as ``GetLastClickCoords``."""
+            """Not built: ``Map.py:1927-1947`` takes its coordinate from the injected runtime's own event.
+
+            This is **not** the case `MissionMap.GetLastClickCoords` is in, and the difference is the
+            point. That member's coordinate is a client field — ``MissionMapContext.last_mouse_location``
+            — so it can be read with the event gate omitted. These two take the value from the **event
+            itself**: ``Map.WorldMap.last_left_clicked_coords = event["mouse_pos"]``
+            (``Map.py:1944``). ``event["mouse_pos"]`` is produced by the injected runtime's
+            ``UIManager._UpdateFrameIOEvents`` reading ``PyImGui.get_io()``, and there is **no
+            client-side field behind it** to fall back on. Handing these members the mission map's own
+            field would be a value the source never produces, so they keep raising and say why.
+            """
 
             raise _unported(
                 "WorldMap.GetLastRightClickCoords",
-                "UIManager.GetIOEventsForFrame, whose only producer is "
-                "UIManager._UpdateFrameIOEvents — PyImGui.get_io() and PyImGui.is_mouse_clicked "
-                "(UIManager.py:74-88), the injected runtime's own recorder",
+                "event[\"mouse_pos\"] from Frame.io_events() — UIManager.GetIOEventsForFrame, whose "
+                "only producer is UIManager._UpdateFrameIOEvents reading PyImGui.get_io() "
+                "(UIManager.py:74-88), the injected runtime's own recorder. Unlike "
+                "MissionMap.GetLastClickCoords, whose coordinate is the client's own "
+                "MissionMapContext.last_mouse_location (Map.py:975) and which this port reads, the "
+                "mini-map and world-map members take the value from the EVENT itself "
+                "(Map.py:1472, :1920) — there is no client-side field behind it to read instead",
             )
 
         @staticmethod

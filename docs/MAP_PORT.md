@@ -134,6 +134,75 @@ the injected runtime's own ImGui context: this project installs none and there i
 install one, so the members report that rather than approximating a mouse position from outside
 the client. `Frame.is_mouse_over`/`Frame.io_events` carry the same divergence.
 
+### Correction (2026-10-08): the six click-coordinate members are blocked on the *event list*, not the coordinate
+
+The paragraph above is accurate for the three `IsMouseOver` members and **overstated** for the six
+`GetLastClickCoords`/`GetLastRightClickCoords` ones, whose raise messages said:
+
+> *"Nothing in the client holds this list; it is the injected runtime's own recorder."*
+
+That is true of `Frame.io_events()` and **false of the coordinate**. Reforged's own body
+(`Map.py:954-980`, and the same shape at `:1455+` and `:1920+`) is:
+
+```
+if not (frame_info := Map.MissionMap.GetFrame()): return 0.0, 0.0
+io_events = frame_info.io_events()
+if len(io_events) == 0: return Map.MissionMap.last_left_clicked_coords   # the cache
+...
+Map.MissionMap.last_left_clicked_coords = misison_map_ctx.last_mouse_location.to_tuple()
+```
+
+So the **coordinate** comes from `MissionMapContext.last_mouse_location` — a field native declares
+at `MissionMapContext.py:33`, and one this port **already reads** at
+`py4gw/context/mission_map_context.py:63`. The cache it falls back to is
+`last_left_clicked_coords`, a class attribute this port already declares (`py4gw/map.py:954-957`).
+What is genuinely missing is the **trigger**: the IO-event list that says *when* to re-read, and that
+really is the injected runtime's recorder.
+
+### Outcome (owner's decision, 2026-10-08): two implemented, four refused
+
+The owner's instruction was *"omit the io events and only grab the coords, that's what GwAu3 does."*
+Carrying it out required **splitting the six**, because the source does not read the coordinate the same
+way in all three classes — and that split is the finding:
+
+| member | the source's route to the coordinate | outcome |
+| --- | --- | --- |
+| `MissionMap.GetLastClickCoords` | `misison_map_ctx.last_mouse_location.to_tuple()` (`Map.py:975`) — a **client field** | **implemented**, gate omitted |
+| `MissionMap.GetLastRightClickCoords` | the same field (`Map.py:1003`) | **implemented**, gate omitted |
+| `MiniMap.GetLastClickCoords` | `event["mouse_pos"]` (`Map.py:1472`) | refused |
+| `MiniMap.GetLastRightClickCoords` | `event["mouse_pos"]` (`:1497`) | refused |
+| `WorldMap.GetLastClickCoords` | `event["mouse_pos"]` (`:1920`) | refused |
+| `WorldMap.GetLastRightClickCoords` | `event["mouse_pos"]` (`:1944`) | refused |
+
+**The two `MissionMap` members now answer**, and the omission is a **recorded divergence, not a port**:
+the source refreshes `last_left_clicked_coords` only when a fresh click event arrives, while this port
+reads the field on every call. Three consequences are written on the members and pinned by
+`tests/test_map_offline.py`:
+
+- the source answers *the mouse location as of the last left or right click*; this port answers *the
+  mouse location now*. The two agree whenever the mouse has not moved since that click;
+- the source's cache attributes `last_left_clicked_coords`/`last_left_clicked_timestamp` stay at their
+  declared `(0.0, 0.0)`/`0`, because nothing refreshes them here;
+- **the two twins now answer the same value.** The client's record carries no left/right distinction —
+  that lived in *which event* refreshed the cache, and the event is gone.
+
+The source's own `if not GetFrame(): return 0.0, 0.0` guard is kept.
+
+**The four `MiniMap`/`WorldMap` members cannot follow, and this is why the same reasoning does not
+transfer to them:** they take the value from the **event itself**, `event["mouse_pos"]`
+(`Map.py:1472`, `:1920`), and there is no client-side field behind it. Handing them the mission map's
+own field would be a value the source never produces. They keep raising, and their reasons now name
+`mouse_pos` specifically rather than the generic event list.
+
+**Why GwAu3 corroborates but does not decide.** The owner's justification was *"that's what GwAu3
+does."* GwAu3 does read click coordinates as two floats out of game memory
+(`external/GwAu3/API/Modules/Data/GwAu3_Data_Map.au3:24-29`) — independent, tier-5 evidence that the
+client holds them, which is what makes the `MissionMap` read defensible. It is not authority: GwAu3's
+globals are unresolved leads here, and no mini-map or world-map equivalent of them was found, which is
+consistent with there being no client field for those two.
+
+Recorded here, on the members themselves, and in the `CLASS_PORT_MAP` register.
+
 ## `MapMethods`
 
 `Map`'s eight action bodies are Reforged's `native_src/methods/MapMethods.py` (135 lines), and

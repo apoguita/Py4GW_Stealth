@@ -1,0 +1,12 @@
+=== probe: AutoIt -> GwAu3 bridge worker over stdio ===
+@AutoItVersion: 3.3.16.1
+@AutoItX64: 0
+repo root: C:\Users\Apo\Py4GW_Stealth
+launching: "python" -u "C:\Users\Apo\Py4GW_Stealth\tools\autoit\run_bridge_worker.py"
+pid: 10904
+stderr: gwa3 worker: protocol 1, 12 routines, one JSON object per line
+writing: {"call": "NoSuchFunction", "args": [], "id": 1}
+reply: {"ok":false,"id":1,"error":{"kind":"unknown","detail":"no function named NoSuchFunction -- not in this layer and not declared by GwAu3"}}
+PASS: the worker refused a name nothing declares, in one line
+reply 2: {"ok":false,"id":2,"error":{"kind":"error","detail":"RuntimeError: No Guild Wars client is connected. Call py4gw.connect() first."}}
+PASS: the channel carried a second request

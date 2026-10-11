@@ -4322,3 +4322,78 @@ label under the table is *"No client connected -- this controller is not attache
 tab's own text spells out which is which. The same reasoning applies to the identically shaped defect
 found here before: *"in selection menus"* was once printed for a read that had **failed**. A table cell
 must say what it measured, and the word "connected" belongs to the controller's connection alone.
+
+
+## 2026-10-08: the GwAu3 checkout audited — its class, its stale offsets, and what it is good for
+
+`external/GwAu3` was audited this week to answer whether it reaches anything in the client this project
+cannot. The answer — and the actionable half — is in
+[`TARGET_SIDE_WORK.md`](TARGET_SIDE_WORK.md). What follows is the provenance record, so the checkout is
+used at the tier it actually occupies.
+
+### Its class, corrected from what its own README suggests
+
+GwAu3 is **not** DLL-injected, and settling that was worth the reading because its README and its file
+layout invite the opposite conclusion. Both of its native libraries are loaded into the **AutoIt host**:
+`GWPathfinder.dll` through `DllOpen` (`Pathfinder_Core.au3:66`), and `imgui.dll` after a `FileInstall`
+(`ImGui.au3:7-15`). Neither is ever handed a client pointer, and there is no
+`LoadLibrary*`/`LdrLoadDll`/manual-mapping path into `Gw.exe` anywhere in the tree. Its real shape is
+**external controller + payload injection** — one emitted code region and five `E9` detours
+(`GwAu3_Core_Assembler.au3:1880-1911`) feeding a 256-slot command ring that the client's own thread
+consumes. That is the same class this project's `game_thread` occupies, which is why its mechanisms are
+comparable one for one rather than categorically different.
+
+Two further characterisations of it, both `verified`:
+
+- **`GwAu3_Core_Updater.au3` does not update offsets.** It is a Git-blob file sync of the library's own
+  `.au3` sources over HTTPS (`:180`, `:535`), and it contains no `ReadProcessMemory`, no module base and
+  no address arithmetic at all. Offsets are always re-derived at runtime by its scanner. Its role in the
+  audit is only as a distribution channel for new patterns.
+- **The 95 KB "assembler" is a lookup table, not an assembler.** `_()` is a 147-arm `Select` over the
+  mnemonic text plus a 346-arm `Switch` keyed on the exact instruction spelling mapping to pre-baked hex
+  (`:992-1695`), with a raw-byte escape. An unrecognised line reaches `Case Else` → `MsgBox` → `Exit`
+  (`:1691-1694`), which kills the host script.
+
+### Its offsets are stale in four places — leads, never assertions
+
+This is the concrete reason the authority order puts GwAu3 at tier 5: its own tables disagree with its own
+structures.
+
+| what | GwAu3 | correct |
+| --- | --- | --- |
+| `CharContext` from district onward | four bytes low (`GwAu3_Data_Map.au3:208-226`) | the ported `CharContextStruct` |
+| `ObserverMatch` | read at `+0x254`, dereferenced at `+0x24C` | — (self-contradictory) |
+| `Item_GetInventoryPtr` | dereferences `ItemContext+0xF8` | the field is `+0xFC` |
+| hero-info stride | `0x9C` | `0x78` — and the wrong stride silently mis-indexes every hero after the first |
+
+On top of that, its scan offsets use a convention one byte off this project's. On the shared dialog anchor
+`89 4B 24 8B 4B 28 83 E9 00` GwAu3 takes its two call targets at `+0x16`/`+0x26`, while this port's
+`send_agent_dialog_func`/`send_gadget_dialog_func` resolve from `+0x15`/`+0x25` through
+`function_from_near_call` — the difference between pointing at a raw address and pointing at the `E8`
+whose `rel32` is then decoded. Verified 2026-10-08; the two name the same client functions.
+
+### One of its own functions is inert, which is a useful caution
+
+`Chat_WriteChat` writes an unassigned global as its queue slot's command entry point, and the dispatcher
+treats a null entry as "skip" (`GwAu3_Core_Assembler.au3:1986-1988`). The global is declared
+(`Const_Chat.au3:3`) and assigned nowhere in the tree. So the existence of a GwAu3 function is not by
+itself evidence that it does anything, and any future GwAu3 claim should be checked that way before being
+counted as reach.
+
+### What of that audit is already superseded
+
+Recorded because the audit's own files were removed rather than kept (see below): several of its findings
+were true when written and are not true now, because the work landed the same day.
+
+- *"`SkillBar.LoadSkillTemplate` and `LoadHeroSkillTemplate` raise"* — both are ported; `Skillbar` is FULL.
+- *"`Skill.GetDescription`/`GetConciseDescription` raise through `_load_descriptions`; this port has no
+  copy of that file"* — the corpus was in the Reforged checkout all along and is now copied; `Skill` is FULL.
+- *"`Map.*.GetLastClickCoords` raise — REAL GAP"* — two of the six now answer (the `MissionMap` pair,
+  reading the client field with the event gate omitted, on the owner's instruction of 2026-10-08); the
+  `MiniMap`/`WorldMap` four cannot and say why.
+- *"`skillbar.attribute_array_addr` is referenced by nothing"* — it drives the template decoder's
+  attribute gating now.
+
+The audit's own two files and a set of scratch scripts were **removed** on 2026-10-08 rather than kept:
+they were written without authorization into `docs/`, and `AGENTS.md` forbids a third list beside
+`CLASS_PORT_MAP.md` and this file. Their durable content is the two sections added today, above.

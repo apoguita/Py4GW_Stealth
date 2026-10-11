@@ -1,0 +1,161 @@
+=== agent view sizes: started Sat 10/10/2026 11:47:00.27 === 
+connected read-only to pid 19696
+player agent id 35
+agent 1 base:AgentStruct buffer=196 allegiance@0x1B5 in-buffer=False raw=<error: unpack_from requires a buffer of at least 438 bytes for unpacking 1 bytes at offset 437 (actual buffer size is 196)> remote=1 | hp raw=<error: unpack_from requires a buffer of at least 312 bytes for unpacking 4 bytes at offset 308 (actual buffer size is 196)> remote=1.0 | level raw=<error: unpack_from requires a buffer of at least 273 bytes for unpacking 1 bytes at offset 272 (actual buffer size is 196)>
+agent 1 living:AgentLivingStruct buffer=452 allegiance@0x1B5 in-buffer=True raw=1 remote=1 | hp raw=1.0 remote=1.0 | level raw=20
+agent 2 base:AgentStruct buffer=196 allegiance@0x1B5 in-buffer=False raw=<error: unpack_from requires a buffer of at least 438 bytes for unpacking 1 bytes at offset 437 (actual buffer size is 196)> remote=1 | hp raw=<error: unpack_from requires a buffer of at least 312 bytes for unpacking 4 bytes at offset 308 (actual buffer size is 196)> remote=1.0 | level raw=<error: unpack_from requires a buffer of at least 273 bytes for unpacking 1 bytes at offset 272 (actual buffer size is 196)>
+agent 2 living:AgentLivingStruct buffer=452 allegiance@0x1B5 in-buffer=True raw=1 remote=1 | hp raw=1.0 remote=1.0 | level raw=20
+agent 12 gadget:AgentGadgetStruct buffer=228 allegiance@0x1B5 in-buffer=False raw=<error: unpack_from requires a buffer of at least 438 bytes for unpacking 1 bytes at offset 437 (actual buffer size is 228)> remote=194 | hp raw=<error: unpack_from requires a buffer of at least 312 bytes for unpacking 4 bytes at offset 308 (actual buffer size is 228)> remote=-1.8714162045700036e-25 | level raw=<error: unpack_from requires a buffer of at least 273 bytes for unpacking 1 bytes at offset 272 (actual buffer size is 228)>
+agent 13 gadget:AgentGadgetStruct buffer=228 allegiance@0x1B5 in-buffer=False raw=<error: unpack_from requires a buffer of at least 438 bytes for unpacking 1 bytes at offset 437 (actual buffer size is 228)> remote=167 | hp raw=<error: unpack_from requires a buffer of at least 312 bytes for unpacking 4 bytes at offset 308 (actual buffer size is 228)> remote=-3.430344785296254e-37 | level raw=<error: unpack_from requires a buffer of at least 273 bytes for unpacking 1 bytes at offset 272 (actual buffer size is 228)>
+agent 35 base:AgentStruct buffer=196 allegiance@0x1B5 in-buffer=False raw=<error: unpack_from requires a buffer of at least 438 bytes for unpacking 1 bytes at offset 437 (actual buffer size is 196)> remote=1 | hp raw=<error: unpack_from requires a buffer of at least 312 bytes for unpacking 4 bytes at offset 308 (actual buffer size is 196)> remote=1.0 | level raw=<error: unpack_from requires a buffer of at least 273 bytes for unpacking 1 bytes at offset 272 (actual buffer size is 196)>
+agent 35 living:AgentLivingStruct buffer=452 allegiance@0x1B5 in-buffer=True raw=1 remote=1 | hp raw=1.0 remote=1.0 | level raw=20
+layer 1 Allegiance -> 1
+layer 1 HP -> 1.0
+layer 1 IsDead -> False
+layer 1 Level -> 20
+layer 2 Allegiance -> 1
+layer 2 HP -> 1.0
+layer 2 IsDead -> False
+layer 2 Level -> 20
+layer 3 Allegiance -> 1
+layer 3 HP -> 1.0
+layer 3 IsDead -> False
+layer 3 Level -> 20
+layer 4 Allegiance -> 1
+layer 4 HP -> 1.0
+layer 4 IsDead -> False
+layer 4 Level -> 20
+layer 5 Allegiance -> 1
+layer 5 HP -> 1.0
+layer 5 IsDead -> False
+layer 5 Level -> 20
+layer 6 Allegiance -> 1
+layer 6 HP -> 1.0
+layer 6 IsDead -> False
+layer 6 Level -> 20
+layer 7 Allegiance -> 1
+layer 7 HP -> 1.0
+layer 7 IsDead -> False
+layer 7 Level -> 20
+layer 8 Allegiance -> 1
+layer 8 HP -> 1.0
+layer 8 IsDead -> False
+layer 8 Level -> 20
+layer 9 Allegiance -> 1
+layer 9 HP -> 1.0
+layer 9 IsDead -> False
+layer 9 Level -> 20
+layer 10 Allegiance -> 1
+layer 10 HP -> 1.0
+layer 10 IsDead -> False
+layer 10 Level -> 20
+layer 12 Allegiance -> <error: unpack_from requires a buffer of at least 438 bytes for unpacking 1 bytes at offset 437 (actual buffer size is 228)>
+layer 12 HP -> <error: unpack_from requires a buffer of at least 312 bytes for unpacking 4 bytes at offset 308 (actual buffer size is 228)>
+layer 12 IsDead -> <error: unpack_from requires a buffer of at least 320 bytes for unpacking 4 bytes at offset 316 (actual buffer size is 228)>
+layer 12 Level -> <error: unpack_from requires a buffer of at least 273 bytes for unpacking 1 bytes at offset 272 (actual buffer size is 228)>
+layer 13 Allegiance -> <error: unpack_from requires a buffer of at least 438 bytes for unpacking 1 bytes at offset 437 (actual buffer size is 228)>
+layer 13 HP -> <error: unpack_from requires a buffer of at least 312 bytes for unpacking 4 bytes at offset 308 (actual buffer size is 228)>
+layer 13 IsDead -> <error: unpack_from requires a buffer of at least 320 bytes for unpacking 4 bytes at offset 316 (actual buffer size is 228)>
+layer 13 Level -> <error: unpack_from requires a buffer of at least 273 bytes for unpacking 1 bytes at offset 272 (actual buffer size is 228)>
+layer 16 Allegiance -> 6
+layer 16 HP -> 1.0
+layer 16 IsDead -> False
+layer 16 Level -> 10
+layer 17 Allegiance -> 6
+layer 17 HP -> 1.0
+layer 17 IsDead -> False
+layer 17 Level -> 20
+layer 18 Allegiance -> 6
+layer 18 HP -> 1.0
+layer 18 IsDead -> False
+layer 18 Level -> 20
+layer 19 Allegiance -> 6
+layer 19 HP -> 1.0
+layer 19 IsDead -> False
+layer 19 Level -> 20
+layer 20 Allegiance -> 6
+layer 20 HP -> 1.0
+layer 20 IsDead -> False
+layer 20 Level -> 20
+layer 21 Allegiance -> 6
+layer 21 HP -> 1.0
+layer 21 IsDead -> False
+layer 21 Level -> 20
+layer 22 Allegiance -> 6
+layer 22 HP -> 1.0
+layer 22 IsDead -> False
+layer 22 Level -> 20
+layer 23 Allegiance -> 6
+layer 23 HP -> 1.0
+layer 23 IsDead -> False
+layer 23 Level -> 20
+layer 24 Allegiance -> 6
+layer 24 HP -> 1.0
+layer 24 IsDead -> False
+layer 24 Level -> 20
+layer 25 Allegiance -> 6
+layer 25 HP -> 1.0
+layer 25 IsDead -> False
+layer 25 Level -> 20
+layer 26 Allegiance -> 6
+layer 26 HP -> 1.0
+layer 26 IsDead -> False
+layer 26 Level -> 20
+layer 27 Allegiance -> 6
+layer 27 HP -> 1.0
+layer 27 IsDead -> False
+layer 27 Level -> 20
+layer 28 Allegiance -> 6
+layer 28 HP -> 1.0
+layer 28 IsDead -> False
+layer 28 Level -> 20
+layer 29 Allegiance -> 6
+layer 29 HP -> 1.0
+layer 29 IsDead -> False
+layer 29 Level -> 24
+layer 30 Allegiance -> 6
+layer 30 HP -> 1.0
+layer 30 IsDead -> False
+layer 30 Level -> 24
+layer 31 Allegiance -> 6
+layer 31 HP -> 1.0
+layer 31 IsDead -> False
+layer 31 Level -> 20
+layer 35 Allegiance -> 1
+layer 35 HP -> 1.0
+layer 35 IsDead -> False
+layer 35 Level -> 20
+layer 37 Allegiance -> 1
+layer 37 HP -> 1.0
+layer 37 IsDead -> False
+layer 37 Level -> 20
+layer 40 Allegiance -> 1
+layer 40 HP -> 1.0
+layer 40 IsDead -> False
+layer 40 Level -> 20
+layer 48 Allegiance -> 1
+layer 48 HP -> 1.0
+layer 48 IsDead -> False
+layer 48 Level -> 20
+layer 58 Allegiance -> 1
+layer 58 HP -> 1.0
+layer 58 IsDead -> False
+layer 58 Level -> 20
+layer 63 Allegiance -> 1
+layer 63 HP -> 1.0
+layer 63 IsDead -> False
+layer 63 Level -> 20
+layer 91 Allegiance -> 1
+layer 91 HP -> 1.0
+layer 91 IsDead -> False
+layer 91 Level -> 20
+layer 122 Allegiance -> 1
+layer 122 HP -> 1.0
+layer 122 IsDead -> False
+layer 122 Level -> 20
+layer 140 Allegiance -> 1
+layer 140 HP -> 1.0
+layer 140 IsDead -> False
+layer 140 Level -> 20
+views seen: {'base:AgentStruct': 3, 'living:AgentLivingStruct': 3, 'gadget:AgentGadgetStruct': 2}
+=== exit=0 === 

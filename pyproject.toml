@@ -16,6 +16,12 @@ dependencies = []
 where = ["."]
 include = ["py4gw*"]
 
+[tool.setuptools.package-data]
+# ``Skill._load_descriptions`` opens ``skill_descriptions.json`` beside the module, exactly as the
+# source does (``Skill.py:12``). Reforged ships that file inside ``Py4GWCoreLib``; this project ships
+# as a wheel, so the file has to be declared here or it would be missing from an installed copy.
+py4gw = ["skill_descriptions.json"]
+
 [tool.pytest.ini_options]
 # pytest's temporary directories belong under tests/, never in the repository root. An external
 # pytest run with an explicit --basetemp in the working directory left 53 `pytest-cache-files-*`

@@ -1,0 +1,67 @@
+=== gwa3 live reads: start Fri 10/09/2026 22:43:25.55 === 
+--- connected read-only to pid 23044 ---
+--- agent 235, map 642, item 4023, quest 167 ---
+test_a_record_the_client_does_not_hold_answers_gwau3s_no_match_value (tests.test_gwa3_live.Gwa3LiveTests.test_a_record_the_client_does_not_hold_answers_gwau3s_no_match_value)
+GwAu3 answers rather than raises when the record is not there, and so does this. ...     a missing agent, skill and map answered 0; a missing quest answered False/0
+ok
+test_a_sample_of_live_values_is_printed_for_the_record (tests.test_gwa3_live.Gwa3LiveTests.test_a_sample_of_live_values_is_printed_for_the_record)
+Not an assertion: the numbers this run read, so the record shows real game data. ...     Agent.Level            20
+    Agent.X                -2867.7900390625
+    Agent.Y                3710.118408203125
+    Agent.CurrentHP        585.0
+    Agent.MaxHP            585
+    Agent.Rotation         -0.5689498782157898
+    Map.NameID             62114
+    Map.MaxPartySize       8
+    Map.MinLevel           1
+    Skill.EnergyCost       0
+    Skill.Activation       2.0
+    Party.IsPartyLeader    True
+    World.Campaign         0
+    Quest.IsCompleted      False
+    Item.ModelID           19140
+ok
+test_every_refused_key_refuses_live_with_its_own_rule (tests.test_gwa3_live.Gwa3LiveTests.test_every_refused_key_refuses_live_with_its_own_rule)
+A refusal that only fires offline would be worse than no refusal: it would answer. ... --- 50 refused keys refused live, each with its recorded reason ---
+ok
+test_every_routed_key_answers_against_the_live_client (tests.test_gwa3_live.Gwa3LiveTests.test_every_routed_key_answers_against_the_live_client)
+The gate the migration rests on: no call a script makes raises or answers nothing. ...     Skill_GetSkillInfo: 63/63 answered, 0 refused in the reader, 0 deferred, 0 empty
+    Item_GetItemInfoByItemID: 32/35 answered, 0 refused in the reader, 3 deferred, 0 empty
+    Map_GetAreaInfo: 40/40 answered, 0 refused in the reader, 0 deferred, 0 empty
+    Quest_GetQuestInfo: 12/16 answered, 0 refused in the reader, 0 deferred, 4 empty
+    Party_GetPartyContextInfo: 7/8 answered, 1 refused in the reader, 0 deferred, 0 empty
+    World_GetWorldInfo: 49/49 answered, 0 refused in the reader, 0 deferred, 0 empty
+    Agent_GetAgentInfo: 139/139 answered, 0 refused in the reader, 0 deferred, 0 empty
+--- 342 routed field keys read the live client; 1 refused by name; 3 refused a read-only connection by name; 4 answered '' because their decode could not start ---
+--- all 350 answered keys accounted for, out of 400 declared across the seven families, 50 of which refuse ---
+ok
+test_gwau3s_own_guards_answer_before_anything_is_read (tests.test_gwa3_live.Gwa3LiveTests.test_gwau3s_own_guards_answer_before_anything_is_read)
+The empty field name and the unknown field name, which GwAu3 answers 0 for. ...     the empty and unknown field names answered 0, as GwAu3's own guards do
+ok
+test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members)
+The layer's answer and the ported member's answer, from the same live agent. ...     11 agent keys equal an independent ported read
+ok
+test_the_agent_keys_beyond_the_cross_checks_answer_a_plausible_value (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_keys_beyond_the_cross_checks_answer_a_plausible_value)
+The remaining living keys, held to the bands the game's own data allows. ...     level 20, hp 585/585, energy 24/24
+ok
+test_the_agent_sentinels_resolve_live (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_sentinels_resolve_live)
+GwAu3's two id sentinels, against the live client. ...     the -2 sentinel resolved to the controlled character 235
+    the -1 sentinel needs the game thread's target capture; asserted, not skipped
+ok
+test_the_map_family_agrees_with_the_ported_area_record (tests.test_gwa3_live.Gwa3LiveTests.test_the_map_family_agrees_with_the_ported_area_record)
+The area keys, against the same `AreaInfoStruct` reached by the ported `Map` members. ...     6 map keys equal the live area record
+ok
+test_the_party_family_answers_the_types_gwau3_declares (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_family_answers_the_types_gwau3_declares)
+The party flags are booleans live, with no id argument -- GwAu3's own arity. ...     party flags read as booleans; ported counts: size 1, heroes 0, henchmen 0, flags 0x80
+ok
+test_the_skill_family_agrees_with_the_ported_skill_record (tests.test_gwa3_live.Gwa3LiveTests.test_the_skill_family_agrees_with_the_ported_skill_record)
+The skill keys, against the record the ported class reads. ...     11 skill keys equal the live skill record
+ok
+--- code section after disconnect: b78fe64f3f748e19… (0x539400 bytes); before: b78fe64f3f748e19… ---
+
+----------------------------------------------------------------------
+Ran 11 tests in 2.491s
+
+OK
+gwa3_live_exit=0 
+=== done Fri 10/09/2026 22:43:28.39 === 

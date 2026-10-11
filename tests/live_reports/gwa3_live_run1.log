@@ -1,0 +1,314 @@
+=== gwa3 live reads: start Fri 10/09/2026 22:32:35.56 === 
+--- connected read-only to pid 23044 ---
+--- agent 235, map 642, item 4023, quest 167 ---
+test_a_record_the_client_does_not_hold_answers_gwau3s_no_match_value (tests.test_gwa3_live.Gwa3LiveTests.test_a_record_the_client_does_not_hold_answers_gwau3s_no_match_value)
+GwAu3 answers rather than raises when the record is not there, and so does this. ...     a missing agent, skill and map each answered GwAu3's own 0
+ok
+test_a_sample_of_live_values_is_printed_for_the_record (tests.test_gwa3_live.Gwa3LiveTests.test_a_sample_of_live_values_is_printed_for_the_record)
+Not an assertion: the numbers this run read, so the record shows real game data. ... ERROR
+test_every_refused_key_refuses_live_with_its_own_rule (tests.test_gwa3_live.Gwa3LiveTests.test_every_refused_key_refuses_live_with_its_own_rule)
+A refusal that only fires offline would be worse than no refusal: it would answer. ... --- 50 refused keys refused live, each with its recorded reason ---
+ok
+test_every_routed_key_answers_against_the_live_client (tests.test_gwa3_live.Gwa3LiveTests.test_every_routed_key_answers_against_the_live_client)
+The gate the migration rests on: no call a script makes raises or answers nothing. ...     Skill_GetSkillInfo: 63/63 answered
+    Item_GetItemInfoByItemID: 32/39 answered
+FAIL
+test_gwau3s_own_guards_answer_before_anything_is_read (tests.test_gwa3_live.Gwa3LiveTests.test_gwau3s_own_guards_answer_before_anything_is_read)
+The empty field name and the unknown field name, which GwAu3 answers 0 for. ...     the empty and unknown field names answered 0, as GwAu3's own guards do
+ok
+test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members)
+The layer's answer and the ported member's answer, from the same live agent. ... 
+  test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='Level')
+The layer's answer and the ported member's answer, from the same live agent. ... ERROR
+  test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='MaxHP')
+The layer's answer and the ported member's answer, from the same live agent. ... ERROR
+  test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='MaxEnergy')
+The layer's answer and the ported member's answer, from the same live agent. ... ERROR
+  test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='CurrentHP')
+The layer's answer and the ported member's answer, from the same live agent. ... ERROR
+  test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='CurrentEnergy')
+The layer's answer and the ported member's answer, from the same live agent. ... ERROR
+  test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='IsDead')
+The layer's answer and the ported member's answer, from the same live agent. ... ERROR
+  test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='Allegiance')
+The layer's answer and the ported member's answer, from the same live agent. ... ERROR
+  test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='WeaponType')
+The layer's answer and the ported member's answer, from the same live agent. ... ERROR
+  test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='TypeMap')
+The layer's answer and the ported member's answer, from the same live agent. ... ERROR
+    11 agent keys equal an independent ported read
+test_the_agent_sentinels_resolve_live (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_sentinels_resolve_live)
+GwAu3's two id sentinels, against the live client. ... ERROR
+test_the_map_family_agrees_with_the_ported_map_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_map_family_agrees_with_the_ported_map_members)
+The area keys, against the ported `Map` members reading the same map. ... 
+  test_the_map_family_agrees_with_the_ported_map_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_map_family_agrees_with_the_ported_map_members) (key='Region')
+The area keys, against the ported `Map` members reading the same map. ... FAIL
+    4 map keys equal an independent ported read
+test_the_party_family_answers_the_types_gwau3_declares (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_family_answers_the_types_gwau3_declares)
+The party keys are booleans and numbers live, and are printed with the ported counts. ... 
+  test_the_party_family_answers_the_types_gwau3_declares (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_family_answers_the_types_gwau3_declares) (key='IsPartyLeader')
+The party keys are booleans and numbers live, and are printed with the ported counts. ... FAIL
+  test_the_party_family_answers_the_types_gwau3_declares (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_family_answers_the_types_gwau3_declares) (key='IsHardMode')
+The party keys are booleans and numbers live, and are printed with the ported counts. ... FAIL
+  test_the_party_family_answers_the_types_gwau3_declares (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_family_answers_the_types_gwau3_declares) (key='IsDefeated')
+The party keys are booleans and numbers live, and are printed with the ported counts. ... FAIL
+  test_the_party_family_answers_the_types_gwau3_declares (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_family_answers_the_types_gwau3_declares) (key='IsWaitingForMission')
+The party keys are booleans and numbers live, and are printed with the ported counts. ... FAIL
+    party flags read as booleans; ported counts: size 1, heroes 0, henchmen 0
+test_the_skill_family_agrees_with_the_ported_skill_record (tests.test_gwa3_live.Gwa3LiveTests.test_the_skill_family_agrees_with_the_ported_skill_record)
+The skill keys, against the record the ported class reads. ...     11 skill keys equal the live skill record
+ok
+--- code section after disconnect: b78fe64f3f748e19… (0x539400 bytes); before: b78fe64f3f748e19… ---
+
+======================================================================
+ERROR: test_a_sample_of_live_values_is_printed_for_the_record (tests.test_gwa3_live.Gwa3LiveTests.test_a_sample_of_live_values_is_printed_for_the_record)
+Not an assertion: the numbers this run read, so the record shows real game data.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 402, in test_a_sample_of_live_values_is_printed_for_the_record
+    "Agent.Level": data_agent.Agent_GetAgentInfo(agent_id, "Level"),
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 620, in Agent_GetAgentInfo
+    return reader(record)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 447, in <lambda>
+    "Level": lambda record: record.level,
+                            ^^^^^^^^^^^^
+AttributeError: 'AgentStruct' object has no attribute 'level'
+
+======================================================================
+ERROR: test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='Level')
+The layer's answer and the ported member's answer, from the same live agent.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 284, in test_the_agent_family_agrees_with_the_ported_agent_members
+    answered = data_agent.Agent_GetAgentInfo(agent_id, key)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 620, in Agent_GetAgentInfo
+    return reader(record)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 447, in <lambda>
+    "Level": lambda record: record.level,
+                            ^^^^^^^^^^^^
+AttributeError: 'AgentStruct' object has no attribute 'level'
+
+======================================================================
+ERROR: test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='MaxHP')
+The layer's answer and the ported member's answer, from the same live agent.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 284, in test_the_agent_family_agrees_with_the_ported_agent_members
+    answered = data_agent.Agent_GetAgentInfo(agent_id, key)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 620, in Agent_GetAgentInfo
+    return reader(record)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 450, in <lambda>
+    "MaxHP": lambda record: record.max_hp,
+                            ^^^^^^^^^^^^^
+AttributeError: 'AgentStruct' object has no attribute 'max_hp'
+
+======================================================================
+ERROR: test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='MaxEnergy')
+The layer's answer and the ported member's answer, from the same live agent.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 284, in test_the_agent_family_agrees_with_the_ported_agent_members
+    answered = data_agent.Agent_GetAgentInfo(agent_id, key)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 620, in Agent_GetAgentInfo
+    return reader(record)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 449, in <lambda>
+    "MaxEnergy": lambda record: record.max_energy,
+                                ^^^^^^^^^^^^^^^^^
+AttributeError: 'AgentStruct' object has no attribute 'max_energy'
+
+======================================================================
+ERROR: test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='CurrentHP')
+The layer's answer and the ported member's answer, from the same live agent.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 284, in test_the_agent_family_agrees_with_the_ported_agent_members
+    answered = data_agent.Agent_GetAgentInfo(agent_id, key)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 620, in Agent_GetAgentInfo
+    return reader(record)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 92, in _read_currenthp
+    return record.hp * record.max_hp
+           ^^^^^^^^^
+AttributeError: 'AgentStruct' object has no attribute 'hp'
+
+======================================================================
+ERROR: test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='CurrentEnergy')
+The layer's answer and the ported member's answer, from the same live agent.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 284, in test_the_agent_family_agrees_with_the_ported_agent_members
+    answered = data_agent.Agent_GetAgentInfo(agent_id, key)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 620, in Agent_GetAgentInfo
+    return reader(record)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 98, in _read_currentenergy
+    return record.energy * record.max_energy
+           ^^^^^^^^^^^^^
+AttributeError: 'AgentStruct' object has no attribute 'energy'
+
+======================================================================
+ERROR: test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='IsDead')
+The layer's answer and the ported member's answer, from the same live agent.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 284, in test_the_agent_family_agrees_with_the_ported_agent_members
+    answered = data_agent.Agent_GetAgentInfo(agent_id, key)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 620, in Agent_GetAgentInfo
+    return reader(record)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 297, in _read_isdead
+    return _read_type_words(record, "IsDead")
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 236, in _read_type_words
+    return (int(record.effects) & bits) == bits
+                ^^^^^^^^^^^^^^
+AttributeError: 'AgentStruct' object has no attribute 'effects'
+
+======================================================================
+ERROR: test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='Allegiance')
+The layer's answer and the ported member's answer, from the same live agent.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 284, in test_the_agent_family_agrees_with_the_ported_agent_members
+    answered = data_agent.Agent_GetAgentInfo(agent_id, key)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 620, in Agent_GetAgentInfo
+    return reader(record)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 384, in <lambda>
+    "Allegiance": lambda record: record.allegiance,
+                                 ^^^^^^^^^^^^^^^^^
+AttributeError: 'AgentStruct' object has no attribute 'allegiance'
+
+======================================================================
+ERROR: test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='WeaponType')
+The layer's answer and the ported member's answer, from the same live agent.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 284, in test_the_agent_family_agrees_with_the_ported_agent_members
+    answered = data_agent.Agent_GetAgentInfo(agent_id, key)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 620, in Agent_GetAgentInfo
+    return reader(record)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 491, in <lambda>
+    "WeaponType": lambda record: record.weapon_type,
+                                 ^^^^^^^^^^^^^^^^^^
+AttributeError: 'AgentStruct' object has no attribute 'weapon_type'
+
+======================================================================
+ERROR: test_the_agent_family_agrees_with_the_ported_agent_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_family_agrees_with_the_ported_agent_members) (key='TypeMap')
+The layer's answer and the ported member's answer, from the same live agent.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 284, in test_the_agent_family_agrees_with_the_ported_agent_members
+    answered = data_agent.Agent_GetAgentInfo(agent_id, key)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 620, in Agent_GetAgentInfo
+    return reader(record)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 483, in <lambda>
+    "TypeMap": lambda record: record.type_map,
+                              ^^^^^^^^^^^^^^^
+AttributeError: 'AgentStruct' object has no attribute 'type_map'
+
+======================================================================
+ERROR: test_the_agent_sentinels_resolve_live (tests.test_gwa3_live.Gwa3LiveTests.test_the_agent_sentinels_resolve_live)
+GwAu3's two id sentinels, against the live client.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 296, in test_the_agent_sentinels_resolve_live
+    self.assertEqual(data_agent.Agent_GetAgentInfo(-2, "Level"), data_agent.Agent_GetAgentInfo(me, "Level"))
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 620, in Agent_GetAgentInfo
+    return reader(record)
+  File "C:\Users\Apo\Py4GW_Stealth\py4gw\gwa3\data_agent.py", line 447, in <lambda>
+    "Level": lambda record: record.level,
+                            ^^^^^^^^^^^^
+AttributeError: 'AgentStruct' object has no attribute 'level'
+
+======================================================================
+FAIL: test_every_routed_key_answers_against_the_live_client (tests.test_gwa3_live.Gwa3LiveTests.test_every_routed_key_answers_against_the_live_client)
+The gate the migration rests on: no call a script makes raises or answers nothing.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 211, in test_every_routed_key_answers_against_the_live_client
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        failures,
+        ^^^^^^^^^
+    ...<2 lines>...
+        + "\n  ".join(failures),
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Lists differ: ['CompleteName: raised RuntimeError: this [1780 chars]ge.'] != []
+
+First list contains 7 additional elements.
+First extra element 0:
+'CompleteName: raised RuntimeError: this connection was opened without the game thread: pass game_thread=True to connect for the bridge.'
+
+Diff is 1967 characters long. Set self.maxDiff to None to see it. : Item_GetItemInfoByItemID: 7 of 39 routed keys failed live:
+  CompleteName: raised RuntimeError: this connection was opened without the game thread: pass game_thread=True to connect for the bridge.
+  Dye1: raised NotImplementedError: GwAu3_Data_Item.au3:605 reads a byte at ``+0x21``. This project's `ItemStruct` holds a three-byte `dye` structure at exactly that offset, so the byte is inside it and there is no attribute naming it (`py4gw/context/item_context.py:282`). Reading the structure's first byte would work but would be an offset read of a field the port chose not to name, which is the kind of answer this layer refuses rather than guesses at. It needs a named accessor on the ported class.
+  Dye2: raised NotImplementedError: GwAu3_Data_Item.au3:607 reads a byte at ``+0x22`` -- the second byte of the `dye` structure at ``+0x21``, which this project declares as a three-byte field without naming its parts (`py4gw/context/item_context.py:282`). Refused for the same reason as `Dye1`: it needs a named accessor on the ported class.
+  Dye3: raised NotImplementedError: GwAu3_Data_Item.au3:609 reads a byte at ``+0x23`` -- the third byte of the `dye` structure named at `py4gw/context/item_context.py:282`. Refused for the same reason as `Dye1`: it needs a named accessor on the ported class.
+  ExtraID: raised NotImplementedError: GwAu3_Data_Item.au3:610 reads a byte at ``+0x22``, the same offset as `Dye2`, and its own comment records the alias. Refused for the same reason as `Dye1`: the byte is inside a structure this project does not name its parts for (`py4gw/context/item_context.py:282`).
+  Name: raised RuntimeError: this connection was opened without the game thread: pass game_thread=True to connect for the bridge.
+  SingleItemName: raised RuntimeError: this connection was opened without the game thread: pass game_thread=True to connect for the bridge.
+
+======================================================================
+FAIL: test_the_map_family_agrees_with_the_ported_map_members (tests.test_gwa3_live.Gwa3LiveTests.test_the_map_family_agrees_with_the_ported_map_members) (key='Region')
+The area keys, against the ported `Map` members reading the same map.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 350, in test_the_map_family_agrees_with_the_ported_map_members
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        answered,
+        ^^^^^^^^^
+        expected,
+        ^^^^^^^^^
+        f"{key}: the layer answered {answered!r}, the ported member {expected!r}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: 19 != 0 : Region: the layer answered 19, the ported member 0
+
+======================================================================
+FAIL: test_the_party_family_answers_the_types_gwau3_declares (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_family_answers_the_types_gwau3_declares) (key='IsPartyLeader')
+The party keys are booleans and numbers live, and are printed with the ported counts.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 369, in test_the_party_family_answers_the_types_gwau3_declares
+    self.assertIsInstance(answered, bool, f"{key} answered {answered!r}")
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 0 is not an instance of <class 'bool'> : IsPartyLeader answered 0
+
+======================================================================
+FAIL: test_the_party_family_answers_the_types_gwau3_declares (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_family_answers_the_types_gwau3_declares) (key='IsHardMode')
+The party keys are booleans and numbers live, and are printed with the ported counts.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 369, in test_the_party_family_answers_the_types_gwau3_declares
+    self.assertIsInstance(answered, bool, f"{key} answered {answered!r}")
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 0 is not an instance of <class 'bool'> : IsHardMode answered 0
+
+======================================================================
+FAIL: test_the_party_family_answers_the_types_gwau3_declares (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_family_answers_the_types_gwau3_declares) (key='IsDefeated')
+The party keys are booleans and numbers live, and are printed with the ported counts.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 369, in test_the_party_family_answers_the_types_gwau3_declares
+    self.assertIsInstance(answered, bool, f"{key} answered {answered!r}")
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 0 is not an instance of <class 'bool'> : IsDefeated answered 0
+
+======================================================================
+FAIL: test_the_party_family_answers_the_types_gwau3_declares (tests.test_gwa3_live.Gwa3LiveTests.test_the_party_family_answers_the_types_gwau3_declares) (key='IsWaitingForMission')
+The party keys are booleans and numbers live, and are printed with the ported counts.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Apo\Py4GW_Stealth\tests\test_gwa3_live.py", line 369, in test_the_party_family_answers_the_types_gwau3_declares
+    self.assertIsInstance(answered, bool, f"{key} answered {answered!r}")
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 0 is not an instance of <class 'bool'> : IsWaitingForMission answered 0
+
+----------------------------------------------------------------------
+Ran 10 tests in 1.241s
+
+FAILED (failures=6, errors=11)
+gwa3_live_exit=1 
+=== done Fri 10/09/2026 22:32:37.14 === 

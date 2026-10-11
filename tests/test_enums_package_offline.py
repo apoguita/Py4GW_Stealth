@@ -17,7 +17,12 @@ can be loaded, and one of them is now ported, so the harness satisfies it the wa
 - ``Item_enums.py``/``Calendar_enums.py`` do ``from .Model_enums import ModelID``, so the source files
   are loaded as members of a synthetic package rooted at the source directory.
 
-``Texture_enums.py`` (``import PySystem``) is still not ported and is not in the list.
+- ``Texture_enums.py`` does ``import PySystem`` and calls ``PySystem.Console.get_projects_path()``
+  **inside** ``get_texture_for_model``, not at import time (``:13``). That call is why the member
+  is the artifact kind here — it names the injected runtime's own module directory — and the port's
+  own ``get_texture_for_model`` raises naming it rather than building a path from this project's
+  directory. :func:`_install_pysystem_stub` exists only so the *source* can be loaded for
+  comparison; nothing in the port calls it.
 """
 
 from __future__ import annotations
@@ -53,6 +58,7 @@ MODULES = (
     ("py4gw_enums", "Py4GW_enums.py"),
     ("quest_enums", "Quest_enums.py"),
     ("region_enums", "Region_enums.py"),
+    ("texture_enums", "Texture_enums.py"),
     ("title_enums", "Title_enums.py"),
     ("ui_enums", "UI_enums.py"),
     ("whiteboard_enums", "Whiteboard_enums.py"),
@@ -62,6 +68,13 @@ MODULES = (
 #: `Model_enums.py` imports native's injected `PySkill` module; the port calls the generated lookup
 #: that module's constructor wraps (`skill_bindings.cpp:29-30`), which is ported in `skill_names`.
 NAME_SUBSTITUTIONS = {"model_enums": {"PySkill": "GetSkillIDByName"}}
+
+#: Names a source module imports and the port does not carry at all, `{module: {names}}`. This is
+#: not a substitution — the port reaches nothing in their place — so they are subtracted from the
+#: source's own names rather than mapped onto a different spelling.
+#: ``Texture_enums.py`` does ``import os.path`` and ``import PySystem``, neither of which the port
+#: needs: the file-name tables are literals and the one member that used the second is an artifact.
+SOURCE_ONLY_IMPORTS = {"texture_enums": {"os", "PySystem"}}
 
 #: Names the source modules import rather than define; skipped when comparing tables.
 IMPORTED = {
@@ -87,6 +100,11 @@ IMPORTED = {
     "Optional",
     "Set",
     "Any",
+    # ``Texture_enums.py`` imports these two rather than defining them: ``import os.path`` (which
+    # binds ``os``) and the injected runtime's ``PySystem``, whose one call is inside an artifact
+    # member. Neither is a table, and the port carries neither (see ``SOURCE_ONLY_IMPORTS``).
+    "os",
+    "PySystem",
 }
 
 
@@ -119,6 +137,28 @@ def _install_pyskill_stub() -> None:
     sys.modules["PySkill"] = stub
 
 
+def _install_pysystem_stub() -> None:
+    """Make the source's ``import PySystem`` resolvable, for the source only.
+
+    ``Texture_enums.py:2`` imports the injected runtime's ``PySystem`` and reaches
+    ``PySystem.Console.get_projects_path()`` **inside** ``get_texture_for_model`` (``:13``), never at
+    import time — so this stub only has to exist for the module to load and be compared. That call is
+    exactly why the member is an artifact in this port: native defines ``get_projects_path()`` as the
+    directory of the injected runtime's own module (``system_bindings.cpp:72-74``), and the port's
+    ``get_texture_for_model`` raises naming it rather than building a path from this project's
+    directory. Nothing in the port calls this stub.
+    """
+
+    if "PySystem" in sys.modules:
+        return
+
+    stub = types.ModuleType("PySystem")
+    stub.Console = types.SimpleNamespace(  # type: ignore[attr-defined]
+        get_projects_path=lambda: r"C:\reforged"
+    )
+    sys.modules["PySystem"] = stub
+
+
 def _load_source(port_name: str, source_file: str) -> Any:
     """Load the Reforged module itself, or skip when the checkout is not on this machine.
 
@@ -135,18 +175,35 @@ def _load_source(port_name: str, source_file: str) -> Any:
         # The checkout is here and the list above says this module is ported, so a missing source file
         # is a defect in the list — ``GameData_enums.py`` was once written ``Game_data_enums.py`` here,
         # and because a skip unwinds the whole test method, that one letter silently stopped this
-        # harness from checking all sixteen modules. It fails now, and names the file.
+        # harness from checking every module in the list. It fails now, and names the file.
         raise AssertionError(
             f"MODULES lists {source_file!r} for {port_name}, but it is not in {SOURCE_DIR}"
         )
 
     _install_pyskill_stub()
+    _install_pysystem_stub()
 
     package = sys.modules.get(_SOURCE_PACKAGE)
     if package is None:
         package = types.ModuleType(_SOURCE_PACKAGE)
         package.__path__ = [str(SOURCE_DIR)]  # type: ignore[attr-defined]
         sys.modules[_SOURCE_PACKAGE] = package
+
+    # ``Texture_enums.py:4`` reaches its sibling through the **absolute**
+    # ``from Py4GWCoreLib.enums_src.Model_enums import ModelID``, where every other module in the
+    # package uses a relative ``.Model_enums``. Without these two aliases the module cannot be
+    # imported at all — and because an import failure here would otherwise surface as a skip, the
+    # comparison would quietly not happen. The aliases point at the same source directory, so what
+    # loads is the same file; it is a second module object, which is why ``ModelID`` is compared as
+    # a name and never as a value.
+    for alias, directory in (
+        ("Py4GWCoreLib", SOURCE_DIR.parent),
+        ("Py4GWCoreLib.enums_src", SOURCE_DIR),
+    ):
+        if alias not in sys.modules:
+            alias_package = types.ModuleType(alias)
+            alias_package.__path__ = [str(directory)]  # type: ignore[attr-defined]
+            sys.modules[alias] = alias_package
 
     full_name = f"{_SOURCE_PACKAGE}.{path.stem}"
     existing = sys.modules.get(full_name)
@@ -170,6 +227,7 @@ def _expected_names(port_name: str, source: Any) -> set[str]:
     """
 
     names = _public_names(source)
+    names -= SOURCE_ONLY_IMPORTS.get(port_name, set())
     for source_name, port_name_ in NAME_SUBSTITUTIONS.get(port_name, {}).items():
         if source_name in names:
             names.discard(source_name)
