@@ -61,7 +61,14 @@ MAGIC = 0x4B4C4253
 #: string is copied: a packet is the client's buffer and it is reused, so the words a StoC
 #: callback reads have to be read where that callback runs. The record is the room both copies
 #: fit in, so it is larger and every offset after the event region moved.
-VERSION = 6
+#:
+#: 7: an event record gained a bounded copy of a packet's own **bytes**, which is the packet
+#: sniffer's capture: up to 512 bytes of an inbound packet and up to 4096 of an outbound one
+#: (``packet_sniffer.cpp:28-30``). The word copy is still the 18 words it was — a listener's own
+#: fields — and the byte copy is a third area with its own length word, because a packet's size is
+#: counted in bytes and not in words. A record has to be a power of two for the slot shift, so it
+#: became 8192 and every offset after the event region moved again.
+VERSION = 7
 
 HEADER_SIZE = 64
 COMMAND_DEPTH = 16
@@ -116,13 +123,25 @@ EVENT_WORDS = 18
 EVENT_WORDS_OFFSET = EVENT_TEXT_OFFSET + EVENT_TEXT_SIZE
 EVENT_WORDS_SIZE = EVENT_WORDS * 4
 
+#: How many **bytes of a packet** an event carries: the packet sniffer's capture. The two bounds are
+#: native's own — ``kMaxStoCPacketBuffer = 512`` for an inbound packet and
+#: ``kMaxReasonableCToSPacketSize = 4096`` for an outbound one (``packet_sniffer.cpp:28-30``) — so an
+#: outbound packet needs the whole 4096 and the room is the larger of the two.
+#:
+#: The copy is taken **inside the client**, in the call that was handed the packet, for the same
+#: reason the word copy is: a packet is the client's own buffer and it is reused for the next one.
+#: Native copies into a ``std::vector`` its own process owns (``packet_sniffer.cpp:51-66``); this is
+#: the room that replaces it, and ``capture_length`` is how much of it this event filled.
+EVENT_CAPTURE_SIZE = 4096
+EVENT_CAPTURE_OFFSET = EVENT_WORDS_OFFSET + EVENT_WORDS_SIZE
+
 #: A record's size, which has to be a power of two: the emitted payload addresses a record by
-#: shifting its slot (``payload.py``). The two copies end at ``EVENT_WORDS_OFFSET +
-#: EVENT_WORDS_SIZE``; the room between there and here is padding rather than a promise, the same
-#: as the command slot's unused words. The record's own fields are eleven words — ``word_count``
-#: is the last — so they reach ``EVENT_TEXT_OFFSET`` with room to spare, and the bytes between
-#: the two are neither written by the payload nor read by the host.
-EVENT_SIZE = 2048
+#: shifting its slot (``payload.py``). The three copies end at ``EVENT_CAPTURE_OFFSET +
+#: EVENT_CAPTURE_SIZE`` = 5192; the room between there and here is padding rather than a promise,
+#: the same as the command slot's unused words. The record's own fields are twelve words —
+#: ``capture_length`` is the last — so they reach ``EVENT_TEXT_OFFSET`` with room to spare, and the
+#: bytes between the two are neither written by the payload nor read by the host.
+EVENT_SIZE = 8192
 
 COMMAND_REGION_OFFSET = HEADER_SIZE
 EVENT_REGION_OFFSET = COMMAND_REGION_OFFSET + COMMAND_DEPTH * COMMAND_SIZE
@@ -188,12 +207,14 @@ BLOCK_SIZE = DECODE_REGION_OFFSET + DECODE_DEPTH * DECODE_SLOT_SIZE
 _HEADER = struct.Struct("<16I")
 #: ``result`` is the one signed field: the call path's refusals are negative codes.
 _COMMAND = struct.Struct("<9IiI")
-#: An event's words, and then the two bounded copies it can carry: the string a watched message
-#: named (``EVENT_TEXT_OFFSET``), which is code units, and a packet's own words
-#: (``EVENT_WORDS_OFFSET``). The first ten words are the record's fields — the copy's state, its
-#: length in code units, and how many packet words follow — and both copies are written
-#: separately because neither is one of those words.
-_EVENT = struct.Struct("<11I")
+#: An event's words, and then the three bounded copies it can carry: the string a watched message
+#: named (``EVENT_TEXT_OFFSET``), which is code units; a packet's own words
+#: (``EVENT_WORDS_OFFSET``), which is what a listener reads; and a packet's own bytes
+#: (``EVENT_CAPTURE_OFFSET``), which is the sniffer's capture. The first twelve words are the
+#: record's fields — the copy's state, its length in code units, how many packet words follow, and
+#: how many packet bytes follow — and all three copies are written separately because none of them
+#: is one of those words.
+_EVENT = struct.Struct("<12I")
 _DESCRIPTOR = struct.Struct("<2I")
 
 _COMMAND_FIELDS = (
@@ -222,6 +243,7 @@ _EVENT_FIELDS = (
     "text_state",
     "text_length",
     "word_count",
+    "capture_length",
 )
 
 _DESCRIPTOR_FIELDS = (
@@ -436,6 +458,79 @@ def float_bits(value: float) -> int:
     return struct.unpack("<I", struct.pack("<f", float(value)))[0]
 
 
+#: Native's own bounds on the size walk (``stoc_methods.cpp:171-172``) and the size it answers with
+#: when the walk does not finish: ``uint32_t size = sizeof(Packet::StoC::PacketBase)`` (``:240``),
+#: which is the header word alone. The emitted capture computes the same walk in the client
+#: (:func:`py4gw.game_thread.payload._emit_packet_capture`), so the bounds live here where both
+#: sides read them.
+K_MAX_COMPUTED_PACKET_BYTES = 8192
+K_MAX_NESTED_REPEAT_COUNT = 4096
+PACKET_BASE_SIZE = 4
+
+
+@dataclass(frozen=True)
+class PacketCapture:
+    """How much of a packet a stub copies, and where the rest of the answer comes from.
+
+    The source computes a StoC packet's size by **walking the template its handler declares**
+    (``GW::StoC::GetPacketSize``, ``stoc_methods.cpp:239-262``): every descriptor contributes its
+    wire width, and a trailing nested struct contributes its nested fields' width **repeated by a
+    count read out of the packet itself** (``:212-227``). That count is packet data, so it is the
+    one part of the size a host cannot know before the stub runs — and the one part the emitted
+    code reads.
+
+    So a capture is three numbers, all of them from the template:
+
+    * ``fixed_bytes`` — the width of every field up to the nested struct, or of the whole template
+      when there is none. That much is always inside the packet.
+    * ``nested_stride`` and ``repeat_offset`` — the nested fields' own width and where the packet
+      keeps its repeat count. Zero and ``-1`` for a template with no nested struct.
+
+    The stub computes ``fixed_bytes + repeat * nested_stride`` in the client, which is the size
+    native's walk produces, and copies ``min(that, cap)`` bytes of the packet. ``cap`` is native's
+    own bound for the direction: ``kMaxStoCPacketBuffer = 512`` inbound and
+    ``kMaxReasonableCToSPacketSize = 4096`` outbound (``packet_sniffer.cpp:28-30``).
+    """
+
+    fixed_bytes: int = 0
+    nested_stride: int = 0
+    repeat_offset: int = -1
+    cap: int = EVENT_CAPTURE_SIZE
+
+    def __post_init__(self) -> None:
+        """Reject a capture whose parts cannot describe a packet."""
+
+        for name in ("fixed_bytes", "nested_stride", "repeat_offset", "cap"):
+            value = getattr(self, name)
+            if not -(2**31) <= value < 2**31:
+                raise ValueError(f"{name} must fit in a signed 32-bit value")
+        if self.fixed_bytes < 0:
+            raise ValueError("fixed_bytes cannot be negative")
+        if self.nested_stride < 0:
+            raise ValueError("nested_stride cannot be negative")
+        if self.nested_stride and self.repeat_offset < 0:
+            raise ValueError(
+                "a capture with a nested stride needs the packet offset its repeat count is at"
+            )
+        if not 0 < self.cap <= EVENT_CAPTURE_SIZE:
+            raise ValueError(
+                f"a capture's cap must be 1..{EVENT_CAPTURE_SIZE} bytes; it is {self.cap}"
+            )
+
+    @property
+    def has_nested_struct(self) -> bool:
+        """Whether the stub has to read a repeat count out of the packet."""
+
+        return self.nested_stride > 0
+
+
+#: Native's ``PacketDirection`` values (``packet_sniffer.h:12-15``), as an event's ``arg0`` carries
+#: them for :attr:`EventKind.PACKET`. The names belong to the binding module that ports
+#: ``PyPacketSniffer``; these two are the numbers the record's word holds, and they are the same two.
+PACKET_DIRECTION_STOC = 0
+PACKET_DIRECTION_CTOS = 1
+
+
 class EventKind(IntEnum):
     """What an event record is about.
 
@@ -470,6 +565,15 @@ class EventKind(IntEnum):
     #: ``PacketBase``'s first word, which is also what indexes the handler array (``stoc.cpp:80``) —
     #: and the packet's own words in the record's word copy (``EVENT_WORDS_OFFSET``), as many as
     #: that header's listener reads and counted by ``word_count``.
+    #:
+    #: The packet sniffer reads the same event for a different purpose, and the other fields are its
+    #: (``packet_sniffer.cpp:135-147``): ``arg0`` is the **direction** as native's ``PacketDirection``
+    #: numbers it (``StoC = 0``, ``CToS = 1``), ``arg1`` is `entry.size` — the packet's size in bytes,
+    #: walked from its handler's field template for an inbound packet and taken from the send
+    #: wrapper's own argument for an outbound one — and the bytes themselves are the record's capture
+    #: copy (``EVENT_CAPTURE_OFFSET``), counted by ``capture_length``. Both directions produce this
+    #: kind: an outbound packet comes from the entry hook on the send wrapper, not from a handler
+    #: entry, and native's own record does not distinguish them either (it holds one log for both).
     PACKET = 5
     UI_MESSAGE = 63
 
@@ -929,6 +1033,12 @@ class EventRecord:
     its listener reads it, the header first, exactly the fields native's own callback reads off
     the pointer it was handed (``listeners.cpp:99-119``). It is empty for every other kind, and
     ``sequence`` carries the header the stub was placed for.
+
+    ``capture`` is the copy the packet stub took of a packet's own **bytes**, which is what the
+    packet sniffer logs: ``data`` in native's own record (``packet_sniffer.h:19-25``), bounded by
+    ``kMaxStoCPacketBuffer`` for an inbound packet and ``kMaxReasonableCToSPacketSize`` for an
+    outbound one and clipped to :data:`EVENT_CAPTURE_SIZE`. It is empty for every kind that is not
+    a packet, and a packet whose capture was clipped says so by carrying fewer bytes than ``arg1``.
     """
 
     kind: int
@@ -941,6 +1051,7 @@ class EventRecord:
     text_state: int = EventTextState.ABSENT
     text: tuple[int, ...] = ()
     words: tuple[int, ...] = ()
+    capture: bytes = b""
 
     def __post_init__(self) -> None:
         """Reject anything the record cannot carry."""
@@ -965,6 +1076,13 @@ class EventRecord:
             )
         for word in self.words:
             _check_uint32("packet word", word)
+        if not isinstance(self.capture, bytes):
+            raise ValueError("a packet capture is bytes")
+        if len(self.capture) > EVENT_CAPTURE_SIZE:
+            raise ValueError(
+                f"an event carries at most {EVENT_CAPTURE_SIZE} bytes of a packet; "
+                f"{len(self.capture)} were given"
+            )
 
     def to_bytes(self) -> bytes:
         """Return the record in its fixed ``EVENT_SIZE``-byte form."""
@@ -981,6 +1099,7 @@ class EventRecord:
             int(self.text_state),
             len(self.text),
             len(self.words),
+            len(self.capture),
         )
         text = b"".join(struct.pack("<H", unit) for unit in self.text)
         packet = b"".join(struct.pack("<I", word) for word in self.words)
@@ -990,7 +1109,9 @@ class EventRecord:
             + text
             + bytes(EVENT_TEXT_SIZE - len(text))
             + packet
-            + bytes(EVENT_SIZE - EVENT_WORDS_OFFSET - len(packet))
+            + bytes(EVENT_WORDS_SIZE - len(packet))
+            + self.capture
+            + bytes(EVENT_SIZE - EVENT_CAPTURE_OFFSET - len(self.capture))
         )
 
     @classmethod
@@ -1012,6 +1133,7 @@ class EventRecord:
             text_state,
             text_length,
             word_count,
+            capture_length,
         ) = _EVENT.unpack(raw[: _EVENT.size])
         if reserved != 0:
             raise ValueError("event reserved field must be zero")
@@ -1025,6 +1147,11 @@ class EventRecord:
                 f"event word count {word_count} is past the {EVENT_WORDS} packet words "
                 "a record carries"
             )
+        if capture_length > EVENT_CAPTURE_SIZE:
+            raise ValueError(
+                f"event capture length {capture_length} is past the {EVENT_CAPTURE_SIZE} "
+                "packet bytes a record carries"
+            )
 
         text = tuple(
             struct.unpack_from("<H", raw, EVENT_TEXT_OFFSET + index * 2)[0]
@@ -1037,6 +1164,9 @@ class EventRecord:
             struct.unpack_from("<I", raw, EVENT_WORDS_OFFSET + index * 4)[0]
             for index in range(word_count)
         )
+        # The same discipline for the capture: exactly the bytes the stub counted, and nothing
+        # beyond them, because a slot is reused.
+        capture = bytes(raw[EVENT_CAPTURE_OFFSET : EVENT_CAPTURE_OFFSET + capture_length])
         return cls(
             kind=kind,
             sequence=sequence,
@@ -1048,6 +1178,7 @@ class EventRecord:
             text_state=text_state,
             text=text,
             words=words,
+            capture=capture,
         )
 
 

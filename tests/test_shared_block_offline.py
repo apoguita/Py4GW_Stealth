@@ -52,7 +52,10 @@ class LayoutTests(unittest.TestCase):
     def test_sizes_are_what_the_payload_expects(self) -> None:
         self.assertEqual(block.HEADER_SIZE, 64)
         self.assertEqual(COMMAND_SIZE, 64)
-        self.assertEqual(block.EVENT_SIZE, 2048)
+        # ``VERSION = 7``: the record grew for the packet sniffer's byte capture, and a record has to
+        # stay a power of two because the emitted payload addresses it by shifting its slot.
+        self.assertEqual(block.EVENT_SIZE, 8192)
+        self.assertEqual(VERSION, 7)
         self.assertEqual(block.COMMAND_REGION_OFFSET, 64)
         self.assertEqual(block.EVENT_REGION_OFFSET, 64 + 16 * 64)
         self.assertEqual(
@@ -77,21 +80,50 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(EVENT_SIZE & (EVENT_SIZE - 1), 0)
 
     def test_the_copy_a_record_carries_starts_after_the_words_a_reader_reads(self) -> None:
-        """The eleven words of fields come first, then the two bounded copies."""
+        """The twelve words of fields come first, then the three bounded copies."""
 
-        # Eleven words: the eight the record always had, then the state and length of the string
-        # copy and the count of the packet words.
+        # Twelve words: the eight the record always had, then the state and length of the string
+        # copy, the count of the packet words, and the count of the packet bytes.
         self.assertEqual(block.EVENT_TEXT_LENGTH_OFFSET + 4, 40)
         self.assertEqual(block.EVENT_OFFSET["word_count"], 40)
         self.assertEqual(block.EVENT_WORDS_OFFSET, block.EVENT_TEXT_OFFSET + block.EVENT_TEXT_SIZE)
         self.assertEqual(block.EVENT_TEXT_SIZE, block.EVENT_TEXT_WORDS * 2)
         self.assertEqual(block.EVENT_WORDS_SIZE, block.EVENT_WORDS * 4)
         self.assertLessEqual(
-            block.EVENT_WORDS_OFFSET + block.EVENT_WORDS_SIZE,
+            block.EVENT_CAPTURE_OFFSET + block.EVENT_CAPTURE_SIZE,
             EVENT_SIZE,
-            "both copies are inside the record, and the rest of it is padding",
+            "the string, the packet's words and the packet's bytes all fit in one record",
         )
+        self.assertEqual(block.EVENT_CAPTURE_OFFSET, block.EVENT_WORDS_OFFSET + block.EVENT_WORDS_SIZE)
+        self.assertEqual(block.EVENT_CAPTURE_SIZE, 4096)
+        self.assertEqual(block.EVENT_OFFSET["capture_length"], block.EVENT_OFFSET["word_count"] + 4)
         self.assertEqual(EVENT_SIZE & (EVENT_SIZE - 1), 0)
+
+    def test_a_packet_record_carries_the_packets_own_bytes(self) -> None:
+        """The capture is what the sniffer logs — native's ``PacketLogEntry::data`` (``packet_sniffer.h``)."""
+
+        capture = bytes(index & 0xFF for index in range(512))
+        record = EventRecord(
+            kind=EventKind.PACKET,
+            sequence=0x84,
+            arg0=block.PACKET_DIRECTION_STOC,
+            arg1=512,
+            capture=capture,
+        )
+
+        raw = record.to_bytes()
+        self.assertEqual(len(raw), EVENT_SIZE)
+        self.assertEqual(
+            raw[block.EVENT_CAPTURE_OFFSET : block.EVENT_CAPTURE_OFFSET + len(capture)],
+            capture,
+        )
+        self.assertEqual(EventRecord.from_bytes(raw), record)
+
+    def test_a_capture_longer_than_the_record_holds_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            EventRecord(
+                kind=EventKind.PACKET, capture=bytes(block.EVENT_CAPTURE_SIZE + 1)
+            )
 
     def test_a_packet_record_carries_the_packets_own_words(self) -> None:
         """The words area is what a packet event travels in, and the count says how many."""

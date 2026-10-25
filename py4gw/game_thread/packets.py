@@ -46,12 +46,21 @@ import struct
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import IntEnum
 from typing import Protocol
 
 from .hooker import FREE_WAIT_SECONDS, HIT_POLL_SECONDS, WritableTarget
 from .patcher import PAGE_EXECUTE_READ
 from .payload import build_packet_stub
-from .shared_block import CommandRecord, CommandState, DATA_REGION_OFFSET, Operation
+from .shared_block import (
+    CommandRecord,
+    CommandState,
+    DATA_REGION_OFFSET,
+    K_MAX_COMPUTED_PACKET_BYTES,
+    Operation,
+    PACKET_BASE_SIZE,
+    PacketCapture,
+)
 
 
 class PacketBridge(Protocol):
@@ -215,11 +224,170 @@ def read_handler_table(access: WritableTarget, table_address: int) -> HandlerTab
     return HandlerTable(address=address, buffer=buffer, capacity=capacity, size=size)
 
 
+def _covers(stub: PacketStub, words: int, capture: PacketCapture | None) -> bool:
+    """Whether an already placed stub already records what a new registration asks for."""
+
+    if stub.words < words:
+        return False
+    if capture is None:
+        return True
+    return stub.capture is not None
+
+
+#: ``kMaxStoCPacketBuffer`` (``packet_sniffer.h:28``): how much of an inbound packet the sniffer
+#: keeps, whatever its walked size says.
+K_MAX_STOC_PACKET_BUFFER = 512
+
+
+class FieldKind(IntEnum):
+    """The kinds of field one template descriptor can describe (``stoc_methods.cpp:118-132``).
+
+    A descriptor is ``type`` in bits 0-3, ``size`` in bits 4-7 and ``count`` in bits 8-23
+    (``:114-116``). The widths below are wire widths, which is what the walk sums.
+    """
+
+    AgentId = 0
+    Float = 1
+    Vect2 = 2
+    Vect3 = 3
+    #: ``Byte``, ``Word`` and ``Dword`` are all serialized as a four-byte value (``:142-144``).
+    Fixed4 = 4
+    Blob = 5
+    #: Template bookkeeping entries (e.g. array-end markers); no wire bytes at all.
+    Ignore = 6
+    String16 = 7
+    Array8 = 8
+    Array16 = 9
+    Array32 = 10
+    #: ``GW`` always places at most one nested struct, and always last (``:225``).
+    NestedStruct = 11
+    Unknown = 12
+
+
+def decode_field_kind(descriptor: int) -> FieldKind:
+    """Port of ``DecodeFieldKind`` (``stoc_methods.cpp:134-165``): one descriptor's kind."""
+
+    field_type = descriptor & 0xF
+    field_size = (descriptor >> 4) & 0xF
+    if field_type == 0:
+        return FieldKind.AgentId
+    if field_type == 1:
+        return FieldKind.Float
+    if field_type == 2:
+        return FieldKind.Vect2
+    if field_type == 3:
+        return FieldKind.Vect3
+    if field_type in (4, 8):
+        return FieldKind.Fixed4
+    if field_type in (5, 9):
+        return FieldKind.Blob
+    if field_type in (6, 10):
+        return FieldKind.Ignore
+    if field_type == 7:
+        return FieldKind.String16
+    if field_type == 11:
+        if field_size == 1:
+            return FieldKind.Array8
+        if field_size == 2:
+            return FieldKind.Array16
+        if field_size == 4:
+            return FieldKind.Array32
+        return FieldKind.Unknown
+    if field_type == 12:
+        return FieldKind.NestedStruct
+    return FieldKind.Unknown
+
+
+def _field_width(kind: FieldKind, count: int) -> int:
+    """Return one field's wire width, which is what the walk adds (``stoc_methods.cpp:181-235``)."""
+
+    if kind in (FieldKind.AgentId, FieldKind.Float, FieldKind.Fixed4):
+        return 4
+    if kind is FieldKind.Vect2:
+        return 8
+    if kind is FieldKind.Vect3:
+        return 12
+    if kind in (FieldKind.Blob, FieldKind.Array8):
+        return count
+    if kind in (FieldKind.String16, FieldKind.Array16):
+        return count * 2
+    if kind is FieldKind.Array32:
+        return count * 4
+    return 0
+
+
+def read_template(access: WritableTarget, entry: int) -> tuple[tuple[int, ...], int]:
+    """Read one handler's own field template: its descriptors and its declared count.
+
+    Native's ``StoCHandler`` is ``{uint32_t* packet_template; uint32_t field_count; handler_func}``
+    (``stoc_methods.cpp:9-13``), so the first two words of a live entry are what the size walk reads.
+    ``field_count`` counts **uint32_t descriptors and is not a byte size** — that distinction is the
+    whole reason the walk exists (``stoc.cpp:20``).
+    """
+
+    template, field_count = struct.unpack("<II", access.read(entry, 8))
+    if not template or not field_count:
+        return (), 0
+    if field_count > K_MAX_COMPUTED_PACKET_BYTES // 4:
+        raise ValueError(
+            f"the handler at 0x{entry:08X} declares {field_count} template descriptors, which is "
+            "past any template a packet can have."
+        )
+    raw = access.read(template, field_count * 4)
+    return struct.unpack(f"<{field_count}I", raw), field_count
+
+
+def describe_template(descriptors: Sequence[int], cap: int = K_MAX_STOC_PACKET_BUFFER) -> PacketCapture:
+    """Return the capture a stub needs to carry one header's packet, from its template alone.
+
+    This is the template-only half of ``GW::StoC::GetPacketSize``'s walk (``stoc_methods.cpp:181-235``):
+    every descriptor contributes its wire width, starting **past** field 0, which describes the header
+    word the packet pointer already accounts for (``:246-248``). When the template ends in a nested
+    struct, the walk's data-dependent part is handed to the stub instead — the repeat count is read
+    out of the packet (``:212-217``) — so what comes back is a :class:`PacketCapture` rather than a
+    size: the fixed width, then the nested stride and where the count sits.
+
+    A nested struct **inside** the nested part is refused by name: native's walk returns after the
+    first nested struct because GW never places a second one (``:225-226``), so a template with one
+    has no width this can state. It is a template no packet of this client uses; a refusal says so
+    instead of copying a size nobody computed.
+    """
+
+    offset = PACKET_BASE_SIZE
+    for index in range(1, len(descriptors)):
+        descriptor = descriptors[index]
+        count = (descriptor >> 8) & 0xFFFF
+        kind = decode_field_kind(descriptor)
+
+        if kind is FieldKind.NestedStruct:
+            stride = 0
+            for nested in descriptors[index + 1 :]:
+                nested_kind = decode_field_kind(nested)
+                if nested_kind is FieldKind.NestedStruct:
+                    raise ValueError(
+                        "the template nests a struct inside a nested struct, which no packet of "
+                        "this client has and which native's walk refuses to walk ("
+                        "stoc_methods.cpp:225-226)."
+                    )
+                stride += _field_width(nested_kind, (nested >> 8) & 0xFFFF)
+            return PacketCapture(
+                fixed_bytes=offset, nested_stride=stride, repeat_offset=offset, cap=cap
+            )
+
+        offset += _field_width(kind, count)
+        if offset > K_MAX_COMPUTED_PACKET_BYTES:
+            return PacketCapture(fixed_bytes=offset, cap=cap)
+
+    return PacketCapture(fixed_bytes=offset, cap=cap)
+
+
 @dataclass(frozen=True)
 class PacketStub:
     """One header's replacement: what it copies, where it came from, and where it now lives."""
 
     header: int
+    #: How many of the packet's words the stub copies into the record, for a listener that reads
+    #: fields off the packet rather than keeping its bytes.
     words: int
     address: int
     original: int
@@ -227,6 +395,9 @@ class PacketStub:
     #: The orphaned stub an original was recovered from, when the entry held one from a controller
     #: that died. Zero when the entry held the client's own handler.
     repaired_from: int = 0
+    #: What the stub copies of the packet's **bytes**, when this header is one the sniffer keeps.
+    #: ``None`` for a stub placed only for a listener, which records words and no capture.
+    capture: PacketCapture | None = None
 
 
 #: The stub's opening: ``pushad`` then ``inc dword [imm32]``, the in-flight count taken on entry —
@@ -343,14 +514,33 @@ class PacketHooks:
     # -- placing and removing ----------------------------------------------
 
     def install(
-        self, table_address: int, wanted: Mapping[int, int]
+        self,
+        table_address: int,
+        wanted: Mapping[int, int],
+        captures: Mapping[int, PacketCapture] | None = None,
     ) -> tuple[PacketStub, ...]:
         """Read the client's array, place one stub per wanted header, and point the entries at them.
 
         ``wanted`` maps a header to how many of that packet's words its listener reads, which is what
-        the stub copies. A header the client's array does not hold is refused before anything is
-        replaced, so a partly applied install cannot happen: native checks the same bound before it
-        writes (``stoc_methods.cpp:55``).
+        the stub copies. ``captures`` maps a header to a :class:`~.shared_block.PacketCapture` — how
+        much of the packet's **bytes** the stub keeps — and is what the packet sniffer asks for. Both
+        may name the same header: native runs one callback per registration on the same packet
+        (``g_packet_entries[header]``, ``stoc.cpp:80-99``), and here the single stub a header gets
+        carries what all of them need, because one record is what the host dispatches.
+
+        **This is additive, as native's registration is.** ``RegisterPacketCallback`` removes that
+        entry's own old registration and inserts the new one (``stoc_methods.cpp:41-53``); it never
+        refuses because a header is already watched, and neither does a second listener's arrival —
+        which is the arrangement native itself creates, because its packet sniffer registers every
+        header (``packet_sniffer.cpp:129-135``) and the merchant listener registers five of the same
+        ones (``listeners.cpp:96-128``). A header this project already replaced is left alone when
+        the stub it has already covers what is now asked, and re-placed when it does not; the stub
+        it replaces is left mapped rather than freed, because freeing code the client may be inside
+        is how a client is taken down — the same reason :meth:`remove` waits on the in-flight count.
+
+        A header the client's array does not hold is refused before anything is replaced, so a
+        partly applied install cannot happen: native checks the same bound before it writes
+        (``stoc_methods.cpp:55``).
 
         The order is the source's: read the array, save each original, place the code, then replace
         the entry (``EnableHooks``, ``stoc.cpp:118-128``). Each entry is read back after the write,
@@ -377,16 +567,14 @@ class PacketHooks:
         kind of pointer this project replaces. Anything else is refused by name.
         """
 
-        if self._stubs:
-            raise RuntimeError(
-                f"{len(self._stubs)} headers are already replaced; remove them first."
-            )
-        if not wanted:
+        captures = {} if captures is None else dict(captures)
+        if not wanted and not captures:
             raise ValueError("no header was asked for.")
 
         access = self._access()
         table = read_handler_table(access, table_address)
-        for header in wanted:
+        every = sorted(set(wanted) | set(captures))
+        for header in every:
             table.entry(header)
 
         bridge = self._require_bridge()
@@ -398,15 +586,33 @@ class PacketHooks:
 
         placed: list[PacketStub] = []
         try:
-            for header, words in sorted(wanted.items()):
+            for header in every:
+                words = wanted.get(header, 0)
+                capture = captures.get(header)
+                existing = self._stubs.get(header)
+                if existing is not None and _covers(existing, words, capture):
+                    continue
+
                 entry = table.entry(header)
-                original = _read_uint32(access, entry + ENTRY_HANDLER_OFFSET)
+                # A header already replaced keeps chaining to the original this project saved, and
+                # never re-reads its own stub off the entry: the entry holds this project's code now.
+                original = (
+                    existing.original
+                    if existing is not None
+                    else _read_uint32(access, entry + ENTRY_HANDLER_OFFSET)
+                )
                 repaired_from = 0
-                if not original:
-                    raise RuntimeError(
-                        f"header {header}'s entry at 0x{entry:08X} has no handler to chain to."
-                    )
-                if not is_live_code(original, module_base, module_size, loaded_modules):
+                # **A null handler is not a reason to refuse.** Native snapshots whatever the entry
+                # holds and registers anyway (``stoc_methods.cpp:41-61``): the array has an entry for
+                # every header in range, and a header the client itself never dispatches has no
+                # handler at all. Nothing chains to it because nothing ever calls it — and the stub
+                # is built to chain to nothing, which is the ``original == 0`` form
+                # (``payload.build_packet_stub``). Measured live on 2026-10-24: header 79's entry
+                # held a zero handler, and refusing it aborted the whole install over a header that
+                # carries no traffic.
+                if original and existing is None and not is_live_code(
+                    original, module_base, module_size, loaded_modules
+                ):
                     recovered = original_from_stub(access, original, module_base, module_size)
                     if not recovered:
                         raise RuntimeError(
@@ -432,6 +638,7 @@ class PacketHooks:
                     words,
                     original,
                     inflight_address=self._inflight_address,
+                    capture=capture,
                 )
                 address = access.allocate(len(code))
                 access.write(address, code)
@@ -445,6 +652,7 @@ class PacketHooks:
                     original=original,
                     entry=entry + ENTRY_HANDLER_OFFSET,
                     repaired_from=repaired_from,
+                    capture=capture,
                 )
                 placed.append(stub)
                 self._stubs[header] = stub

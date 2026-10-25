@@ -322,7 +322,18 @@ class MerchantListener(Listener):
         self._reset_merchant_window_item.start()
 
     def Uninstall(self) -> None:
-        """``listeners.cpp:130-136``: remove the callbacks and put the client's handlers back."""
+        """``listeners.cpp:130-136``: remove this listener's five callbacks.
+
+        **Native removes the callbacks and leaves the client's handler entries replaced**, which is
+        what ``GW::StoC::RemoveCallback`` does (``stoc_methods.cpp:70-87``): it drops the listener's
+        entry out of ``g_packet_entries[header]`` and leaves ``handler_func`` pointing at
+        ``StoCHandler_Func``, whose list — now shorter — simply chains to the original. Every entry
+        is put back by ``DisableHooks`` at shutdown and by nothing else (``stoc.cpp:130-140``).
+
+        So this unregisters the host handler and restores nothing. Restoring here would take out
+        every header **another** consumer registered — the packet sniffer registers all of them
+        (``packet_sniffer.cpp:129-135``) — and native has no such effect.
+        """
 
         client, self._installed_on = self._installed_on, None
         if client is None:
@@ -330,7 +341,6 @@ class MerchantListener(Listener):
                 "the merchant listener is enabled but nothing says what it installed onto."
             )
         client.callbacks.unregister(EventKind.PACKET, self.OnPacket)  # type: ignore[attr-defined]
-        client.bridge.remove_packets()  # type: ignore[attr-defined]
 
 
 #: The one merchant listener, created on first use — native's function-local static

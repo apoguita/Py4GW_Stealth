@@ -1,0 +1,23 @@
+starting elevated run 
+cwd=C:\Windows\system32 
+test_a_narrow_capture_is_placed_and_restored (tests.test_live_packet_sniffer.LivePacketSnifferTests.test_a_narrow_capture_is_placed_and_restored)
+Five headers only: the merchant listener's own five, whose packets carry a few words. ... skipped 'the five headers were placed, captured nothing in 8.0 s, and were restored'
+test_an_inbound_packet_is_captured_and_every_header_restored (tests.test_live_packet_sniffer.LivePacketSnifferTests.test_an_inbound_packet_is_captured_and_every_header_restored)
+``initialize_stoc`` replaces every header's entry; ``terminate_stoc`` puts them back. ... ok
+test_an_outbound_packet_is_captured (tests.test_live_packet_sniffer.LivePacketSnifferTests.test_an_outbound_packet_is_captured)
+The send wrapper hook: its entry is ``55 8B EC 83 EC 50`` (probe, 2026-10-24). ... ok
+test_the_clear_and_filter_members_work_over_live_entries (tests.test_live_packet_sniffer.LivePacketSnifferTests.test_the_clear_and_filter_members_work_over_live_entries) ... ok
+test_the_lifecycle_is_the_sources (tests.test_live_packet_sniffer.LivePacketSnifferTests.test_the_lifecycle_is_the_sources)
+``initialize`` is both halves and ``terminate`` is CToS first — and both are idempotent. ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 60.982s
+
+OK (skipped=1)
+--- connected to pid 6616; block at 0x0DA80000..0x0DB2A640 (0xaa640 bytes); event region 0x0DA80440..0x0DB00440; capture area of a record at +0x448 (4096 bytes) ---
+--- entries rewritten by another runtime after the restore: {'0x84': '0xe2d0b0', '0x85': '0xe2d0d0', '0x86': '0xe2d0f0', '0xcc': '0xe2dc10', '0xf7': '0xe2e200'} (one shared address across headers is another runtime's single handler, as native's own StoCHandler_Func is) ---
+--- captured StoC 0x001E size=8 copied=8 head=1e 00 00 00 fd 01 00 00 ---
+--- outbound capture: 1 stub hit(s), 1 logged ---
+--- captured CToS 0x0039 size=12 copied=12 head=39 00 00 00 12 00 00 00 00 00 00 00 ---
+--- disconnected from pid 6616 ---
+exit=0 

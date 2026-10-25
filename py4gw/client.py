@@ -135,6 +135,46 @@ _RENDER_HOOK = "render.end_scene_func"
 #: to ``0x8DFF10`` inside text and its head was ``55 8b ec 83 ec 48 a1 80 74 e0 00 33 c5 89 45 fc 56 8b 75 08``.
 _RENDER_HOOK_BYTES = bytes.fromhex("55 8B EC 83 EC 48")
 
+#: The client's outbound send wrapper, which native hooks for its CToS packet capture
+#: (``packet_sniffer.cpp:156-194``) and resolves through ``packet_sniffer.ctos_send_target``
+#: (``packet_sniffer_patterns.cpp:17``). It is **not** hooked at connect: a connection that never
+#: sniffs must not touch the function every packet the client sends goes through, so the sniffer asks
+#: for it by name (``ConnectedClient.install_send_capture``) and takes it out again the same way.
+_SEND_HOOK = "packet_sniffer.ctos_send_target"
+
+
+def _entry_span(raw: bytes) -> bytes | None:
+    """Return the whole-instruction prefix of a function entry that a five-byte patch can replace.
+
+    MinHook — the library native hooks through — disassembles the function's first instructions to
+    learn how many bytes its entry patch has to displace (``hook.c``). This project has no
+    disassembler by design: every other hook it places declares its own displaced bytes, measured
+    once and written down beside the resolver (``_GAME_THREAD_HOOK_BYTES``, ``_RENDER_HOOK_BYTES``).
+
+    The send wrapper is the one function whose bytes were not measured when this was written, so its
+    span is worked out from the two prologue shapes the client's own functions have. **The lengths are
+    the instructions', not a round number**, and getting that wrong took a client down twice on
+    2026-10-24:
+
+    * ``55 8B EC 83 EC xx`` — ``push ebp`` (1) + ``mov ebp, esp`` (2) + ``sub esp, imm8`` (**3**) = **6**
+      bytes. Returning 5 splits ``sub esp, 0x50`` after ``83 EC``, so the trampoline replays a
+      ``sub esp`` that eats the first byte of the jump as its immediate and the body resumes in the
+      middle of a ``push`` — a wrecked frame on every send, and a fault a couple of sends later.
+    * ``55 8B EC 81 EC xx xx xx xx`` — the same two, plus ``sub esp, imm32`` (**6**) = **9** bytes.
+
+    Both are a whole number of instructions, which is what the trampoline requires. **Anything else
+    answers ``None``** and the caller refuses by name: a guess at how long an instruction is, replayed
+    at another address, is how a client is taken down.
+    """
+
+    if len(raw) < 9 or raw[:3] != b"\x55\x8B\xEC":
+        return None
+    if raw[3] == 0x83 and raw[4] == 0xEC:
+        return raw[:6]
+    if raw[3] == 0x81 and raw[4] == 0xEC:
+        return raw[:9]
+    return None
+
 #: ``jmp rel32``, the first byte of an entry patch.
 _JMP_REL32 = 0xE9
 
@@ -650,6 +690,50 @@ class ConnectedClient:
         """
 
         return self._patterns.resolve(name, self._scanner).ok
+
+    # -- the outbound packet capture ---------------------------------------
+
+    def install_send_capture(self) -> int:
+        """Hook the client's send wrapper and return the address it was patched at.
+
+        ``GW::packet_sniffer::InitializeCToS`` resolves ``packet_sniffer.ctos_send_target`` and places
+        one hook on the function it answers with (``packet_sniffer.cpp:162-185``). This is that
+        installation for a controller outside the process, so it goes through the same
+        :meth:`_prepare_target` every other hooked function does — which is what lets it sit on top
+        of another runtime's entry jump instead of refusing — and the bridge owns the hook from then
+        on, so a disconnect takes it out with everything else.
+
+        **A function whose entry cannot be displaced is refused by name, and nothing is written.**
+        The span is worked out by :func:`_entry_span`, which knows the two prologue shapes this
+        client's functions have and nothing else.
+        """
+
+        if self._bridge is None:
+            raise RuntimeError("the connection has no bridge, so there is nothing to hook.")
+        target, anchor = self._resolve_placement(_SEND_HOOK)
+        access = self._access
+        if access is None:
+            raise RuntimeError("the connection is not open.")
+        raw = access.read(target, 16)
+        span = _entry_span(raw)
+        if span is None:
+            raise RuntimeError(
+                f"pid {self._pid}: the send wrapper at 0x{target:08X} begins "
+                f"{raw[:8].hex(' ')}, which is neither ``55 8B EC 83 EC xx`` nor "
+                "``55 8B EC 81 EC xx xx xx xx``. Its entry cannot be displaced without decoding "
+                "the instruction it starts with, so the outbound capture was not placed and the "
+                "client was not patched. `tests/probe_send_wrapper_entry.py` prints the bytes the "
+                "span then has to be declared from."
+            )
+        placement = self._prepare_target(access, _SEND_HOOK, target, span, anchor)
+        self._bridge.install_send_capture(placement.target, placement.displaced)
+        return placement.target
+
+    def remove_send_capture(self, free_code: bool = False) -> None:
+        """Take the outbound capture out: ``TerminateCToS`` (``packet_sniffer.cpp:214-227``)."""
+
+        if self._bridge is not None:
+            self._bridge.remove_send_capture(free_code=free_code)
 
     def _prepare_target(
         self,

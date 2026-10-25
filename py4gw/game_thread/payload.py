@@ -53,13 +53,20 @@ from .shared_block import (
     DESCRIPTOR_DEPTH,
     DESCRIPTOR_OFFSET,
     DESCRIPTOR_SIZE,
+    EVENT_CAPTURE_OFFSET,
+    EVENT_CAPTURE_SIZE,
     EVENT_DEPTH,
     EVENT_OFFSET,
     EVENT_REGION_OFFSET,
     EVENT_SIZE,
     HEADER_OFFSET,
     HEADER_SIZE,
+    K_MAX_COMPUTED_PACKET_BYTES,
+    K_MAX_NESTED_REPEAT_COUNT,
     MAGIC,
+    PACKET_BASE_SIZE,
+    PACKET_DIRECTION_CTOS,
+    PACKET_DIRECTION_STOC,
     PING_RESULT,
     RESULT_BAD_ARGUMENTS,
     RESULT_BAD_DESCRIPTOR,
@@ -73,6 +80,7 @@ from .shared_block import (
     CallForm,
     CommandState,
     DecodeState,
+    PacketCapture,
     EVENT_TEXT_LENGTH_OFFSET,
     EVENT_TEXT_OFFSET,
     EVENT_TEXT_STATE_OFFSET,
@@ -103,6 +111,7 @@ _JB = 0x82
 _JAE = 0x83
 _JE = 0x84
 _JNE = 0x85
+_JBE = 0x86
 _JA = 0x87
 
 #: Instructions with no operand of their own.
@@ -214,6 +223,49 @@ def _mov_mem_r32(base: int, disp: int, src: int, index: int | None = None) -> by
     return bytes((0x89,)) + _memory(src, base, disp, index)
 
 
+#: The byte-sized half of the two moves above: ``AL`` is register zero in an ``8A``/``88``
+#: instruction, and a packet capture copies its bytes one at a time because a packet's size is
+#: counted in bytes and not in words (``packet_sniffer.h:19-25``).
+_AL = 0
+
+
+def _mov_r8_mem(
+    dst: int, base: int, disp: int, index: int | None = None, scale: int = 1
+) -> bytes:
+    """Return ``mov dst8, [base + index*scale + disp]`` (``8A /r``)."""
+
+    return bytes((0x8A,)) + _memory(dst, base, disp, index, scale)
+
+
+def _mov_mem_r8(
+    base: int, disp: int, src: int, index: int | None = None, scale: int = 1
+) -> bytes:
+    """Return ``mov [base + index*scale + disp], src8`` (``88 /r``)."""
+
+    return bytes((0x88,)) + _memory(src, base, disp, index, scale)
+
+
+def _imul_r32_r32_imm32(dst: int, src: int, value: int) -> bytes:
+    """Return ``imul dst, src, imm32`` (``69 /r id``).
+
+    This is how a nested struct's share of a packet's size is worked out: the repeat count the
+    packet carries, times the width of the nested fields, which is a template constant. Native's
+    walk multiplies by re-walking those fields once per repetition (``stoc_methods.cpp:220-224``);
+    the product is the same number, and no field in the nested part can be variable-width without
+    its width being a template constant itself.
+    """
+
+    return bytes((0x69, _modrm(_MOD_REGISTER, dst, src))) + struct.pack(
+        "<I", value & _UINT32_MAX
+    )
+
+
+def _inc_r32(reg: int) -> bytes:
+    """Return ``inc reg`` (``40+rd``)."""
+
+    return bytes((0x40 + reg,))
+
+
 def _mov_mem_imm32(
     base: int, disp: int, value: int, index: int | None = None
 ) -> bytes:
@@ -312,6 +364,18 @@ def _and_r32_imm8(reg: int, value: int) -> bytes:
     """Return ``and reg, imm8`` (``83 /4``)."""
 
     return bytes((0x83, _modrm(_MOD_REGISTER, 4, reg), _imm8(value)))
+
+
+def _and_r32_imm32(reg: int, value: int) -> bytes:
+    """Return ``and reg, imm32`` (``81 /4``).
+
+    The one-byte form cannot carry 0xFFFF, which is the mask an outbound packet's header word is
+    taken with: native reads it as ``raw_header & 0xFFFF`` (``packet_sniffer.cpp:42``).
+    """
+
+    return bytes((0x81, _modrm(_MOD_REGISTER, 4, reg))) + struct.pack(
+        "<I", value & _UINT32_MAX
+    )
 
 
 def _shl_r32_imm8(reg: int, value: int) -> bytes:
@@ -1128,6 +1192,65 @@ def _dec_mem32(address: int) -> bytes:
     return bytes((0xFF, _DEC_MEM32)) + struct.pack("<I", address)
 
 
+def _emit_packet_capture(code: _Code, capture: PacketCapture) -> None:
+    """Emit the sniffer's half of a packet event: the size native's walk finds, then the bytes.
+
+    ``eax`` is the packet's size in bytes, computed exactly as ``GW::StoC::GetPacketSize`` computes
+    it — the template's fixed width, plus a nested struct's width times the repeat count **the
+    packet itself carries** (``stoc_methods.cpp:212-227``). For a template with no nested struct the
+    whole size is a template constant and no byte of the packet is read to find it.
+
+    The copy is ``min(size, cap)`` bytes, which is native's own bound on how much of a packet it
+    keeps: ``kMaxStoCPacketBuffer`` inbound, ``kMaxReasonableCToSPacketSize`` outbound
+    (``packet_sniffer.cpp:28-30``). Clipping the copy and not the reported size is native's
+    (``:141-145``: ``entry.size`` is the walked size, ``entry.data`` the clipped copy), so an event
+    whose ``capture_length`` is below its ``arg1`` says its capture was clipped.
+
+    Nothing beyond the walked size is ever read, which is the one thing emitted code must not get
+    wrong: native wraps its own copy in a ``__try`` and falls back to a four-byte copy when the walk
+    was wrong (``:68-79``), and there is no exception handler here to catch a read past a packet.
+    """
+
+    if capture.has_nested_struct:
+        code.emit(_mov_r32_mem(_EAX, _ESI, capture.repeat_offset))
+        # A repeat count past native's ceiling is the walk failing, and native answers with the size
+        # of a bare header when it fails (``stoc_methods.cpp:215-217``, ``:240``). Emitted code has
+        # to make that check itself, or a wild count would be reported as a packet's size.
+        code.emit(_cmp_r32_imm32(_EAX, K_MAX_NESTED_REPEAT_COUNT))
+        code.jcc(_JA, "capture_overflow")
+        code.emit(_imul_r32_r32_imm32(_EAX, _EAX, capture.nested_stride))
+        code.emit(_add_r32_imm32(_EAX, capture.fixed_bytes))
+        code.emit(_cmp_r32_imm32(_EAX, K_MAX_COMPUTED_PACKET_BYTES))
+        code.jcc(_JA, "capture_overflow")
+        code.jump("capture_size")
+        code.label("capture_overflow")
+        code.emit(_mov_r32_imm32(_EAX, PACKET_BASE_SIZE))
+        code.label("capture_size")
+    else:
+        code.emit(_mov_r32_imm32(_EAX, capture.fixed_bytes))
+
+    code.emit(_mov_mem_r32(_EDI, EVENT_OFFSET["arg1"], _EAX))
+
+    code.emit(_mov_r32_r32(_ECX, _EAX))
+    code.emit(_cmp_r32_imm32(_ECX, capture.cap))
+    code.jcc(_JBE, "capture_count")
+    code.emit(_mov_r32_imm32(_ECX, capture.cap))
+    code.label("capture_count")
+    code.emit(_mov_mem_r32(_EDI, EVENT_OFFSET["capture_length"], _ECX))
+
+    # One byte at a time: a packet's size is counted in bytes, and a word at a time would read up to
+    # three bytes past the walked size of a packet whose size is not a multiple of four.
+    code.emit(_xor_r32_r32(_EDX, _EDX))
+    code.label("capture_next")
+    code.emit(_cmp_r32_r32(_EDX, _ECX))
+    code.jcc(_JAE, "capture_done")
+    code.emit(_mov_r8_mem(_AL, _ESI, 0, _EDX))
+    code.emit(_mov_mem_r8(_EDI, EVENT_CAPTURE_OFFSET, _AL, _EDX))
+    code.emit(_inc_r32(_EDX))
+    code.jump("capture_next")
+    code.label("capture_done")
+
+
 def build_packet_stub(
     block_address: int = 0,
     header: int = 0,
@@ -1135,6 +1258,7 @@ def build_packet_stub(
     original: int = 0,
     kind: int = EventKind.PACKET,
     inflight_address: int = 0,
+    capture: PacketCapture | None = None,
 ) -> bytes:
     """Return the packet stub: what runs where the client's own packet handler ran.
 
@@ -1241,7 +1365,21 @@ def build_packet_stub(
     code.emit(_mov_mem_imm32(_EDI, EVENT_TEXT_STATE_OFFSET, EventTextState.ABSENT))
     code.emit(_mov_mem_imm32(_EDI, EVENT_TEXT_LENGTH_OFFSET, 0))
     code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["word_count"], words))
+    # An event from a handler entry is an inbound packet, and the record says so even when no
+    # capture was asked for: the direction is the same word either way, and the other two are
+    # written as zero rather than left as whatever the previous event in this slot put there.
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["arg0"], PACKET_DIRECTION_STOC))
+    if capture is None:
+        code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["arg1"], 0))
+        code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["capture_length"], 0))
+    else:
+        _emit_packet_capture(code, capture)
 
+    # The counter is **re-read**, not incremented in a register: the capture stage above works in
+    # eax, ecx and edx, so whatever the size and the copy loop left in eax is not the sequence this
+    # event landed in. This stub is the only writer of that counter, so reading it back is exactly
+    # the value it was holding.
+    code.emit(_mov_r32_mem(_EAX, _EBX, HEADER_OFFSET["event_written"]))
     code.emit(_INC_EAX)
     code.emit(_mov_mem_r32(_EBX, HEADER_OFFSET["event_written"], _EAX))
 
@@ -1275,6 +1413,140 @@ def packet_stub_size(words: int = EVENT_WORDS) -> int:
     return len(
         build_packet_stub(0x10000000, 0x1000, words, 0x10001000, inflight_address=0x10002000)
     )
+
+
+#: The send wrapper's own signature is **three** words —
+#: ``void __cdecl SendPacket(void* ctx, uint32_t size, const void* packet)`` (``packet_sniffer.h:51-52``)
+#: — so the capture reads the **second and third**, not the first two. Forwarding only two hands the
+#: stub ``(ctx, size)``: the size word is a pointer, its guard sees it past the ceiling, and every
+#: packet is dropped in silence while nothing is captured at all. A payload that pops the block and
+#: three arguments ends ``ret 16``.
+_SEND_CAPTURE_ARGUMENTS = 3
+_SEND_CAPTURE_SIZE_OFFSET = _OBSERVER_BLOCK_OFFSET + 8
+_SEND_CAPTURE_PACKET_OFFSET = _OBSERVER_BLOCK_OFFSET + 12
+_SEND_CAPTURE_EPILOGUE = bytes((0xC2, 0x10, 0x00))
+
+
+def build_send_capture_stub(
+    block_address: int = 0,
+    kind: int = EventKind.PACKET,
+) -> bytes:
+    """Return the capture stub for the client's **outbound** send wrapper.
+
+    Native takes its CToS half from an entry hook on one function —
+    ``void __cdecl SendPacket(void* ctx, uint32_t size, const void* packet)``
+    (``packet_sniffer.h:51-52``) — whose detour reads the header straight out of the packet, copies
+    the bytes the wrapper says it is sending, and then **calls the original unconditionally**
+    (``packet_sniffer.cpp:81-98``). This is that handler, emitted: the hooker's own stub pushes the
+    block and the wrapper's arguments for it (``hooker.build_stub``'s ``forwarded_arguments``), so
+    it is entered as ``__stdcall(block, size, packet)`` and pops three words.
+
+    The guards are the source's, in the source's order (``packet_sniffer.cpp:82``): a null packet,
+    a size below ``sizeof(uint32_t)`` and a size past ``kMaxReasonableCToSPacketSize`` are all
+    dropped without a record. A packet that passes is recorded with the header the wrapper's own
+    first word carries — ``raw & 0xFFFF`` (``:42``) — its size, and its bytes, and the original then
+    runs from the trampoline, which the hooker owns rather than this stub.
+
+    **The copy is not clipped and cannot be.** The bound *is* the guard above, which is native's:
+    a packet of 4096 bytes or fewer is copied whole, and a larger one is dropped rather than
+    truncated (``packet_sniffer.cpp:52-55``, ``:82``). That is also why this stub copies in a loop
+    of bytes rather than emitting a fixed count: the length is the wrapper's argument, not a
+    constant.
+    """
+
+    code = _Code()
+
+    code.emit(_PUSHAD)
+    code.emit(_mov_r32_mem(_EBX, _ESP, _OBSERVER_BLOCK_OFFSET))
+    code.emit(_TEST_EBX_EBX)
+    code.jcc(_JE, "send_return")
+
+    for field, expected in _HEADER_CHECKS:
+        code.emit(_cmp_mem_imm32(_EBX, HEADER_OFFSET[field], expected))
+        code.jcc(_JNE, "send_return")
+
+    # eax the size the wrapper was given, esi the packet it is sending. They are its **second and
+    # third** arguments: the first is the connection context, and reading that as a size is how the
+    # outbound half captured nothing at all for two live runs.
+    code.emit(_mov_r32_mem(_EAX, _ESP, _SEND_CAPTURE_SIZE_OFFSET))
+    code.emit(_mov_r32_mem(_ESI, _ESP, _SEND_CAPTURE_PACKET_OFFSET))
+
+    code.emit(_TEST_ESI_ESI)
+    code.jcc(_JE, "send_return")
+    code.emit(_cmp_r32_imm8(_EAX, 4))
+    code.jcc(_JB, "send_return")
+    code.emit(_cmp_r32_imm32(_EAX, EVENT_CAPTURE_SIZE))
+    code.jcc(_JA, "send_return")
+
+    # The event region can be full, and then the packet is recorded nowhere: the client is never
+    # asked to wait for this side.
+    code.emit(_mov_r32_mem(_ECX, _EBX, HEADER_OFFSET["event_written"]))
+    code.emit(_mov_r32_mem(_EDX, _EBX, HEADER_OFFSET["event_taken"]))
+    code.emit(_sub_r32_r32(_ECX, _EDX))
+    code.emit(_cmp_r32_imm8(_ECX, EVENT_DEPTH))
+    code.jcc(_JAE, "send_return")
+
+    code.emit(_mov_r32_mem(_EDX, _EBX, HEADER_OFFSET["event_written"]))
+    code.emit(_mov_r32_r32(_ECX, _EDX))
+    code.emit(_and_r32_imm8(_ECX, _EVENT_SLOT_MASK))
+    code.emit(_shl_r32_imm8(_ECX, _EVENT_SLOT_SHIFT))
+    code.emit(_lea_r32_mem(_EDI, _EBX, EVENT_REGION_OFFSET, _ECX))
+
+    # The header is the outbound packet's own first word, masked to sixteen bits.
+    code.emit(_mov_r32_mem(_ECX, _ESI, 0))
+    code.emit(_and_r32_imm32(_ECX, 0xFFFF))
+
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["kind"], int(kind)))
+    code.emit(_mov_mem_r32(_EDI, EVENT_OFFSET["sequence"], _ECX))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["arg0"], PACKET_DIRECTION_CTOS))
+    code.emit(_mov_mem_r32(_EDI, EVENT_OFFSET["arg1"], _EAX))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["arg2"], 0))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["arg3"], 0))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["tick"], 0))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["reserved"], 0))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_TEXT_STATE_OFFSET, EventTextState.ABSENT))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_TEXT_LENGTH_OFFSET, 0))
+    code.emit(_mov_mem_imm32(_EDI, EVENT_OFFSET["word_count"], 0))
+    # The whole packet travels: the guard above has already refused one longer than the record holds.
+    code.emit(_mov_mem_r32(_EDI, EVENT_OFFSET["capture_length"], _EAX))
+
+    code.emit(_mov_r32_r32(_ECX, _EAX))
+    code.emit(_xor_r32_r32(_EDX, _EDX))
+    code.label("send_next")
+    code.emit(_cmp_r32_r32(_EDX, _ECX))
+    code.jcc(_JAE, "send_done")
+    code.emit(_mov_r8_mem(_AL, _ESI, 0, _EDX))
+    code.emit(_mov_mem_r8(_EDI, EVENT_CAPTURE_OFFSET, _AL, _EDX))
+    code.emit(_inc_r32(_EDX))
+    code.jump("send_next")
+    code.label("send_done")
+
+    code.emit(_mov_r32_mem(_EAX, _EBX, HEADER_OFFSET["event_written"]))
+    code.emit(_INC_EAX)
+    code.emit(_mov_mem_r32(_EBX, HEADER_OFFSET["event_written"], _EAX))
+
+    code.label("send_return")
+    code.emit(_POPAD)
+    code.emit(_SEND_CAPTURE_EPILOGUE)
+
+    return code.assemble()
+
+
+def send_capture_stub_size() -> int:
+    """Return the send capture stub's length, which does not depend on its data."""
+
+    return len(build_send_capture_stub(0x10000000))
+
+
+def send_capture_arguments() -> int:
+    """Return how many of the send wrapper's arguments its capture needs forwarded.
+
+    Three: ``SendPacket(void* ctx, uint32_t size, const void* packet)`` (``packet_sniffer.h:51-52``)
+    and the capture reads ``size`` and ``packet``. Kept beside the stub because the hook's forwarding
+    and the payload's epilogue have to agree, and nothing else checks that they do.
+    """
+
+    return _SEND_CAPTURE_ARGUMENTS
 
 #: How far the decoder stub will scan the client's string looking for its terminator, in wide
 #: characters. Native reads the string with ``wcslen`` inside an SEH frame

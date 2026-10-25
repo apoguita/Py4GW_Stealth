@@ -309,6 +309,33 @@ class PacketHooksTests(unittest.TestCase):
 
         self.assertEqual(self.entry_handler(0x20), ORIGINAL_HANDLER + 0x20 * 0x10)
 
+    def test_a_null_handler_is_registered_and_chains_to_nothing(self) -> None:
+        """The array has an entry per header, and one the client never dispatches has no handler.
+
+        Native registers regardless — it snapshots the entry and inserts into
+        ``g_packet_entries[header]``, and ``handler_func`` stays null, so nothing is ever chained
+        (``stoc_methods.cpp:41-61``). Refusing it here aborted the whole install over a header that
+        carries no traffic: measured live on 2026-10-24, header 79's entry held a zero handler and
+        every header after it went unregistered.
+        """
+
+        header = GAME_SMSG_WINDOW_ITEMS_END
+        self.memory.put_u32(BUFFER + header * ENTRY_SIZE + ENTRY_HANDLER_OFFSET, 0)
+
+        placed = self.install()
+
+        self.assertEqual(len(placed), len(self.HEADERS))
+        stub = self.hooks.stub(header)
+        self.assertEqual(stub.original, 0, "a null handler is what it chains to")
+        self.assertNotEqual(self.entry_handler(header), 0)
+        self.assertEqual(self.entry_handler(header), stub.address)
+        # The emitted code carries no chain, which is the ``original == 0`` form of the stub.
+        self.assertNotIn(bytes((0xFF, 0xD0)), self.access.allocations[stub.address])
+
+        self.hooks.remove()
+
+        self.assertEqual(self.entry_handler(header), 0, "the null is what the restore puts back")
+
     def test_the_stub_is_the_one_that_header_needs(self) -> None:
         """Each stub is built for its own header and word count, and its own original."""
 
@@ -411,18 +438,25 @@ class PacketHooksTests(unittest.TestCase):
         self.assertEqual(self.access.allocations, {})
         self.assertEqual(self.entry_handler(0), ORIGINAL_HANDLER)
 
-    def test_an_entry_with_no_handler_to_chain_to_is_refused(self) -> None:
-        """A stub that could not chain would stop the client handling that packet."""
+    def test_a_null_handler_is_not_a_refusal(self) -> None:
+        """It used to be, and that refusal was this project's own, not the source's.
+
+        The sound of it — "a stub that could not chain would stop the client handling that packet" —
+        is wrong for the one case it can happen in: an entry with no handler is a header the client
+        itself never dispatches, so there is nothing to stop, and native registers it anyway
+        (``stoc_methods.cpp:41-61``). Measured live on 2026-10-24, the refusal turned one such header
+        into a failed install and every header after it went unregistered. The case is covered, with
+        the emitted code and the restore, by
+        ``test_a_null_handler_is_registered_and_chains_to_nothing``.
+        """
 
         entry = BUFFER + GAME_SMSG_ITEM_PRICE_QUOTE * ENTRY_SIZE + ENTRY_HANDLER_OFFSET
         self.memory.put_u32(entry, 0)
 
-        with self.assertRaises(RuntimeError) as caught:
-            self.install()
+        placed = self.install()
 
-        self.assertIn("chain", str(caught.exception))
-        self.assertEqual(self.entry_handler(0), ORIGINAL_HANDLER, "nothing was replaced")
-        self.assertEqual(self.hooks.headers, ())
+        self.assertEqual(len(placed), len(self.HEADERS))
+        self.assertEqual(self.hooks.stub(GAME_SMSG_ITEM_PRICE_QUOTE).original, 0)
 
     def test_a_handler_outside_the_client_module_is_refused(self) -> None:
         """This project's own recovery discipline: never chain to a pointer nobody owns.
@@ -571,11 +605,30 @@ class PacketHooksTests(unittest.TestCase):
         self.assertEqual(self.access.freed, [])
         self.assertEqual(self.hooks.headers, (GAME_SMSG_WINDOW_ADD_ITEMS,))
 
-    def test_installing_twice_is_refused(self) -> None:
-        self.install()
+    def test_installing_again_adds_rather_than_replaces(self) -> None:
+        """``RegisterPacketCallback`` never refuses a header that is already watched (``:41-53``).
 
-        with self.assertRaises(RuntimeError):
-            self.install()
+        A second registration for the same headers places nothing new — the stubs already carry what
+        they ask for — and a header asked for the first time is the only one placed. That is what lets
+        the packet sniffer's 487 headers and this listener's five coexist, which is native's own
+        arrangement (``packet_sniffer.cpp:129-135``, ``listeners.cpp:96-128``).
+        """
+
+        self.install()
+        placed = len(self.hooks._stubs)
+        addresses = {stub.address for stub in self.hooks._stubs.values()}
+
+        self.assertEqual(self.hooks.install(RESOLVED, self.HEADERS), ())
+
+        self.assertEqual(len(self.hooks._stubs), placed)
+        self.assertEqual({stub.address for stub in self.hooks._stubs.values()}, addresses)
+
+        extra = 0x0100
+        added = self.hooks.install(RESOLVED, {extra: 2})
+
+        self.assertEqual([stub.header for stub in added], [extra])
+        self.assertEqual(self.entry_handler(extra), added[0].address)
+        self.assertEqual(len(self.hooks._stubs), placed + 1)
 
     def test_asking_for_nothing_is_refused(self) -> None:
         with self.assertRaises(ValueError):
@@ -861,8 +914,15 @@ class ListenerLifecycleTests(unittest.TestCase):
         )
         self.assertTrue(listener._reset_merchant_window_item.isRunning())
 
-    def test_uninstall_removes_both_halves(self) -> None:
-        """``listeners.cpp:130-136``: the callbacks come out and the entries go back."""
+    def test_uninstall_removes_the_callback_and_leaves_the_entries(self) -> None:
+        """``listeners.cpp:130-136``: the five ``RemoveCallback`` calls, and nothing else.
+
+        ``GW::StoC::RemoveCallback`` drops the listener's entry out of ``g_packet_entries[header]``
+        and leaves ``handler_func`` pointing at the callback itself, which then chains to the
+        original — the entries are put back by ``DisableHooks`` at shutdown only
+        (``stoc_methods.cpp:70-87``, ``stoc.cpp:130-140``). Restoring them here would take out every
+        header another consumer registered, the packet sniffer's 487 among them.
+        """
 
         client = mock.MagicMock()
         client._resolve.return_value = RESOLVED
@@ -873,7 +933,7 @@ class ListenerLifecycleTests(unittest.TestCase):
             listener.Uninstall()
 
         client.callbacks.unregister.assert_called_once()
-        client.bridge.remove_packets.assert_called_once()
+        client.bridge.remove_packets.assert_not_called()
 
     def test_the_singleton_is_one_object(self) -> None:
         """``listeners.cpp:140-143``: the function-local static."""
@@ -904,7 +964,9 @@ class ListenerLifecycleTests(unittest.TestCase):
             listeners_module.Shutdown()
 
         self.assertFalse(Merchant().IsEnabled())
-        client.bridge.remove_packets.assert_called_once()
+        # The callbacks are unregistered; the entries stay, as native's ``RemoveCallback`` leaves
+        # them (``stoc_methods.cpp:70-87``), and ``DisableHooks`` is what puts them back.
+        client.bridge.remove_packets.assert_not_called()
 
     def test_shutdown_with_nothing_enabled_does_nothing(self) -> None:
         from py4gw import listeners as listeners_module

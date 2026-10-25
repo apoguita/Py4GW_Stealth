@@ -1,0 +1,23 @@
+starting elevated run 
+cwd=C:\Windows\system32 
+test_a_narrow_capture_is_placed_and_restored (tests.test_live_packet_sniffer.LivePacketSnifferTests.test_a_narrow_capture_is_placed_and_restored)
+Five headers only: the merchant listener's own five, whose packets carry a few words. ... skipped 'the five headers were placed, captured nothing in 8.0 s, and were restored'
+test_an_inbound_packet_is_captured_and_every_header_restored (tests.test_live_packet_sniffer.LivePacketSnifferTests.test_an_inbound_packet_is_captured_and_every_header_restored)
+``initialize_stoc`` replaces every header's entry; ``terminate_stoc`` puts them back. ... ok
+test_an_outbound_packet_is_captured (tests.test_live_packet_sniffer.LivePacketSnifferTests.test_an_outbound_packet_is_captured)
+The send wrapper hook: its entry is ``55 8B EC 83 EC 50`` (probe, 2026-10-24). ... skipped 'set PY4GW_LIVE_CTOS=1 to place the send-wrapper hook'
+test_the_clear_and_filter_members_work_over_live_entries (tests.test_live_packet_sniffer.LivePacketSnifferTests.test_the_clear_and_filter_members_work_over_live_entries) ... ok
+test_the_lifecycle_is_the_sources (tests.test_live_packet_sniffer.LivePacketSnifferTests.test_the_lifecycle_is_the_sources)
+``initialize`` is both halves and ``terminate`` is CToS first — and both are idempotent. ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 59.177s
+
+OK (skipped=2)
+--- connected to pid 30300; block at 0x07120000..0x071CA640 (0xaa640 bytes); event region 0x07120440..0x071A0440; capture area of a record at +0x448 (4096 bytes) ---
+--- entries rewritten by another runtime after the restore: {'0x84': '0x56ca1ebf', '0x85': '0x56ca1ebf', '0x86': '0x56ca1ebf', '0xcc': '0x56ca1ebf', '0xf7': '0x56ca1ebf'} (one shared address across headers is another runtime's single handler, as native's own StoCHandler_Func is) ---
+--- captured StoC 0x001E size=8 copied=8 head=1e 00 00 00 4d 01 00 00 ---
+--- captured StoC 0x002E size=16 copied=16 head=2e 00 00 00 11 00 00 00 5e 91 29 c0 92 0a 06 40 ---
+--- captured StoC 0x001E size=8 copied=8 head=1e 00 00 00 01 00 00 00 ---
+--- disconnected from pid 30300 ---
+exit=0 

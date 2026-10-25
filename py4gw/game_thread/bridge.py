@@ -32,7 +32,14 @@ from collections.abc import Mapping, Sequence
 from .hooker import Hooker, WritableTarget
 from .packets import PacketHooks, PacketStub, read_handler_table
 from .patcher import PAGE_EXECUTE_READ
-from .payload import build_decoder_stub, build_dispatcher, build_observer, build_slot_capture
+from .payload import (
+    build_decoder_stub,
+    build_dispatcher,
+    build_observer,
+    build_send_capture_stub,
+    build_slot_capture,
+    send_capture_arguments,
+)
 from .shared_block import (
     BLOCK_SIZE,
     COMMAND_DEPTH,
@@ -88,6 +95,12 @@ EFFECTS_OBSERVER_NAME = "observe_effects"
 #: because those two run every frame and the host only ever wants the latest value — so this hook's payload
 #: keeps the argument in a slot rather than appending an event per frame.
 RENDER_CAPTURE_NAME = "capture_render"
+
+#: What it calls the **outbound packet capture**: the hook on the client's send wrapper, which is
+#: native's CToS half of the packet sniffer (``packet_sniffer.cpp:156-194``). It is asked for by
+#: name and on its own rather than folded into ``install``, because a connection that never sniffs
+#: must not hook the function every packet the client sends goes through.
+SEND_CAPTURE_NAME = "capture_send"
 
 #: Which of the hooked function's arguments the capture keeps. ``OnEndScene(GwDxContext* ctx, void* unk)``
 #: receives the context first (``render.cpp:75``), so it is argument one.
@@ -153,6 +166,10 @@ class Bridge:
         self._watch_address = 0
         self._capture_address = 0
         self._capture_hooker: Hooker | None = None
+        #: The outbound packet capture — the sniffer's CToS half — placed on demand and owned here, so
+        #: a disconnect takes it out with everything else.
+        self._send_capture_address = 0
+        self._send_hooker: Hooker | None = None
         self._dispatcher_address = 0
         self._observer_address = 0
         self._effects_watch_address = 0
@@ -286,27 +303,31 @@ class Bridge:
     # -- the client's packet handlers --------------------------------------
 
     def install_packets(
-        self, table_address: int, wanted: Mapping[int, int]
+        self,
+        table_address: int,
+        wanted: Mapping[int, int],
+        captures: Mapping[int, object] | None = None,
     ) -> tuple[PacketStub, ...]:
         """Replace the client's handler for each wanted header, and return what was placed.
 
         ``table_address`` is where the resolver ``stoc.handler_table_addr`` points — the address of
         the client's ``GameServer*`` variable, which is native's own reading of it
         (``stoc_patterns.cpp:43``). ``wanted`` maps a header to how many of that packet's words its
-        listener reads.
+        listener reads, and ``captures`` names the headers whose bytes the sniffer keeps.
 
         This is the one thing this project places that changes how the client dispatches **its own**
         packets, so it is asked for explicitly and by name rather than folded into ``install``: a
         connection that only reads never calls it, and every entry it takes is restored by
         :meth:`remove_packets` before anything is freed.
+
+        **A second call adds to the first, as native's registration does** (``stoc_methods.cpp:32-61``):
+        the sniffer registers every header and the merchant listener registers five of the same, and
+        both keep working. The hooks object is reused for exactly that reason — it is what holds the
+        originals every entry has to be restored to.
         """
 
-        if self._packets is not None and self._packets.headers:
-            raise RuntimeError(
-                f"pid {self._pid}: headers {self._packets.headers} are already replaced."
-            )
-        hooks = PacketHooks(self)
-        placed = hooks.install(table_address, wanted)
+        hooks = self._packets if self._packets is not None else PacketHooks(self)
+        placed = hooks.install(table_address, wanted, captures)  # type: ignore[arg-type]
         self._packets = hooks
         return placed
 
@@ -347,6 +368,91 @@ class Bridge:
         """
 
         return read_handler_table(self._access, table_address)
+
+    # -- the outbound packet capture ---------------------------------------
+
+    def install_send_capture(self, target: int, displaced: bytes) -> None:
+        """Hook the client's send wrapper so every outbound packet is recorded.
+
+        This is native's CToS half (``packet_sniffer.cpp:156-194``): an entry hook on
+        ``void __cdecl SendPacket(void* ctx, uint32_t size, const void* packet)``
+        (``packet_sniffer.h:51-52``) whose payload copies what the wrapper is about to send and then
+        lets the original run from the trampoline. ``target`` is what the resolver
+        ``packet_sniffer.ctos_send_target`` answers (``packet_sniffer_patterns.cpp:17``) and
+        ``displaced`` the whole instructions the entry patch replaces.
+
+        **Idempotent, as ``InitializeCToS`` is** (``packet_sniffer.cpp:158-161``): a second call
+        does nothing, because the hook is already placed and one capture per packet is what the
+        source installs.
+
+        The capture is asked for by name rather than folded into ``install`` because it hooks a
+        function the client uses for every packet it sends: a connection that never sniffs must
+        never place it.
+        """
+
+        if self._send_hooker is not None and SEND_CAPTURE_NAME in self._send_hooker.installed:
+            return
+
+        self._require_block()
+        code = build_send_capture_stub(self._block_address)
+        address = self._access.allocate(len(code))
+        self._access.write(address, code)
+        self._access.protect(address, len(code), PAGE_EXECUTE_READ)
+        self._access.flush_instruction_cache(address, len(code))
+
+        hooker = Hooker(
+            self._access,
+            self._pid,
+            self._block_address,
+            address,
+            self._timeout_ms,
+        )
+        hooker.install(
+            SEND_CAPTURE_NAME,
+            target,
+            displaced,
+            forwarded_arguments=send_capture_arguments(),
+        )
+        self._send_capture_address = address
+        self._send_hooker = hooker
+
+    @property
+    def observing_send(self) -> bool:
+        """Whether the outbound packet capture is currently placed."""
+
+        return (
+            self._send_hooker is not None
+            and SEND_CAPTURE_NAME in self._send_hooker.installed
+        )
+
+    def send_capture_hits(self) -> int:
+        """Return how many times the client has reached the outbound capture's stub.
+
+        The one number that separates "the client sent nothing" from "the capture is not running": the
+        stub counts itself in before any of its guards, so a nonzero count with an empty log is a
+        capture that was reached and dropped something, which is a different defect from a function
+        the client never calls.
+        """
+
+        if self._send_hooker is None or SEND_CAPTURE_NAME not in self._send_hooker.installed:
+            return 0
+        return self._send_hooker.hits(SEND_CAPTURE_NAME)
+
+    def remove_send_capture(self, free_code: bool = False) -> None:
+        """Take the send wrapper's own bytes back, as ``TerminateCToS`` does.
+
+        ``TerminateCToS`` removes the hook and drops the trampoline (``packet_sniffer.cpp:214-227``);
+        the code this project placed goes with it when the caller asks, after the hooker has waited
+        for nothing to be inside it.
+        """
+
+        hooker, self._send_hooker = self._send_hooker, None
+        if hooker is None or SEND_CAPTURE_NAME not in hooker.installed:
+            return
+        hooker.remove(SEND_CAPTURE_NAME, free_code=free_code)
+        if free_code and self._send_capture_address:
+            self._access.free(self._send_capture_address)
+        self._send_capture_address = 0
 
     @property
     def dispatcher_address(self) -> int:
@@ -677,6 +783,11 @@ class Bridge:
         """
 
         self.remove_packets(free_code=free_allocations)
+
+        # The outbound capture comes out before the block it writes into is freed, for the same reason
+        # the packet entries do: its payload runs inside the hooked function.
+        if self.observing_send:
+            self.remove_send_capture(free_code=free_allocations)
 
         if self.observing_render and self._capture_hooker is not None:
             self._capture_hooker.remove(RENDER_CAPTURE_NAME, free_code=free_allocations)

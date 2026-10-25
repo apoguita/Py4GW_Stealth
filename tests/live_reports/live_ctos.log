@@ -1,0 +1,14 @@
+starting elevated run 
+cwd=C:\Windows\system32 
+test_an_outbound_packet_is_captured (tests.test_live_packet_sniffer.LivePacketSnifferTests.test_an_outbound_packet_is_captured)
+The send wrapper hook: its entry is ``55 8B EC 83 EC 50`` (probe, 2026-10-24). ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.701s
+
+OK
+--- connected to pid 6616; block at 0x23BA0000..0x23C4A640 (0xaa640 bytes); event region 0x23BA0440..0x23C20440; capture area of a record at +0x448 (4096 bytes) ---
+--- outbound capture: 1 stub hit(s), 1 logged ---
+--- captured CToS 0x003D size=28 copied=28 head=3d 00 00 00 99 08 bb c4 b6 7b 7c 45 16 00 00 00 ---
+--- disconnected from pid 6616 ---
+exit=0 

@@ -1,0 +1,24 @@
+{
+  "pid": 20600,
+  "elevated": false,
+  "connect": "not used: this probe reads directly, so no elevation is required",
+  "resolver": {
+    "name": "packet_sniffer.ctos_send_target",
+    "ok": true,
+    "value": "0xceb0c0",
+    "trace": [
+      {
+        "step": "scan_wrapper",
+        "op": "scan",
+        "in": "0x0",
+        "out": "0xceb0c0",
+        "ok": true,
+        "detail": ""
+      }
+    ]
+  },
+  "target": "0xceb0c0",
+  "head": "55 8b ec 83 ec 50 a1 00 85 10 01 33 c5 89 45 fc 53 8b 5d 10 56 8b 75 0c 57 8b 7d 08 85 ff 75 14",
+  "entry_span": "55 8b ec 83 ec",
+  "displaceable": true
+}
