@@ -1,0 +1,155 @@
+# Py4GW Stealth — the Py4GW Reforged library that runs from outside the game
+
+hey folks, this is Py4GW Stealth, it's a port of Py4GW Reforged that runs OUTSIDE the game, there's no DLL injection involved.
+
+it's been created porting all the base functionality of Py4GW Reforged, leaving it simple on purpose, trying to mimic what GwAu3 (AutoIt) does.
+
+reach isn't the limiting factor either, it keeps everything Py4GW Reforged (or GWCA) reaches in data and methods, there's nothing in the game that we cannot access.
+
+it was also made to feel familiar to anyone coming from AutoIt and the GwAu3 library, it even carries a port of the whole GwAu3 library on the GwAu3 class, plus an AutoIt bridge, so people that only know AutoIt can have an easier migration.
+
+## Q&A
+
+**q: is this library injected?**
+
+a: this library has two components, one that is 100% read only and absolutely undetectable, the other one is the code injection (the part that executes actions in the game), this injects a very small payload into the exe to allow code execution (this method is unavoidable, GWCA, Py4GW Reforged and GwAu3 all of them need to inject a payload), but the payload that is injected from Py4GW Stealth is undetectable with the current tooling the game has and it's very minimal compared to theirs.
+
+**q: is this library complete?**
+
+a: this library is not fully complete on purpose, the point is to allow newcomers and early adopters to shape it as they would with their skillset, the functionality that exists is plentiful but basic.
+
+**q: is it Python only?**
+
+a: yes, it's based on Python and all the Py4GW Stealth libraries have an exact usage compared to Py4GW Reforged, although a GwAu3 class has been created which ports THE ENTIRETY of GwAu3 to Python and we have an AutoIt bridge to close the gaps.
+
+**q: can i use my AutoIt scripts on Py4GW Stealth?**
+
+a: not as-is, the .au3 files don't run because the logic is Python now, but there's an AutoIt bridge, an include that keeps GwAu3's names, arguments and constants, so porting is your calls staying where they are and the logic moving over a function at a time.
+
+**q: how does the AutoIt bridge work?**
+
+a: each call goes over as one JSON line, the Python side answers with one line, no game logic in AutoIt. a failure comes back through @error with the reason (not built yet, refused, no such function), not as a silent 0 or "".
+
+**q: can i do everything that GwAu3 and AutoIt can do?**
+
+a: yes and a lot more, the way Py4GW Stealth interfaces with the game is through channels that a real user must use, Py4GW Stealth has access to not only all the data that GwAu3 has access but it loads all the data lazily (it's always available) and it's magnitudes faster, e.g. you can load a full pathing map in ~100ms.
+
+**q: do i need to download pathing maps like GwAu3 does?**
+
+a: no, there's no maps.rar and no GWPathfinder.dll to keep in sync, the pathing data is read from the game itself.
+
+**q: is Py4GW Stealth slow?**
+
+a: depends compared to what, Py4GW Stealth is slower than Py4GW Reforged, in Py4GW Reforged we access data in microseconds, in Py4GW Stealth the data is accessed in a couple milliseconds, it's a negligible difference, but there is a difference, now, compared to AutoIt, we are about 100X more performant since we don't have to make operating system interruptions.
+
+**q: can we debug and break our code with Py4GW Stealth on a debugger?**
+
+a: yes.
+
+**q: can i use this library exclusively as read only?**
+
+a: yes, it's undetectable.
+
+**q: is it better than AutoIt?**
+
+a: yes, objectively in every aspect, in access to the game, in the methods it uses to hook, in the speed, in the scope, in the reach, in the tech.
+
+**q: what can i build with it?**
+
+a: the same things you build with GwAu3 or Py4GW Reforged — bots, tool windows, data readers, a pathfinder, a debug view of the client — it's a library, the script is yours.
+
+**q: has this library been tested?**
+
+a: yes, all the structures and methods have been tested, although there's no scripts made for it except the example ones.
+
+**q: is there documentation?**
+
+a: yes, in the docs folder of the repo, and every claim in there says verified, inferred or unresolved, so you can see what was run against a client and what wasn't.
+
+**q: are Py4GW Reforged and Py4GW Stealth compatible?**
+
+a: both are 100% compatible, you can inject Py4GW Reforged and use its widgets (even the heroai) and control them through Py4GW Stealth. they coexist seamlessly.
+
+**q: do i need Py4GW Reforged installed to use Py4GW Stealth?**
+
+a: no, Py4GW Stealth is standalone, Py4GW Reforged is only there if you want its widgets and its framework on top.
+
+**q: is Py4GW Stealth going to grow as Py4GW Reforged?**
+
+a: i doubt so, it's barebones for a reason, to allow AutoIt coders to have an easier time handling Python and not get overwhelmed with content. that being said, the library has a lot of access that GwAu3 cannot access, we access all the UI classes of the game, we access the pathing data, we have access to sniffers, we have access to listeners, we have access to many high end engineering tools, it's not just a simple GwAu3 clone.
+
+**q: what do i need to run it?**
+
+a: a 32 bit Python 3.10 (for compatibility with Py4GW Reforged).
+
+**q: do i need to run as admin?**
+
+a: for the action half yes, the read half no, Windows won't give a normal process the rights to write into another one, so the shell has to be elevated before Python starts.
+
+**q: do i have to compile anything?**
+
+a: no, there's no DLL to build, no compiler, no binary, the code that runs inside the game is emitted from Python when you connect.
+
+**q: does it work on my game build?**
+
+a: everything is resolved by signature scan, if Py4GW Reforged works with it, Py4GW Stealth also does.
+
+**q: can i run more than one client?**
+
+a: yes, every client is listed and read, a connection is per client.
+
+**q: is there an overlay?**
+
+a: not in Py4GW Stealth, that is Py4GW Reforged's job, and it runs next to Py4GW Stealth, inject Py4GW Reforged and steer it from here. a clone of AutoIt's UI has been provided too.
+
+**q: can i get banned?**
+
+a: you could always get banned, but this library gives you better chances not to.
+
+**q: how does it look in code?**
+
+a: like any Python library:
+
+```python
+import py4gw
+from py4gw import Player
+
+py4gw.connect(pid)
+print(Player.GetName(), Player.GetLevel())
+py4gw.disconnect()
+```
+
+**q: how does it look on the GwAu3 class?**
+
+a: exactly like the GwAu3 you already write, same names, same arguments:
+
+```python
+from py4gw.gwa3 import constants, core, data_agent
+
+core.Core_Initialize(1234)          # a pid, or a character name
+print(data_agent.Agent_GetAgentInfo(-2, "HP"))
+print(constants.GC_I_ALLEGIANCE_ENEMY)
+```
+
+**q: how does it look on the AutoIt bridge?**
+
+a: like your old scripts, an include and your calls stay where they are:
+
+```autoit
+#include "Stealth_GwAu3.au3"
+
+_Stealth_BridgeStart("C:\Users\you\Py4GW_Stealth")  ; once, at the top
+Local $fX = Agent_GetAgentInfo(-2, "X")
+Local $iHP = Agent_GetAgentInfo(-2, "HP")
+If @error Then ConsoleWrite("bridge: " & $g_s_Stealth_Error & @CRLF)
+_Stealth_BridgeStop()
+```
+
+**q: where do i start?**
+
+a: clone the repo, run one of the examples, change it, that's the point.
+
+post what breaks, one line with your build and the call is enough. if you write GwAu3, tell me if the names feel familiar.
+
+repo: https://github.com/apoguita/Py4GW_Stealth
+discord: https://discord.gg/TpqHXBgAVb

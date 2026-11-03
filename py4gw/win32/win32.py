@@ -524,3 +524,14 @@ class Win32:
             wintypes.DWORD,
         ]
         self._psapi.GetModuleInformation.restype = wintypes.BOOL
+        # GetModuleFileNameExW had no signature, so ctypes converted the 64-bit HMODULE
+        # to a 32-bit int and every handle above 2^31 raised OverflowError before the
+        # call. `list_modules` is what py4gw.connect() uses, so the whole sniffer was
+        # blocked by it on a 64-bit client build.
+        self._psapi.GetModuleFileNameExW.argtypes = [
+            wintypes.HANDLE,
+            wintypes.HMODULE,
+            wintypes.LPWSTR,
+            wintypes.DWORD,
+        ]
+        self._psapi.GetModuleFileNameExW.restype = wintypes.DWORD
