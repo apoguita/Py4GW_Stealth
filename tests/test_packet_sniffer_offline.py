@@ -285,9 +285,21 @@ class TemplateWalkTests(unittest.TestCase):
         self.assertEqual(capture.cap, 512)
 
     def test_a_template_sized_region_uses_its_count(self) -> None:
-        # string16 with count 3 (bits 8-23) is six bytes; array32 with count 2 is eight
-        capture = describe_template((0x1, (3 << 8) | 0x7, (2 << 8) | 0xB | (4 << 4)))
-        self.assertEqual(capture.fixed_bytes, 4 + 6 + 8)
+        # string16 with count 3 (bits 8-23) is six bytes; array32 with count 2 is its four-byte
+        # element count and eight bytes of elements
+        capture = describe_template((0x1, (3 << 8) | 0x7, (2 << 8) | 0xB | (2 << 4)))
+        self.assertEqual(capture.fixed_bytes, 4 + 6 + 4 + 8)
+
+    def test_the_preferences_message_is_its_whole_struct(self) -> None:
+        # 0x00B5: header, a byte array of 256 and its type-6 payload entry - the client's
+        # {u32 opcode; u32 count; u8 data[0x100]}, 264 bytes. This walked to 4 before the fix.
+        capture = describe_template((0xB5, (256 << 8) | 0xB, 0x6))
+        self.assertEqual(capture.fixed_bytes, 264)
+
+    def test_a_dword_array_is_not_halved(self) -> None:
+        # 0x008A, a dword array of 64: this walked to 132 before the fix.
+        capture = describe_template((0x8A, (64 << 8) | 0xB | (2 << 4), 0x6))
+        self.assertEqual(capture.fixed_bytes, 4 + 4 + 64 * 4)
 
     def test_ignore_fields_contribute_nothing(self) -> None:
         self.assertEqual(describe_template((0x1, 0x6, 0xA)).fixed_bytes, 4)
@@ -318,9 +330,11 @@ class TemplateWalkTests(unittest.TestCase):
             (0x6, FieldKind.Ignore),
             (0xA, FieldKind.Ignore),
             (0x7, FieldKind.String16),
-            (0xB | (1 << 4), FieldKind.Array8),
-            (0xB | (2 << 4), FieldKind.Array16),
-            (0xB | (4 << 4), FieldKind.Array32),
+            # the array nibble is log2 of the element size on this client, not native's 1/2/4
+            (0xB, FieldKind.Array8),
+            (0xB | (1 << 4), FieldKind.Array16),
+            (0xB | (2 << 4), FieldKind.Array32),
+            (0xB | (4 << 4), FieldKind.Unknown),
             (0xC, FieldKind.NestedStruct),
             (0xD, FieldKind.Unknown),
         )

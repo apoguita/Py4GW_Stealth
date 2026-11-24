@@ -238,6 +238,9 @@ def _covers(stub: PacketStub, words: int, capture: PacketCapture | None) -> bool
 #: keeps, whatever its walked size says.
 K_MAX_STOC_PACKET_BUFFER = 512
 
+#: The element count that precedes an array's storage in the client's message struct.
+ARRAY_COUNT_SIZE = 4
+
 
 class FieldKind(IntEnum):
     """The kinds of field one template descriptor can describe (``stoc_methods.cpp:118-132``).
@@ -286,11 +289,19 @@ def decode_field_kind(descriptor: int) -> FieldKind:
     if field_type == 7:
         return FieldKind.String16
     if field_type == 11:
-        if field_size == 1:
+        # **Not native's mapping, on purpose.** Native (and GWCA's PacketLogger it mirrors) reads bits
+        # 4-7 as the element's byte size - 1, 2, 4 (``stoc_methods.cpp:153-158``). On this client the
+        # nibble is the **log2** of the element size - 0, 1, 2 - which is how Rurik's ``msgshape.py``
+        # (``decode_cmd``: "index is a log2 element size") reads the same descriptors. Measured, not
+        # argued: with native's mapping the live templates of the byte-array messages 0x00B5, 0x0104
+        # and 0x0197 walked to 4 bytes (``tests/live_reports/stoc_captures.json``), and the dword
+        # arrays of 0x008A (64) and 0x00DB (128) walked to 132 and 260 - half their width - which is
+        # what every capture then held.
+        if field_size == 0:
             return FieldKind.Array8
-        if field_size == 2:
+        if field_size == 1:
             return FieldKind.Array16
-        if field_size == 4:
+        if field_size == 2:
             return FieldKind.Array32
         return FieldKind.Unknown
     if field_type == 12:
@@ -307,12 +318,21 @@ def _field_width(kind: FieldKind, count: int) -> int:
         return 8
     if kind is FieldKind.Vect3:
         return 12
-    if kind in (FieldKind.Blob, FieldKind.Array8):
+    if kind is FieldKind.Blob:
         return count
-    if kind in (FieldKind.String16, FieldKind.Array16):
+    if kind is FieldKind.String16:
         return count * 2
+    # An array in the client's struct is a four-byte element count and then room for ``count``
+    # elements: 0x00B5 is ``{u32 opcode; u32 count; u8 data[0x100]}``, 264 bytes (Eden,
+    # ``docs/re/configuration.md`` 7.1 and 7.3), and a captured 0x00DB opens ``db000000 0e000000``
+    # - the header, then fourteen, then the elements. Native's walk leaves the count word out
+    # (``stoc_methods.cpp:193-203``), which dropped the last four bytes of every array.
+    if kind is FieldKind.Array8:
+        return ARRAY_COUNT_SIZE + count
+    if kind is FieldKind.Array16:
+        return ARRAY_COUNT_SIZE + count * 2
     if kind is FieldKind.Array32:
-        return count * 4
+        return ARRAY_COUNT_SIZE + count * 4
     return 0
 
 

@@ -50,6 +50,7 @@ waited for the drain. It is recorded here rather than smoothed over.
 from __future__ import annotations
 
 import ctypes
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import IntEnum
 
@@ -89,6 +90,28 @@ _handler_registered = False
 #: record's own word already carries the size the stub computed, so nothing is re-walked when a record
 #: arrives; this is only what :meth:`PacketSniffer.initialize_stoc` installed.
 _stoc_captures: dict[int, PacketCapture] = {}
+#: The StoC headers :func:`InitializeStoC` takes, or ``None`` for every header as native does. **This
+#: port's own, not the source's**: the event region holds ``EVENT_DEPTH`` (64) records and a full one
+#: drops the record, and an area load delivers hundreds of packets between two drains - measured in
+#: this project's captures, no drain ever holds more than 64 StoC records. A capture that names its
+#: headers takes only those entries, so the burst it does not want cannot crowd out the ones it does.
+_stoc_header_filter: frozenset[int] | None = None
+
+
+def SetStoCHeaderFilter(headers: Iterable[int] | None) -> None:
+    """Name the StoC headers the next :func:`InitializeStoC` takes; ``None`` takes them all.
+
+    Refused while the inbound half is installed, because the entries already placed are the ones
+    :func:`TerminateStoC` puts back.
+    """
+
+    global _stoc_header_filter
+
+    if _stoc_initialized:
+        raise RuntimeError(
+            "the StoC capture is installed; terminate it before changing which headers it takes."
+        )
+    _stoc_header_filter = None if headers is None else frozenset(int(header) for header in headers)
 
 _kernel32 = getattr(ctypes, "windll", None)
 _kernel32 = None if _kernel32 is None else _kernel32.kernel32
@@ -236,6 +259,8 @@ def InitializeStoC() -> bool:
         # Native's own bound check: a header the live array does not hold is not registered
         # (``stoc_methods.cpp:55``), and its registration answers ``false`` without stopping the loop.
         if header >= table.size:
+            continue
+        if _stoc_header_filter is not None and header not in _stoc_header_filter:
             continue
         descriptors, _field_count = read_template(bridge.access, table.entry(header))
         captures[header] = describe_template(descriptors, K_MAX_STOC_PACKET_BUFFER)

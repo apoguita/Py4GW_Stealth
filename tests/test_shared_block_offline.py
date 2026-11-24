@@ -54,13 +54,16 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(COMMAND_SIZE, 64)
         # ``VERSION = 7``: the record grew for the packet sniffer's byte capture, and a record has to
         # stay a power of two because the emitted payload addresses it by shifting its slot.
+        # ``VERSION = 8``: the event region went from 64 records to 1024, because a load's burst
+        # overflowed 64 and the sniffer lost packets.
         self.assertEqual(block.EVENT_SIZE, 8192)
-        self.assertEqual(VERSION, 7)
+        self.assertEqual(VERSION, 8)
+        self.assertEqual(block.EVENT_DEPTH, 1024)
         self.assertEqual(block.COMMAND_REGION_OFFSET, 64)
         self.assertEqual(block.EVENT_REGION_OFFSET, 64 + 16 * 64)
         self.assertEqual(
             block.DECODE_REGION_OFFSET,
-            block.EVENT_REGION_OFFSET + 64 * EVENT_SIZE + block.DATA_SIZE,
+            block.EVENT_REGION_OFFSET + 1024 * EVENT_SIZE + block.DATA_SIZE,
         )
         self.assertEqual(
             BLOCK_SIZE,

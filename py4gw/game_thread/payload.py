@@ -1035,12 +1035,12 @@ def build_observer(
         code.emit(_mov_r32_mem(_EAX, _EBX, HEADER_OFFSET["event_written"]))
         code.emit(_mov_r32_mem(_ECX, _EBX, HEADER_OFFSET["event_taken"]))
         code.emit(_sub_r32_r32(_EAX, _ECX))
-        code.emit(_cmp_r32_imm8(_EAX, EVENT_DEPTH))
+        code.emit(_cmp_r32_imm32(_EAX, EVENT_DEPTH))
         code.jcc(_JAE, "observer_return")
 
         code.emit(_mov_r32_mem(_EAX, _EBX, HEADER_OFFSET["event_written"]))
         code.emit(_mov_r32_r32(_ECX, _EAX))
-        code.emit(_and_r32_imm8(_ECX, _EVENT_SLOT_MASK))
+        code.emit(_and_r32_imm32(_ECX, _EVENT_SLOT_MASK))
         code.emit(_shl_r32_imm8(_ECX, _EVENT_SLOT_SHIFT))
         code.emit(_lea_r32_mem(_EDI, _EBX, EVENT_REGION_OFFSET, _ECX))
 
@@ -1344,12 +1344,12 @@ def build_packet_stub(
     code.emit(_mov_r32_mem(_EAX, _EBX, HEADER_OFFSET["event_written"]))
     code.emit(_mov_r32_mem(_ECX, _EBX, HEADER_OFFSET["event_taken"]))
     code.emit(_sub_r32_r32(_EAX, _ECX))
-    code.emit(_cmp_r32_imm8(_EAX, EVENT_DEPTH))
+    code.emit(_cmp_r32_imm32(_EAX, EVENT_DEPTH))
     code.jcc(_JAE, "packet_chain")
 
     code.emit(_mov_r32_mem(_EAX, _EBX, HEADER_OFFSET["event_written"]))
     code.emit(_mov_r32_r32(_ECX, _EAX))
-    code.emit(_and_r32_imm8(_ECX, _EVENT_SLOT_MASK))
+    code.emit(_and_r32_imm32(_ECX, _EVENT_SLOT_MASK))
     code.emit(_shl_r32_imm8(_ECX, _EVENT_SLOT_SHIFT))
     code.emit(_lea_r32_mem(_EDI, _EBX, EVENT_REGION_OFFSET, _ECX))
 
@@ -1483,12 +1483,12 @@ def build_send_capture_stub(
     code.emit(_mov_r32_mem(_ECX, _EBX, HEADER_OFFSET["event_written"]))
     code.emit(_mov_r32_mem(_EDX, _EBX, HEADER_OFFSET["event_taken"]))
     code.emit(_sub_r32_r32(_ECX, _EDX))
-    code.emit(_cmp_r32_imm8(_ECX, EVENT_DEPTH))
+    code.emit(_cmp_r32_imm32(_ECX, EVENT_DEPTH))
     code.jcc(_JAE, "send_return")
 
     code.emit(_mov_r32_mem(_EDX, _EBX, HEADER_OFFSET["event_written"]))
     code.emit(_mov_r32_r32(_ECX, _EDX))
-    code.emit(_and_r32_imm8(_ECX, _EVENT_SLOT_MASK))
+    code.emit(_and_r32_imm32(_ECX, _EVENT_SLOT_MASK))
     code.emit(_shl_r32_imm8(_ECX, _EVENT_SLOT_SHIFT))
     code.emit(_lea_r32_mem(_EDI, _EBX, EVENT_REGION_OFFSET, _ECX))
 
@@ -1773,11 +1773,11 @@ def build_dispatcher(
     code.emit(_mov_r32_mem(_ECX, _EBX, HEADER_OFFSET["event_taken"]))
     code.emit(_mov_r32_r32(_EDX, _EAX))
     code.emit(_sub_r32_r32(_EDX, _ECX))
-    code.emit(_cmp_r32_imm8(_EDX, EVENT_DEPTH))
+    code.emit(_cmp_r32_imm32(_EDX, EVENT_DEPTH))
     code.jcc(_JAE, "return")
 
     code.emit(_mov_r32_r32(_EDX, _EAX))
-    code.emit(_and_r32_imm8(_EDX, _EVENT_SLOT_MASK))
+    code.emit(_and_r32_imm32(_EDX, _EVENT_SLOT_MASK))
     code.emit(_shl_r32_imm8(_EDX, _EVENT_SLOT_SHIFT))
     code.emit(_lea_r32_mem(_EDI, _EBX, EVENT_REGION_OFFSET, _EDX))
 

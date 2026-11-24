@@ -62,6 +62,9 @@ TARGET = 0x00401000
 ORIGINAL = bytes.fromhex("55 8B EC 81 EC 20 02 00 00")
 ALLOC_BASE = 0x20000000
 REGION = 0x100000
+#: The allocations' own region. It has to hold the whole block, which is 8 MB since the event
+#: region went to 1024 records (``VERSION = 8``).
+ALLOC_REGION = 0x1000000
 PID = 1234
 PAGE_READWRITE = 0x04
 
@@ -72,7 +75,7 @@ class FakeTarget:
     def __init__(self) -> None:
         # Two regions so the target's own memory and the allocations can never
         # alias each other.
-        self.memory = bytearray(2 * REGION)
+        self.memory = bytearray(REGION + ALLOC_REGION)
         self.memory[TARGET - BASE : TARGET - BASE + len(ORIGINAL)] = ORIGINAL
         self.allocated: dict[int, int] = {}
         self.freed: list[int] = []
@@ -141,7 +144,7 @@ class FakeTarget:
     def _index(self, address: int) -> int:
         if BASE <= address < BASE + REGION:
             return address - BASE
-        if ALLOC_BASE <= address < ALLOC_BASE + REGION:
+        if ALLOC_BASE <= address < ALLOC_BASE + ALLOC_REGION:
             return REGION + (address - ALLOC_BASE)
         raise ValueError(f"address 0x{address:08X} is outside the fake's regions")
 

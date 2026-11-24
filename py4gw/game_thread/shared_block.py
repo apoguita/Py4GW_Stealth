@@ -68,11 +68,18 @@ MAGIC = 0x4B4C4253
 #: fields — and the byte copy is a third area with its own length word, because a packet's size is
 #: counted in bytes and not in words. A record has to be a power of two for the slot shift, so it
 #: became 8192 and every offset after the event region moved again.
-VERSION = 7
+#:
+#: 8: the event region went from 64 records to 1024, so every offset after it moved. 64 was not
+#: enough for the sniffer: a full region drops the record, and an area load delivers hundreds of
+#: packets between two drains. Measured in the captures taken with version 7 - drain after drain
+#: holds exactly 64 StoC records, and the load's 0x008A, 0x00B5 and 0x00DB are not in the file at
+#: all. The depth no longer fits a one-byte immediate, so the payload compares and masks it with
+#: the four-byte forms (``payload.py``).
+VERSION = 8
 
 HEADER_SIZE = 64
 COMMAND_DEPTH = 16
-EVENT_DEPTH = 64
+EVENT_DEPTH = 1024
 
 #: A command record's size must stay a power of two: the emitted dispatcher addresses a
 #: record by shifting its slot, which is checked where the shift is derived
